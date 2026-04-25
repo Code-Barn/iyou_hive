@@ -8,7 +8,10 @@
 <div class="timeline-container">
     <div class="timeline-header">
         <h1 class="timeline-title">Legal Timeline</h1>
-        <a href="{% url 'timeline:upload' %}" class="btn-primary upload-btn">Upload Timeline</a>
+        <div class="timeline-actions">
+            <a href="{% url 'timeline:upload' %}" class="btn-primary upload-btn">Upload Timeline</a>
+            <a href="{% url 'archive:upload' %}" class="btn-secondary upload-btn">Upload Document</a>
+        </div>
     </div>
 
     <!-- Main Timeline Structure -->
@@ -38,12 +41,12 @@
             <!-- Event Content -->
             <div class="event-content">
                 <h3 class="event-title">{{ event.event }}</h3>
-                <p class="event-category">{{ event.category }}</p>
+                <p class="event-category">{{ event.get_category_display }}</p>
                 <p class="event-description">{{ event.notes|truncatechars:150 }}</p>
                 {% if event.supporting_docs %}
                 <div class="event-docs-indicator">
                     <span class="docs-icon">📎</span>
-                    <span class="docs-count">Documents available</span>
+                    <span class="docs-count">{{ event.get_document_urls|length }} document(s)</span>
                 </div>
                 {% endif %}
             </div>
@@ -78,17 +81,29 @@
         <div class="popup-body">
             <p id="popupCategory" class="popup-category"></p>
             <div id="popupDescription" class="popup-description"></div>
-            <div id="popupNotes" class="popup-notes"></div>
             
             <!-- Supporting Documents Section -->
             <div id="popupMedia" class="popup-media">
                 <h4 class="media-title">Supporting Documents</h4>
                 <div id="popupDocs" class="media-content"></div>
             </div>
+            
+            <!-- AI Section -->
+            <div id="aiSection" class="popup-ai-section" style="display: none;">
+                <h4 class="ai-title">AI Analysis</h4>
+                <div id="aiLoading" class="ai-loading">
+                    <div class="spinner"></div>
+                    <p>Analyzing with AI...</p>
+                </div>
+                <div id="aiResponse" class="ai-response"></div>
+            </div>
         </div>
 
         <!-- Popup Footer -->
         <div class="popup-footer">
+            <button id="askAIBtn" class="btn-primary ai-btn" onclick="askAIAboutEvent()">
+                <span class="ai-icon">🤖</span> Ask AI About This
+            </button>
             <button class="btn-secondary" onclick="closeEventPopup()">Close</button>
         </div>
     </div>
@@ -104,11 +119,18 @@ const timelineEvents = {
         title: "{{ event.event|escapejs }}",
         date: "{{ event.date|date:'F j, Y' }}",
         date_iso: "{{ event.date|date:'Y-m-d' }}",
-        category: "{{ event.category|escapejs }}",
+        category: "{{ event.get_category_display|escapejs }}",
         description: "{{ event.notes|escapejs }}",
-        supporting_docs: "{{ event.supporting_docs|escapejs }}"
+        supporting_docs: {{ event.supporting_docs|safe }},
+        document_urls: {{ event.get_document_urls|safe }}
     }{% if not forloop.last %},{% endif %}
     {% endfor %}
 };
+
+// Global variable to store current event being viewed
+let currentEventId = null;
+
+// Track AI analysis state
+let isAnalyzingWithAI = false;
 </script>
 {% endblock %}

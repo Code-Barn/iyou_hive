@@ -1,10 +1,12 @@
 /**
- * Hiver - Theme & Popup Management
+ * Hiver - Theme & Timeline Integration
  *
  * This file handles:
  * 1. Dark/Light mode toggle with localStorage persistence
  * 2. Timeline event popup functionality
- * 3. Animations and transitions
+ * 3. AI Assistant integration
+ * 4. Document rendering in popups
+ * 5. Animations and transitions
  */
 
 /**
@@ -25,20 +27,22 @@ document.addEventListener("DOMContentLoaded", function () {
   updateIcon(saved);
 
   // Toggle theme on button click
-  toggle.addEventListener("click", function () {
-    const current = html.getAttribute("data-theme");
-    const next = current === "light" ? "dark" : "light";
-    html.setAttribute("data-theme", next);
-    localStorage.setItem("theme", next);
-    updateIcon(next);
-  });
+  if (toggle) {
+    toggle.addEventListener("click", function () {
+      const current = html.getAttribute("data-theme");
+      const next = current === "light" ? "dark" : "light";
+      html.setAttribute("data-theme", next);
+      localStorage.setItem("theme", next);
+      updateIcon(next);
+    });
+  }
 
   /**
    * Update the theme toggle icon based on current mode
    * @param {string} theme - Current theme ('light' or 'dark')
    */
   function updateIcon(theme) {
-    const icon = toggle.querySelector(".theme-icon");
+    const icon = toggle && toggle.querySelector(".theme-icon");
     if (icon) {
       icon.textContent = theme === "light" ? "🌙" : "☀️";
     }
@@ -53,10 +57,13 @@ document.addEventListener("DOMContentLoaded", function () {
  * - Proper data population
  * - Keyboard accessibility (ESC to close)
  * - Click outside to close
+ * - Document rendering
  */
 
 // Global reference to the popup element
 let eventPopup = null;
+let currentEventId = null;
+let isAnalyzingWithAI = false;
 
 /**
  * Initialize popup functionality
@@ -76,15 +83,6 @@ function initPopup() {
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && eventPopup.classList.contains("active")) {
         closeEventPopup();
-      }
-    });
-
-    // Prevent body scroll when popup is open
-    document.addEventListener("click", function () {
-      if (eventPopup.classList.contains("active")) {
-        document.body.style.overflow = "hidden";
-      } else {
-        document.body.style.overflow = "";
       }
     });
   }
@@ -107,49 +105,14 @@ function openEventPopup(eventId) {
     initPopup();
   }
 
+  currentEventId = eventId;
   const event = timelineEvents[eventId];
 
   // Populate popup content
-  if (document.getElementById("popupTitle")) {
-    document.getElementById("popupTitle").textContent = event.title;
-  }
-  if (document.getElementById("popupDate")) {
-    document.getElementById("popupDate").textContent = event.date;
-  }
-  if (document.getElementById("popupCategory")) {
-    document.getElementById("popupCategory").textContent = event.category;
-  }
-  if (document.getElementById("popupDescription")) {
-    document.getElementById("popupDescription").textContent = event.description;
-  }
-  if (document.getElementById("popupNotes")) {
-    document.getElementById("popupNotes").textContent = event.description;
-  }
+  setPopupContent(eventId, event);
 
-  // Handle supporting documents
-  const docsContainer = document.getElementById("popupDocs");
-  const mediaSection = document.getElementById("popupMedia");
-
-  if (docsContainer && event.supporting_docs) {
-    // Parse documents string and create links
-    const docs = parseDocuments(event.supporting_docs);
-    if (docs.length > 0) {
-      docsContainer.innerHTML = docs
-        .map(
-          (doc) => `
-                <a href="${doc.url}" target="_blank" rel="noopener noreferrer">
-                    <span class="doc-icon">📄</span> ${doc.text || doc.url}
-                </a>
-            `,
-        )
-        .join("");
-      mediaSection.style.display = "block";
-    } else {
-      mediaSection.style.display = "none";
-    }
-  } else if (mediaSection) {
-    mediaSection.style.display = "none";
-  }
+  // Reset AI section
+  resetAISection();
 
   // Show popup with animation
   eventPopup.classList.add("active");
@@ -166,6 +129,250 @@ function openEventPopup(eventId) {
 }
 
 /**
+ * Set popup content based on event data
+ * @param {number} eventId - The event ID
+ * @param {Object} event - The event data object
+ */
+function setPopupContent(eventId, event) {
+  if (!event) return;
+
+  // Set basic fields
+  if (document.getElementById("popupTitle")) {
+    document.getElementById("popupTitle").textContent = event.title;
+  }
+  if (document.getElementById("popupDate")) {
+    document.getElementById("popupDate").textContent = event.date;
+  }
+  if (document.getElementById("popupCategory")) {
+    document.getElementById("popupCategory").textContent =
+      event.category || "Uncategorized";
+  }
+  if (document.getElementById("popupDescription")) {
+    document.getElementById("popupDescription").textContent = event.description;
+  }
+
+  // Set documents
+  renderDocuments(event);
+}
+
+/**
+ * Render documents in the popup
+ * @param {Object} event - The event data
+ */
+function renderDocuments(event) {
+  const docsContainer = document.getElementById("popupDocs");
+  const mediaSection = document.getElementById("popupMedia");
+
+  if (!docsContainer) return;
+
+  // Clear previous content
+  docsContainer.innerHTML = "";
+
+  // Check if there are documents
+  const docUrls = event.document_urls || [];
+  const supportingDocs = event.supporting_docs;
+
+  if (!docUrls || docUrls.length === 0) {
+    if (mediaSection) {
+      mediaSection.style.display = "none";
+    }
+    return;
+  }
+
+  if (mediaSection) {
+    mediaSection.style.display = "block";
+  }
+
+  // Render each document
+  docUrls.forEach((doc, index) => {
+    const docElement = document.createElement("div");
+    docElement.className = "document-item";
+
+    // Add loading attribute for lazy loading
+    const docLink = document.createElement("a");
+    docLink.href = doc.url || "#";
+    docLink.target = "_blank";
+    docLink.rel = "noopener noreferrer";
+
+    // Determine icon based on file type
+    let icon = "📄";
+    if (doc.url) {
+      const ext = doc.url.split(".").pop().toLowerCase();
+      if (ext === "pdf") icon = "📕";
+      else if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext))
+        icon = "🖼️";
+      else if (["doc", "docx"].includes(ext)) icon = "📝";
+      else if (["xls", "xlsx"].includes(ext)) icon = "📊";
+      else if (["txt", "md", "markdown"].includes(ext)) icon = "📄";
+      else if (["email", "eml"].includes(ext)) icon = "✉️";
+    }
+
+    docLink.innerHTML = `<span class="doc-icon">${icon}</span> <span class="doc-title">${doc.title || "Document " + (index + 1)}</span>`;
+
+    // Add file size or type if available
+    if (doc.size || doc.type) {
+      const metaElement = document.createElement("span");
+      metaElement.className = "doc-meta";
+      metaElement.textContent = `[${doc.type || "File"} ${doc.size ? " - " + doc.size : ""}]`;
+      docLink.appendChild(metaElement);
+    }
+
+    docElement.appendChild(docLink);
+
+    // Add preview for images
+    if (doc.url && isImageUrl(doc.url)) {
+      const previewElement = document.createElement("div");
+      previewElement.className = "doc-preview";
+      previewElement.innerHTML = `<img src="${doc.url}" alt="${doc.title || "Preview"}" loading="lazy">`;
+      docElement.appendChild(previewElement);
+    }
+
+    docsContainer.appendChild(docElement);
+  });
+}
+
+/**
+ * Check if a URL points to an image
+ * @param {string} url - The URL to check
+ * @returns {boolean} - True if URL is an image
+ */
+function isImageUrl(url) {
+  const ext = url.split(".").pop().toLowerCase();
+  return ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"].includes(ext);
+}
+
+/**
+ * Reset AI section to initial state
+ */
+function resetAISection() {
+  const aiSection = document.getElementById("aiSection");
+  const aiResponse = document.getElementById("aiResponse");
+  const aiLoading = document.getElementById("aiLoading");
+  const askAIBtn = document.getElementById("askAIBtn");
+
+  if (aiSection) aiSection.style.display = "none";
+  if (aiResponse) aiResponse.innerHTML = "";
+  if (aiLoading) aiLoading.style.display = "block";
+  if (askAIBtn) {
+    askAIBtn.disabled = false;
+    askAIBtn.innerHTML = '<span class="ai-icon">🤖</span> Ask AI About This';
+  }
+  isAnalyzingWithAI = false;
+}
+
+/**
+ * Ask AI about the current event
+ */
+function askAIAboutEvent() {
+  if (!currentEventId || isAnalyzingWithAI) return;
+
+  const askAIBtn = document.getElementById("askAIBtn");
+  const aiSection = document.getElementById("aiSection");
+  const aiResponse = document.getElementById("aiResponse");
+  const aiLoading = document.getElementById("aiLoading");
+
+  if (!aiSection || !aiResponse || !askAIBtn) return;
+
+  // Show AI section and loading state
+  aiSection.style.display = "block";
+  aiResponse.innerHTML = "";
+  aiLoading.style.display = "block";
+  askAIBtn.disabled = true;
+  askAIBtn.innerHTML = '<span class="ai-icon">🤖</span> Analyzing...';
+
+  isAnalyzingWithAI = true;
+
+  // Make API call to analyze the event
+  fetch(`/ai/analyze-event/${currentEventId}/`)
+    .then((response) => response.json())
+    .then((data) => {
+      if (data.status === "success") {
+        // Format AI response as markdown
+        const formattedResponse = formatMarkdown(data.analysis);
+        aiResponse.innerHTML = formattedResponse;
+        aiLoading.style.display = "none";
+        askAIBtn.disabled = false;
+        askAIBtn.innerHTML = '<span class="ai-icon">🤖</span> Ask AI Again';
+      } else {
+        // Show error
+        aiResponse.innerHTML =
+          '<p class="ai-error">Error: ' +
+          (data.error || "Failed to get AI analysis") +
+          "</p>";
+        aiLoading.style.display = "none";
+        askAIBtn.disabled = false;
+        askAIBtn.innerHTML = '<span class="ai-icon">🤖</span> Try Again';
+      }
+    })
+    .catch((error) => {
+      console.error("AI analysis error:", error);
+      aiResponse.innerHTML =
+        '<p class="ai-error">Error: Failed to connect to AI service. Please check your configuration.</p>';
+      aiLoading.style.display = "none";
+      askAIBtn.disabled = false;
+      askAIBtn.innerHTML = '<span class="ai-icon">🤖</span> Try Again';
+    })
+    .finally(() => {
+      isAnalyzingWithAI = false;
+    });
+}
+
+/**
+ * Format markdown text as HTML (simple formatting)
+ * @param {string} markdown - Markdown text to format
+ * @returns {string} - HTML formatted text
+ */
+function formatMarkdown(markdown) {
+  if (!markdown) return "<p>No response from AI.</p>";
+
+  // Escape HTML first
+  let html = markdown
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+
+  // Format headers
+  html = html.replace(/^#\s+(.*?)$/gm, "<h2>$1</h2>");
+  html = html.replace(/^##\s+(.*?)$/gm, "<h3>$1</h3>");
+  html = html.replace(/^###\s+(.*?)$/gm, "<h4>$1</h4>");
+
+  // Format bold and italic
+  html = html.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*(.*?)\*/g, "<em>$1</em>");
+
+  // Format lists
+  html = html.replace(/^\-\s+(.*?)$/gm, "<li>$1</li>");
+  html = html.replace(/^\d+\.\s+(.*?)$/gm, "<li>$1</li>");
+
+  // Wrap lists in ul/ol
+  html = html.replace(/((?:<li>.*<\/li>\n)+)/g, function (match) {
+    return "<ul>" + match.trim().replace(/<\/li>\n/g, "</li>") + "</ul>";
+  });
+
+  // Format paragraphs
+  html = html.replace(/\n\n+/g, "</p><p>");
+  html = html.replace(/\n/g, "<br>");
+  html = "<p>" + html + "</p>";
+
+  // Format code blocks
+  html = html.replace(/`(.*?)`/g, "<code>$1</code>");
+
+  // Format links
+  html = html.replace(
+    /\[(.*?)\]\((.*?)\)/g,
+    '<a href="$2" target="_blank" rel="noopener">$1</a>',
+  );
+
+  // Format horizontal rules
+  html = html.replace(/^---$/gm, "<hr>");
+
+  // Format blockquotes
+  html = html.replace(/^>\s+(.*?)$/gm, "<blockquote>$1</blockquote>");
+
+  return html;
+}
+
+/**
  * Close the event popup
  */
 function closeEventPopup() {
@@ -177,6 +384,10 @@ function closeEventPopup() {
     eventPopup.classList.remove("active");
     document.body.style.overflow = "";
 
+    // Reset AI state when closing
+    resetAISection();
+    currentEventId = null;
+
     // Return focus to the event that was clicked
     const activeEvent = document.querySelector(".timeline-event:focus");
     if (activeEvent) {
@@ -186,45 +397,10 @@ function closeEventPopup() {
 }
 
 /**
- * Parse supporting documents string into array of document objects
- * @param {string} docsString - The supporting_docs string from event data
- * @returns {Array} Array of document objects with url and text properties
- */
-function parseDocuments(docsString) {
-  if (!docsString || docsString.trim() === "") {
-    return [];
-  }
-
-  // Simple parsing for markdown-style links: [text](url)
-  const linkRegex = /\[(.*?)\]\((.*?)\)/g;
-  const matches = [];
-  let match;
-
-  while ((match = linkRegex.exec(docsString)) !== null) {
-    matches.push({
-      text: match[1],
-      url: match[2],
-    });
-  }
-
-  // If no markdown links found, just split by commas/newlines
-  if (matches.length === 0) {
-    return docsString
-      .split(/[,\n]/)
-      .map((url) => url.trim())
-      .filter((url) => url)
-      .map((url) => ({ text: url, url: url }));
-  }
-
-  return matches;
-}
-
-/**
  * Close popup by event ID (legacy function for backwards compatibility)
  * @param {number} eventId - The ID of the event whose popup should close
  */
 function closePopup(eventId) {
-  // Legacy support - close the main popup
   closeEventPopup();
 }
 

@@ -1,0 +1,94 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ document.title }} - Hiver{% endblock %}
+
+{% block content %}
+<div class="document-detail-container">
+    <div class="doc-header">
+        <h1 class="doc-title">{{ document.title }}</h1>
+        <div class="doc-actions">
+            <a href="{% url 'archive:document_file' document.pk %}" class="btn-primary" target="_blank">
+                <span>📥</span> Download
+            </a>
+            <a href="{% url 'archive:archive' %}" class="btn-secondary">Back to Archive</a>
+        </div>
+    </div>
+    
+    <div class="doc-meta-grid">
+        <div class="meta-item">
+            <span class="meta-label">File Type:</span>
+            <span class="meta-value">{{ document.get_file_type_display }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Category:</span>
+            <span class="meta-value">{{ document.category|default:"Uncategorized" }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Uploaded:</span>
+            <span class="meta-value">{{ document.upload_date|date:"F j, Y H:i" }}</span>
+        </div>
+        <div class="meta-item">
+            <span class="meta-label">Uploader:</span>
+            <span class="meta-value">{{ document.uploader.username if document.uploader else "Anonymous" }}</span>
+        </div>
+    </div>
+    
+    {% if document.description %}
+    <div class="doc-section">
+        <h3>Description</h3>
+        <p>{{ document.description }}</p>
+    </div>
+    {% endif %}
+    
+    {% if document.tags %}
+    <div class="doc-section">
+        <h3>Tags</h3>
+        <div class="tags-list">
+            {% for tag in document.tags %}
+            <span class="tag">{{ tag }}</span>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+    
+    {% if document.timeline_event %}
+    <div class="doc-section">
+        <h3>Linked Timeline Event</h3>
+        <p>
+            <a href="{% url 'timeline:detail' document.timeline_event.pk %}">
+                {{ document.timeline_event.date }}: {{ document.timeline_event.event }}
+            </a>
+        </p>
+    </div>
+    {% endif %}
+    
+    <div class="doc-section">
+        <h3>File Preview</h3>
+        {% if document.is_pdf %}
+        <div class="pdf-preview">
+            <embed src="{% url 'archive:document_file' document.pk %}" 
+                   type="application/pdf" 
+                   width="100%" 
+                   height="500px">
+            <p>Your browser does not support PDF embedding. 
+               <a href="{% url 'archive:document_file' document.pk %}" target="_blank">Download the PDF</a> to view it.</p>
+        </div>
+        {% elif document.is_image %}
+        <div class="image-preview">
+            <img src="{% url 'archive:document_file' document.pk %}" 
+                 alt="{{ document.title }}" 
+                 class="preview-image">
+        </div>
+        {% else %}
+        <div class="file-preview">
+            <p>This file type cannot be previewed directly.</p>
+            <a href="{% url 'archive:document_file' document.pk %}" class="btn-primary" target="_blank">
+                Download File
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

@@ -1,0 +1,60 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Document - Hiver{% endblock %}
+
+{% block content %}
+<div class="upload-container">
+    <h1>Upload Document to Archive</h1>
+    
+    {% if form %}
+    <form method="post" enctype="multipart/form-data" class="upload-form">
+        {% csrf_token %}
+        
+        <div class="form-group">
+            <label for="{{ form.title.id_for_label }}">Document Title *</label>
+            {{ form.title }}
+            {% if form.title.errors %}
+            <div class="error">{{ form.title.errors }}</div>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.file.id_for_label }}">File *</label>
+            {{ form.file }}
+            {% if form.file.errors %}
+            <div class="error">{{ form.file.errors }}</div>
+            {% endif %}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.file_type.id_for_label }}">File Type</label>
+            {{ form.file_type }}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.category.id_for_label }}">Category</label>
+            {{ form.category }}
+            <div class="help-text">{{ form.category.help_text }}</div>
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.description.id_for_label }}">Description</label>
+            {{ form.description }}
+        </div>
+        
+        <div class="form-group">
+            <label for="{{ form.tags.id_for_label }}">Tags</label>
+            {{ form.tags }}
+            <div class="help-text">{{ form.tags.help_text }}</div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="submit" class="btn-primary">Upload Document</button>
+            <a href="{% url 'archive:archive' %}" class="btn-secondary">Cancel</a>
+        </div>
+    </form>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

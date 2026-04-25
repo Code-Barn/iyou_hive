@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Document Archive - Hiver{% endblock %}
+
+{% block content %}
+<div class="archive-container">
+    <h1>Document Archive</h1>
+    
+    {% if documents %}
+    <div class="archive-list">
+        {% for doc in documents %}
+        <div class="archive-item">
+            <div class="doc-header">
+                <h3 class="doc-title">{{ doc.title }}</h3>
+                <span class="doc-type badge badge-{{ doc.file_type }}">{{ doc.get_file_type_display }}</span>
+            </div>
+            <p class="doc-category">Category: {{ doc.category|default:"Uncategorized" }}</p>
+            <p class="doc-description">{{ doc.description|truncatechars:200 }}</p>
+            <div class="doc-meta">
+                <span class="doc-date">Uploaded: {{ doc.upload_date|date:"F j, Y" }}</span>
+                {% if doc.uploader %}
+                <span class="doc-uploader">By: {{ doc.uploader.username }}</span>
+                {% endif %}
+            </div>
+            <div class="doc-tags">
+                {% for tag in doc.tags %}
+                <span class="tag">{{ tag }}</span>
+                {% endfor %}
+            </div>
+            <div class="doc-actions">
+                <a href="{% url 'archive:document_detail' doc.pk %}" class="btn-secondary">View Details</a>
+                <a href="{% url 'archive:document_file' doc.pk %}" class="btn-primary" target="_blank">Download</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-archive">
+        <p>No documents in the archive yet. Upload your first document!</p>
+        <a href="{% url 'archive:upload' %}" class="btn-primary">Upload Document</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}{% endblock %}

@@ -16,13 +16,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from apps.timeline.views import home
+from apps.timeline.views import timeline_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', home, name='home'),
+    path('', timeline_view, name='home'),
     path('timeline/', include('apps.timeline.urls')),
     path('archive/', include('apps.archive.urls')),
-    path('conversations/', include('apps.conversation_logs.urls')),
     path('ai/', include('apps.ai_assistant.urls')),
 ]
+
+# Note: conversation_logs URLs are commented out until templates are created
+# path('conversations/', include('apps.conversation_logs.urls')),

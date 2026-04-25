@@ -1,4 +1,283 @@
+Responsive Design
+   ======================================== */
+=======
 /* ========================================
+   Archive Styles
+   ======================================== */
+
+.archive-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.archive-list {
+    display: grid;
+    gap: 1.5rem;
+    margin-top: 2rem;
+}
+
+.archive-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+}
+
+.doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.doc-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.badge-pdf {
+    background: rgba(255, 50, 50, 0.1);
+    color: #ff3232;
+}
+
+.badge-image {
+    background: rgba(50, 150, 255, 0.1);
+    color: #3296ff;
+}
+
+.badge-text {
+    background: rgba(100, 100, 100, 0.1);
+    color: #666;
+}
+
+.badge-word {
+    background: rgba(0, 100, 170, 0.1);
+    color: var(--accent);
+}
+
+.doc-category,
+.doc-description,
+.doc-date,
+.doc-uploader {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.doc-meta {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.doc-tags {
+    margin-top: 1rem;
+}
+
+.tag {
+    display: inline-block;
+    background: rgba(255, 140, 0, 0.15);
+    color: var(--primary);
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin-right: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.doc-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.doc-actions a {
+    text-decoration: none;
+}
+
+.empty-archive {
+    text-align: center;
+    padding: 3rem;
+    color: var(--text-secondary);
+}
+
+.empty-archive p {
+    font-size: 1.1rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Archive Detail */
+.document-detail-container {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.document-detail-container .doc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.document-detail-container .doc-title {
+    font-size: 2rem;
+}
+
+.document-detail-container .doc-actions {
+    display: flex;
+    gap: 1rem;
+}
+
+.doc-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    background: var(--bg);
+    border-radius: 8px;
+}
+
+.meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.meta-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.meta-value {
+    font-weight: 600;
+    color: var(--text);
+}
+
+.doc-section {
+    margin-bottom: 2rem;
+}
+
+.doc-section h3 {
+    font-size: 1.25rem;
+    color: var(--accent);
+    margin-bottom: 1rem;
+}
+
+.doc-section p {
+    color: var(--text);
+    line-height: 1.7;
+}
+
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.pdf-preview,
+.image-preview,
+.file-preview {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+
+.pdf-preview embed {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.preview-image {
+    max-width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+/* Upload Form */
+.upload-container {
+    max-width: 700px;
+    margin: 0 auto;
+}
+
+.upload-container h1 {
+    color: var(--primary);
+    margin-bottom: 2rem;
+}
+
+.upload-form {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+.form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.form-group .help-text {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 0.5rem;
+}
+
+.form-group .error {
+    color: #ff4444;
+    font-size: 0.85rem;
+    margin-top: 0.5rem;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+}
+
+.form-actions button,
+.form-actions a {
+    padding: 0.75rem 1.5rem;
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+========================================
    Hiver - Main Stylesheet
    Color Scheme: Honey-Orange (#FF8C00) and Byers Blue (#0064AA)
    ======================================== */
@@ -579,12 +858,207 @@ label {
 .popup-footer {
     display: flex;
     justify-content: flex-end;
+    gap: 1rem;
     border-top: 1px solid var(--border);
     padding-top: 1.5rem;
 }
 
 .popup-footer .btn-secondary {
     min-width: 100px;
+}
+
+.popup-footer .ai-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 150px;
+}
+
+.ai-icon {
+    font-size: 1rem;
+}
+
+/* ========================================
+   AI Section in Popup
+   ======================================== */
+
+.popup-ai-section {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+}
+
+.ai-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 1rem;
+}
+
+.ai-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    background: rgba(255, 140, 0, 0.1);
+    border-radius: 8px;
+    color: var(--text-secondary);
+}
+
+.spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.ai-response {
+    color: var(--text);
+    line-height: 1.7;
+}
+
+.ai-response h2,
+.ai-response h3,
+.ai-response h4 {
+    color: var(--accent);
+    margin-top: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.ai-response ul,
+.ai-response ol {
+    margin: 0.75rem 0;
+    padding-left: 1.5rem;
+}
+
+.ai-response li {
+    margin-bottom: 0.5rem;
+}
+
+.ai-response strong {
+    color: var(--primary);
+}
+
+.ai-response em {
+    font-style: italic;
+}
+
+.ai-response code {
+    background: rgba(0, 0, 0, 0.1);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-family: "Courier New", monospace;
+}
+
+.ai-response blockquote {
+    border-left: 3px solid var(--primary);
+    padding-left: 1rem;
+    margin-left: 0;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.ai-response a {
+    color: var(--primary);
+    text-decoration: none;
+}
+
+.ai-response a:hover {
+    text-decoration: underline;
+}
+
+.ai-error {
+    color: #ff4444;
+    background: rgba(255, 68, 68, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+}
+
+/* ========================================
+   Document Display in Popup
+   ======================================== */
+
+.media-content {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.document-item {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid var(--border);
+}
+
+.document-item a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text);
+    text-decoration: none;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: background 0.2s ease;
+}
+
+.document-item a:hover {
+    background: rgba(255, 140, 0, 0.1);
+    color: var(--primary);
+}
+
+.doc-icon {
+    font-size: 1.25rem;
+}
+
+.doc-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.doc-meta {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-left: auto;
+}
+
+.doc-preview {
+    margin-top: 0.75rem;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.doc-preview img {
+    width: 100%;
+    max-height: 300px;
+    object-fit: contain;
+    background: var(--bg-card);
+}
+
+/* Timeline Actions */
+.timeline-actions {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.timeline-actions .btn-secondary {
+    background: transparent;
+    color: var(--accent);
+    border: 2px solid var(--accent);
+}
+
+.timeline-actions .btn-secondary:hover {
+    background: var(--accent);
+    color: white;
 }
 
 /* ========================================

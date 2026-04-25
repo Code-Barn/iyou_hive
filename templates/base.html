@@ -5,7 +5,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hiver{% endblock %}</title>
+    {% if DEBUG %}
+    <!-- Development: Use unminified files for easier debugging -->
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    {% else %}
+    <!-- Production: Use minified files -->
+    <link rel="stylesheet" href="{% static 'css/style.min.css' %}">
+    {% endif %}
 </head>
 <body>
     <nav class="navbar">
@@ -13,20 +19,32 @@
             <img src="{% static 'core/images/logos/light_mode_LOGO.png' %}" alt="Hiver" class="logo">
         </div>
         <div class="nav-links">
+            {% if user.is_authenticated %}
             <a href="{% url 'timeline:timeline' %}">Timeline</a>
             <a href="{% url 'archive:archive' %}">Archive</a>
             <a href="{% url 'ai_assistant:chat' %}">AI Assistant</a>
+            {% else %}
+            <a href="{% url 'admin:login' %}">Login</a>
+            {% endif %}
         </div>
+        {% if user.is_authenticated %}
         <button id="theme-toggle" class="theme-btn">
             <span class="theme-icon">🌙</span>
         </button>
+        {% endif %}
     </nav>
 
     <main class="container">
         {% block content %}{% endblock %}
     </main>
 
+    {% if DEBUG %}
+    <!-- Development: Use unminified files -->
     <script src="{% static 'js/theme.js' %}"></script>
+    {% else %}
+    <!-- Production: Use minified files -->
+    <script src="{% static 'js/theme.min.js' %}"></script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 </body>
 </html>
