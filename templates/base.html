@@ -15,23 +15,22 @@
 </head>
 <body>
     <nav class="navbar">
-        <div class="nav-brand">
-            <img src="{% static 'core/images/logos/light_mode_LOGO.png' %}" alt="Hiver" class="logo">
-        </div>
+        <a href="/" class="logo-link">
+            <img id="site-logo" src="{% static 'core/images/logos/light_mode_LOGO.png' %}" alt="Hiver" width="150">
+        </a>
         <div class="nav-links">
+            <a href="{% url 'timeline:timeline' %}" class="nav-button">Timeline</a>
+            <a href="{% url 'archive:archive' %}" class="nav-button">Archive</a>
             {% if user.is_authenticated %}
-            <a href="{% url 'timeline:timeline' %}">Timeline</a>
-            <a href="{% url 'archive:archive' %}">Archive</a>
-            <a href="{% url 'ai_assistant:chat' %}">AI Assistant</a>
+            <a href="{% url 'ai_assistant:chat' %}" class="nav-button">AI Assistant</a>
+            <a href="{% url 'admin:logout' %}" class="nav-button">Logout</a>
             {% else %}
-            <a href="{% url 'admin:login' %}">Login</a>
+            <a href="{% url 'admin:login' %}" class="nav-button">Login</a>
             {% endif %}
         </div>
-        {% if user.is_authenticated %}
-        <button id="theme-toggle" class="theme-btn">
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light mode">
             <span class="theme-icon">☀️</span>
         </button>
-        {% endif %}
     </nav>
 
     <main class="container">

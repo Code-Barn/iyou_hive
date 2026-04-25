@@ -103,6 +103,21 @@ You'll need to:
 3. **Upload Documents**: Go to `/archive/upload/` to upload supporting documents
 4. **Use AI Assistant**: Visit `/ai/` to query your timeline and documents
 
+### Dark/Light Mode Toggle
+
+The application features a theme toggle button in the navigation bar that allows users to switch between dark and light modes. The preference is automatically saved to the browser's localStorage and persists across page reloads.
+
+- **Dark Mode**: Default theme with black background (#000000), honey-orange (#FF8C00) and Byers blue (#0064AA) accents
+- **Light Mode**: Light theme with off-white background (#F5F5F5)
+- **Toggle Button**: Located in the navigation bar with sun (☀️) icon for dark mode and moon (🌙) icon for light mode
+
+### Dynamic Logo
+
+The site logo automatically switches based on the current theme:
+- **Dark Mode**: Displays the dark mode logo (DARK_mode_LOGO.png)
+- **Light Mode**: Displays the light mode logo (light_mode_LOGO.png)
+- The logo is 3x larger than the original and links to the home page (`/`)
+
 ### Timeline Markdown Format
 
 Create timeline files using the following markdown format:

@@ -55,6 +55,70 @@ This style guide ensures consistency across the Hiver project, aligning with the
 
 ## UI Components
 
+### Navigation Bar
+The navigation bar appears at the top of every page and provides access to key features.
+
+#### Structure
+```
+┌─────────────────────────────────────────────────────────────┐
+│  [Logo]                    [Timeline] [Archive] [AI] [Login]  ☀️ │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### Specifications
+- **Background**: var(--bg-navbar) - #1E1E1E (dark mode), #FFFFFF (light mode)
+- **Border**: 2px solid Honey-Orange (#FF8C00) at bottom
+- **Position**: Sticky at top with z-index: 100
+- **Padding**: 1rem 2rem
+- **Logo**: Centered on left, 120px height (3x original), links to home (`/`)
+- **Navigation Links**: Centered, using .nav-button class with hover effects
+- **Theme Toggle**: Right side, using .theme-toggle class
+
+#### Navigation Buttons
+- **Timeline**: Links to `/timeline/` - Honey-Orange hover effect
+- **Archive**: Links to `/archive/` - Honey-Orange hover effect
+- **AI Assistant**: Links to `/ai/` - Honey-Orange hover effect (authenticated users only)
+- **Login/Logout**: Links to authentication pages - Honey-Orange hover effect
+
+#### Theme Toggle Button
+- **Class**: `.theme-toggle`
+- **Styles**:
+  - Border: 2px solid var(--primary)
+  - Padding: 0.5rem 1rem
+  - Border-radius: 4px
+  - Color: var(--text)
+  - Hover: background var(--primary), color white
+- **Icon**: .theme-icon with sun (☀️) for dark mode, moon (🌙) for light mode
+- **Functionality**:
+  - Persists preference to localStorage
+  - Calls updateIcon() and updateLogo() on theme change
+  - Defaults to dark mode if no preference saved
+
+#### Logo Toggle Implementation
+The logo automatically switches based on the current theme using JavaScript:
+
+```javascript
+// In theme.js
+function updateLogo(theme) {
+  const logo = document.getElementById('site-logo');
+  if (logo) {
+    if (theme === 'dark') {
+      logo.src = '/static/core/images/logos/DARK_mode_LOGO.png';
+    } else {
+      logo.src = '/static/core/images/logos/light_mode_LOGO.png';
+    }
+  }
+}
+
+// Called on DOMContentLoaded and theme toggle
+updateLogo(saved);
+```
+
+**Logo Assets:**
+- Dark mode: `/static/core/images/logos/DARK_mode_LOGO.png`
+- Light mode: `/static/core/images/logos/light_mode_LOGO.png`
+- Size: 120px height (desktop), 80px (mobile)
+
 ### Timeline
 The timeline is the core component of Hiver, displaying legal events in a vertical scrolling layout.
 

@@ -20,11 +20,13 @@
 document.addEventListener("DOMContentLoaded", function () {
   const toggle = document.getElementById("theme-toggle");
   const html = document.documentElement;
+  const logo = document.getElementById("site-logo");
 
   // Load saved theme preference from localStorage, default to dark mode
   const saved = localStorage.getItem("theme") || "dark";
   html.setAttribute("data-theme", saved);
   updateIcon(saved);
+  updateLogo(saved);
 
   // Toggle theme on button click
   if (toggle) {
@@ -34,6 +36,7 @@ document.addEventListener("DOMContentLoaded", function () {
       html.setAttribute("data-theme", next);
       localStorage.setItem("theme", next);
       updateIcon(next);
+      updateLogo(next);
     });
   }
 
@@ -46,6 +49,21 @@ document.addEventListener("DOMContentLoaded", function () {
     if (icon) {
       // Dark mode is default, sun icon means switch to light mode
       icon.textContent = theme === "dark" ? "☀️" : "🌙";
+    }
+  }
+
+  /**
+   * Update the logo based on current theme
+   * Switches between dark mode and light mode logos
+   * @param {string} theme - Current theme ('light' or 'dark')
+   */
+  function updateLogo(theme) {
+    if (logo) {
+      if (theme === "dark") {
+        logo.src = "/static/core/images/logos/DARK_mode_LOGO.png";
+      } else {
+        logo.src = "/static/core/images/logos/light_mode_LOGO.png";
+      }
     }
   }
 });
@@ -437,3 +455,103 @@ document.addEventListener("click", function (e) {
     }
   }
 });
+
+/* ========================================
+   Test Functions (for manual testing)
+   ======================================== */
+
+/**
+ * Test function for updateLogo()
+ * Can be called from browser console to verify logo toggle functionality
+ * Usage: testUpdateLogo()
+ */
+function testUpdateLogo() {
+  const logo = document.getElementById("site-logo");
+  const html = document.documentElement;
+
+  if (!logo) {
+    console.error("Logo element not found for testing");
+    return false;
+  }
+
+  // Test dark mode
+  const originalTheme = html.getAttribute("data-theme");
+  html.setAttribute("data-theme", "dark");
+  updateLogo("dark");
+  const darkLogo = logo.src.includes("DARK_mode_LOGO.png");
+
+  // Test light mode
+  html.setAttribute("data-theme", "light");
+  updateLogo("light");
+  const lightLogo = logo.src.includes("light_mode_LOGO.png");
+
+  // Restore original theme
+  html.setAttribute("data-theme", originalTheme);
+  updateLogo(originalTheme);
+
+  if (darkLogo && lightLogo) {
+    console.log(
+      "✓ updateLogo() test passed: Both dark and light logos load correctly",
+    );
+    return true;
+  } else {
+    console.error(
+      "✗ updateLogo() test failed: Logo sources not updated correctly",
+    );
+    return false;
+  }
+}
+
+/**
+ * Test function for updateIcon()
+ * Can be called from browser console to verify icon toggle functionality
+ * Usage: testUpdateIcon()
+ */
+function testUpdateIcon() {
+  const toggle = document.getElementById("theme-toggle");
+  const icon = toggle && toggle.querySelector(".theme-icon");
+
+  if (!icon) {
+    console.error("Icon element not found for testing");
+    return false;
+  }
+
+  // Test dark mode
+  updateIcon("dark");
+  const darkIcon = icon.textContent === "☀️";
+
+  // Test light mode
+  updateIcon("light");
+  const lightIcon = icon.textContent === "🌙";
+
+  // Restore
+  const html = document.documentElement;
+  const currentTheme = html.getAttribute("data-theme");
+  updateIcon(currentTheme);
+
+  if (darkIcon && lightIcon) {
+    console.log("✓ updateIcon() test passed: Icons toggle correctly");
+    return true;
+  } else {
+    console.error("✗ updateIcon() test failed: Icons not updated correctly");
+    return false;
+  }
+}
+
+/**
+ * Run all theme tests
+ * Usage: testTheme()
+ */
+function testTheme() {
+  console.log("Running theme tests...");
+  const logoTest = testUpdateLogo();
+  const iconTest = testUpdateIcon();
+
+  if (logoTest && iconTest) {
+    console.log("✓ All theme tests passed!");
+    return true;
+  } else {
+    console.error("✗ Some theme tests failed");
+    return false;
+  }
+}
