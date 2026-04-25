@@ -13,6 +13,7 @@ urlpatterns = [
     # API endpoints
     path('api/documents/', views.api_document_list, name='api_document_list'),
     path('api/search/', views.api_document_search, name='api_document_search'),
+    path('api/map/', views.generate_archive_map, name='api_generate_map'),
     path('api/link/<int:document_id>/to-event/<int:event_id>/', 
          views.link_to_timeline, 
          name='api_link_to_timeline'),

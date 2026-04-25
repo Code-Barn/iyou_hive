@@ -21,8 +21,8 @@ document.addEventListener("DOMContentLoaded", function () {
   const toggle = document.getElementById("theme-toggle");
   const html = document.documentElement;
 
-  // Load saved theme preference from localStorage, default to light mode
-  const saved = localStorage.getItem("theme") || "light";
+  // Load saved theme preference from localStorage, default to dark mode
+  const saved = localStorage.getItem("theme") || "dark";
   html.setAttribute("data-theme", saved);
   updateIcon(saved);
 
@@ -30,7 +30,7 @@ document.addEventListener("DOMContentLoaded", function () {
   if (toggle) {
     toggle.addEventListener("click", function () {
       const current = html.getAttribute("data-theme");
-      const next = current === "light" ? "dark" : "light";
+      const next = current === "dark" ? "light" : "dark";
       html.setAttribute("data-theme", next);
       localStorage.setItem("theme", next);
       updateIcon(next);
@@ -44,7 +44,8 @@ document.addEventListener("DOMContentLoaded", function () {
   function updateIcon(theme) {
     const icon = toggle && toggle.querySelector(".theme-icon");
     if (icon) {
-      icon.textContent = theme === "light" ? "🌙" : "☀️";
+      // Dark mode is default, sun icon means switch to light mode
+      icon.textContent = theme === "dark" ? "☀️" : "🌙";
     }
   }
 });
