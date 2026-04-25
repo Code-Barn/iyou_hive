@@ -128,9 +128,59 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  /**
+   * Initialize timeline selector dropdown
+   * Allows users to select different Markdown-based timelines
+   */
+  function initTimelineSelector() {
+    const timelineSelector = document.getElementById("timeline-selector");
+    if (!timelineSelector) return;
+
+    timelineSelector.addEventListener("change", function () {
+      const filePath = this.value;
+      if (filePath) {
+        // Save selection to localStorage
+        localStorage.setItem("selectedTimelinePath", filePath);
+
+        // Fetch timeline data
+        fetch(
+          `/timeline/api/load-timeline/?file_path=${encodeURIComponent(filePath)}`,
+        )
+          .then((response) => response.json())
+          .then((data) => {
+            if (data.status === "success") {
+              // Update main heading
+              const headingEl = document.getElementById("timeline-heading");
+              if (headingEl) {
+                headingEl.textContent = data.main_heading || "Legal Timeline";
+              }
+
+              // Reload page with new timeline selection
+              window.location.href = `/timeline/?timeline_file=${encodeURIComponent(filePath)}`;
+            }
+          })
+          .catch((error) => {
+            console.error("Failed to load timeline:", error);
+          });
+      }
+    });
+
+    // Restore saved selection
+    const savedTimelinePath = localStorage.getItem("selectedTimelinePath");
+    if (savedTimelinePath) {
+      const option = timelineSelector.querySelector(
+        `option[value="${savedTimelinePath}"]`,
+      );
+      if (option) {
+        timelineSelector.value = savedTimelinePath;
+      }
+    }
+  }
+
   // Initialize workspace features
   initCaseSelector();
   initCollapsiblePanes();
+  initTimelineSelector();
 });
 
 /**

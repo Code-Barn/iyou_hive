@@ -98,6 +98,72 @@ ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com
 After starting the server, open your browser to `http://localhost:8000`
 
 You'll need to:
+
+### Timeline Management
+
+Hiver now supports multiple Markdown-based timelines with dynamic heading parsing:
+
+#### Working with Markdown Timelines
+
+1. **Create a Timeline Markdown File**:
+   ```markdown
+   # My Case Timeline
+   
+   ## Contract Signed
+   **Date:** 2024-01-15
+   **Category:** contract
+   **Notes:** Initial agreement executed
+   
+   ## First Amendment
+   **Date:** 2024-03-20
+   **Category:** contract
+   **Notes:** Modified payment terms
+   ```
+
+2. **Upload and Parse**:
+   - Use the "Upload Timeline" button in the timeline view
+   - Select your Markdown file
+   - The system will automatically parse and create timeline events
+
+3. **Select Timelines**:
+   - Use the timeline selector dropdown to switch between different timelines
+   - Each timeline maintains its own set of events and headings
+   - Selections are persisted in localStorage
+
+4. **Dynamic Headings**:
+   - The first H1 heading from your Markdown file becomes the main timeline title
+   - All headings (H1-H6) are displayed as a navigation bar
+   - Click on headings to scroll to sections
+
+### Case Compartmentalization
+
+Organize your work into separate cases for better isolation:
+
+1. **Create Cases**: Cases are automatically created per user
+2. **Switch Cases**: Use the case selector dropdown in the header
+3. **Case-Specific Data**: Timeline events, documents, and AI context are filtered by case
+
+### Workspace Layout
+
+The three-pane workspace provides:
+
+- **Timeline Pane** (Primary): Main timeline view with events
+- **Archive Pane** (Right, collapsible): Document list and management
+- **AI Assistant Pane** (Right, collapsible): AI chat and analysis
+
+#### Collapsible Panes
+
+- Click the ▼/▶ buttons to expand/collapse side panes
+- State is persisted across sessions using localStorage
+- Provides more screen space when focused on one task
+
+### Dark/Light Mode
+
+- Toggle between dark and light themes using the ☀️/🌙 button in the header
+- Preference is saved automatically
+- Default is dark mode (black #000000 background)
+
+You'll need to:
 1. **Admin Login**: Go to `/admin/` and log in with your superuser credentials
 2. **Upload Timeline**: Navigate to `/timeline/upload/` to upload markdown timeline files
 3. **Upload Documents**: Go to `/archive/upload/` to upload supporting documents

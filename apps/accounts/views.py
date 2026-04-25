@@ -13,6 +13,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
+from apps.core.middleware import RustDIDAuthenticationMiddleware
 import uuid
 import json
 
@@ -65,7 +66,6 @@ def did_login(request):
         
         # Try Rust-DID verification
         from apps.core.did_rust_wrapper import verify_credential
-        from apps.core.middleware import RustDIDAuthenticationMiddleware
         
         try:
             # Create a VC (Verification Credential) string for verification

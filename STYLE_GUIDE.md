@@ -546,9 +546,154 @@ TIMELINE_SCHEMA.md        # Timeline data schema
 - Include code examples where helpful
 - Document all major components and their specifications
 
+## Timeline Components
+
+### Timeline Selector
+- Dropdown select element for choosing between multiple Markdown-based timelines
+- Full width, max-width: 500px
+- Padding: 0.75rem
+- Border: 2px solid var(--border), rounds to var(--primary) on hover/focus
+- Background: var(--bg-card)
+- Color: var(--text)
+- Border-radius: 6px
+- Font-size: 1rem
+- Box-shadow on focus: 0 0 0 3px rgba(255, 140, 0, 0.2)
+- Persists selection in localStorage
+
+### Timeline Navigation
+- Displays headings from the parsed Markdown file
+- Flexbox layout with flex-wrap
+- Gap: 0.5rem
+- Padding: 0.5rem 0
+- Overflow-x: auto for horizontal scrolling on small screens
+
+### Navigation Links
+- Display: inline-block
+- Padding: 0.375rem 0.75rem
+- Border: 1px solid var(--border)
+- Border-radius: 4px
+- Background: var(--bg-card)
+- Color: var(--text)
+- Font-size: 0.875rem
+- White-space: nowrap
+- Transition: all 0.2s ease
+- Hover: Border color → var(--primary), background → rgba(255, 140, 0, 0.1)
+- Indentation based on heading level:
+  - h1: No indent, font-weight: 700, font-size: 1rem
+  - h2: padding-left: 1rem, font-weight: 600
+  - h3: padding-left: 1.5rem, font-weight: 500
+
+### Upload Buttons
+- Display: flex, gap: 1rem
+- Padding-top: 0.5rem
+- Button styling:
+  - Padding: 0.5rem 1rem
+  - Border-radius: 6px
+  - Font-size: 0.875rem
+  - Transition: all 0.3s ease
+  - Primary: background: var(--primary), color: white, border: 2px solid var(--primary)
+  - Secondary: background: var(--bg-card), color: var(--text), border: 2px solid var(--border)
+  - Hover: Primary inverts, Secondary gets primary color border
+
+## Markdown Parsing
+
+### Supported Formats
+1. **Event Format (Legacy)**:
+   ```markdown
+   # Date
+   **Event:** Event Title
+   **Category:** category_name
+   **Notes:** Event notes
+   **Supporting Docs:** doc1, doc2
+   ```
+
+2. **Structured Timeline Format**:
+   ```markdown
+   # My Timeline Name
+   
+   ## Event 1
+   **Date:** 2024-01-15
+   **Event:** Event Title
+   **Category:** contract
+   **Notes:** Detailed notes
+   **Description:** Additional description
+   
+   ## Event 2
+   **Date:** 2024-03-20
+   ...
+   ```
+
+3. **Section Headings**: Any heading (H1-H6) is extracted for navigation
+   - H1 becomes the main timeline title
+   - H2-H6 appear in the navigation bar
+   - Anchors are generated from heading text (lowercase, hyphens)
+
+### Parsing Functions
+- `parse_markdown_file(file_path)`: Parse file and return headings, sections, HTML
+- `extract_headings(html_content, markdown_content)`: Extract heading structure
+- `get_main_heading(markdown_content, file_path)`: Get first H1 heading
+- `parse_timeline_events_from_markdown(content)`: Parse events from structured format
+
+## JavaScript Components
+
+### Timeline Selector (initTimelineSelector)
+- Listens for change events on dropdown
+- Saves selection to localStorage with key 'selectedTimelinePath'
+- Fetches timeline data via `/timeline/api/load-timeline/`
+- Updates main heading and reloads page with new timeline file
+
+### Collapsible Panes (initCollapsiblePanes)
+- Toggles 'collapsed' class on workspace panes
+- Saves state to localStorage with key `{pane_id}_state`
+- Updates button text (▼ for expanded, ▶ for collapsed)
+- Restores state on page load
+
+### Theme Toggle
+- Persists theme preference in localStorage with key 'theme'
+- Default: 'dark'
+- Toggles between 'light' and 'dark'
+- Updates icon (☀️ for dark mode, 🌙 for light mode)
+- Updates logo (DARK_mode_LOGO.png / light_mode_LOGO.png)
+
+## Case Compartmentalization
+
+### Case Model
+```python
+class Case(models.Model):
+    name: CharField(max_length=255)
+    description: TextField(blank=True)
+    color: CharField(max_length=7, default='#FF8C00')
+    is_active: BooleanField(default=False)
+    created_at: DateTimeField(auto_now_add=True)
+    updated_at: DateTimeField(auto_now=True)
+    user: ForeignKey(User, on_delete=CASCADE)
+```
+
+### TimelineEvent Model Updates
+```python
+class TimelineEvent(models.Model):
+    # ... existing fields ...
+    timeline_file: CharField(max_length=512, blank=True, null=True)
+    case: ForeignKey(Case, on_delete=SET_NULL, null=True, blank=True)
+```
+
+### TimelineFile Model
+```python
+class TimelineFile(models.Model):
+    name: CharField(max_length=255)
+    file_path: CharField(max_length=512)
+    case: ForeignKey(Case, on_delete=CASCADE, null=True, blank=True)
+    description: TextField(blank=True)
+    created_at: DateTimeField(auto_now_add=True)
+    updated_at: DateTimeField(auto_now=True)
+    user: ForeignKey(User, on_delete=CASCADE)
+```
+
 ## Version History
 - **v1.0** (Initial): Basic brand colors and component styles
-- **v1.1** (Current): Added timeline and popup specifications
+- **v1.1**: Added timeline and popup specifications
+- **v1.2**: Added case compartmentalization and workspace redesign
+- **v1.3**: Added Markdown parsing, timeline selector, and improved UI components
 
 ## License
 This style guide is part of the Byers Brands ecosystem and follows the same licensing terms.

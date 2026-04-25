@@ -7,7 +7,36 @@
 <!-- Timeline Container with vertical scrolling -->
 <div class="timeline-container">
     <div class="timeline-header">
-        <h1 class="timeline-title">Legal Timeline</h1>
+        <!-- Timeline selection dropdown -->
+        {% if timeline_files %}
+        <div class="timeline-selector">
+            <select id="timeline-selector" aria-label="Select timeline">
+                <option value="">-- Select Timeline --</option>
+                {% for timeline in timeline_files %}
+                <option value="{{ timeline.file_path|default:timeline.path }}"
+                        data-timeline-id="{{ timeline.id|default:'' }}"
+                        {% if timeline.file_path == selected_timeline_path %}selected{% endif %}>
+                    {{ timeline.name|default:timeline.main_heading|default:"Untitled" }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% endif %}
+        
+        <h1 class="timeline-title" id="timeline-heading">{{ main_heading }}</h1>
+        
+        <!-- Display headings as navigation if available -->
+        {% if headings %}
+        <nav class="timeline-navigation">
+            <span class="nav-label">Sections:</span>
+            {% for heading in headings %}
+            <a href="#{{ heading.anchor }}" class="nav-link h{{ heading.level|slice:"1:" }}">
+                {{ heading.text }}
+            </a>
+            {% endfor %}
+        </nav>
+        {% endif %}
+        
         <div class="timeline-actions">
             <a href="{% url 'timeline:upload' %}" class="btn-primary upload-btn">Upload Timeline</a>
             <a href="{% url 'archive:upload' %}" class="btn-secondary upload-btn">Upload Document</a>
@@ -132,5 +161,55 @@ let currentEventId = null;
 
 // Track AI analysis state
 let isAnalyzingWithAI = false;
+
+/**
+ * Initialize timeline selector dropdown
+ */
+function initTimelineSelector() {
+  const timelineSelector = document.getElementById('timeline-selector');
+  if (!timelineSelector) return;
+
+  timelineSelector.addEventListener('change', function() {
+    const filePath = this.value;
+    if (filePath) {
+      // Save selection to localStorage
+      localStorage.setItem('selectedTimelinePath', filePath);
+      
+      // Fetch timeline data
+      fetch(`/timeline/api/load-timeline/?file_path=${encodeURIComponent(filePath)}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            // Update main heading
+            const headingEl = document.getElementById('timeline-heading');
+            if (headingEl) {
+              headingEl.textContent = data.main_heading || 'Legal Timeline';
+            }
+            
+            // Reload page with new timeline selection
+            // This will trigger the backend to filter events by timeline file
+            window.location.href = `/timeline/?timeline_file=${encodeURIComponent(filePath)}`;
+          }
+        })
+        .catch(error => {
+          console.error('Failed to load timeline:', error);
+        });
+    }
+  });
+
+  // Restore saved selection
+  const savedTimelinePath = localStorage.getItem('selectedTimelinePath');
+  if (savedTimelinePath) {
+    const option = timelineSelector.querySelector(`option[value="${savedTimelinePath}"]`);
+    if (option) {
+      timelineSelector.value = savedTimelinePath;
+    }
+  }
+}
+
+// Initialize timeline selector when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+  initTimelineSelector();
+});
 </script>
 {% endblock %}

@@ -16,6 +16,8 @@ class TimelineEvent(models.Model):
         supporting_docs: JSON field or list of ArchiveDocument IDs/URLs
         notes: Detailed notes about the event
         created_by: User who created this event
+        timeline_file: Path to Markdown file this event belongs to
+        case: Case this event belongs to (for compartmentalization)
     """
     
     CATEGORY_CHOICES = [
@@ -49,6 +51,24 @@ class TimelineEvent(models.Model):
     )
     
     notes = models.TextField(blank=True, help_text="Detailed notes about the event")
+    
+    # Link to Markdown file this event belongs to
+    timeline_file = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text="Path to the Markdown file this event belongs to"
+    )
+    
+    # Case compartmentalization
+    case = models.ForeignKey(
+        'core.Case',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='events',
+        help_text="Case this event belongs to"
+    )
     
     # User who created this event
     created_by = models.ForeignKey(

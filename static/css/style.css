@@ -259,8 +259,8 @@ label {
 /* Timeline Header */
 .timeline-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    flex-direction: column;
+    gap: 1rem;
     margin-bottom: 2rem;
     padding: 0 1rem;
 }
@@ -273,6 +273,127 @@ label {
 
 .upload-btn {
     font-size: 0.9rem;
+}
+
+/* Timeline Selector - Dropdown for selecting different timelines */
+.timeline-selector {
+    width: 100%;
+    max-width: 500px;
+}
+
+.timeline-selector select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+    transition:
+        border-color 0.3s ease,
+        box-shadow 0.3s ease;
+}
+
+.timeline-selector select:hover,
+.timeline-selector select:focus {
+    border-color: var(--primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(255, 140, 0, 0.2);
+}
+
+.timeline-selector select option {
+    background: var(--bg-card);
+    color: var(--text);
+}
+
+/* Timeline Navigation - Shows document sections/headings */
+.timeline-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+    overflow-x: auto;
+}
+
+.nav-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    padding-right: 0.5rem;
+    white-space: nowrap;
+}
+
+.nav-link {
+    display: inline-block;
+    padding: 0.375rem 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg-card);
+    color: var(--text);
+    text-decoration: none;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.nav-link:hover {
+    border-color: var(--primary);
+    background: rgba(255, 140, 0, 0.1);
+    color: var(--primary);
+}
+
+.nav-link.h1 {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.nav-link.h2 {
+    font-weight: 600;
+    padding-left: 1rem;
+}
+
+.nav-link.h3 {
+    font-weight: 500;
+    padding-left: 1.5rem;
+}
+
+/* Timeline Actions - Upload buttons */
+.timeline-actions {
+    display: flex;
+    gap: 1rem;
+    padding-top: 0.5rem;
+}
+
+.timeline-actions .btn-primary,
+.timeline-actions .btn-secondary {
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.timeline-actions .btn-primary {
+    background: var(--primary);
+    color: white;
+    border: 2px solid var(--primary);
+}
+
+.timeline-actions .btn-primary:hover {
+    background: transparent;
+    color: var(--primary);
+}
+
+.timeline-actions .btn-secondary {
+    background: var(--bg-card);
+    color: var(--text);
+    border: 2px solid var(--border);
+}
+
+.timeline-actions .btn-secondary:hover {
+    border-color: var(--primary);
+    color: var(--primary);
 }
 
 /* Main Timeline Wrapper - Contains all events */
@@ -1233,19 +1354,19 @@ a:focus-visible {
     .workspace-body {
         grid-template-columns: 1fr;
     }
-    
+
     .workspace-pane[data-pane="timeline"] {
         grid-column: 1;
     }
-    
+
     .workspace-pane[data-pane="archive"] {
         grid-column: 1;
     }
-    
+
     .workspace-pane.collapsible {
         display: none;
     }
-    
+
     .workspace-pane.collapsible.active {
         display: block;
     }
@@ -1258,18 +1379,18 @@ a:focus-visible {
         padding: 1rem;
         gap: 1rem;
     }
-    
+
     .workspace-nav {
         order: 3;
         justify-content: center;
         flex-wrap: wrap;
     }
-    
+
     .logo-and-toggle {
         order: 1;
         justify-content: space-between;
     }
-    
+
     .case-selector {
         order: 2;
     }
