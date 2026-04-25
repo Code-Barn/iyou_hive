@@ -66,6 +66,71 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     }
   }
+
+  /**
+   * Initialize case selector dropdown
+   */
+  function initCaseSelector() {
+    const caseSelector = document.getElementById("case-selector");
+    if (!caseSelector) return;
+
+    fetch("/core/api/cases/")
+      .then((response) => response.json())
+      .then((cases) => {
+        const options = caseSelector.querySelectorAll(
+          "option:not(:first-child)",
+        );
+        options.forEach((opt) => opt.remove());
+        cases.forEach((caseItem) => {
+          const option = document.createElement("option");
+          option.value = caseItem.id;
+          option.textContent = caseItem.name;
+          caseSelector.appendChild(option);
+        });
+        const savedCaseId = localStorage.getItem("selectedCaseId");
+        if (savedCaseId && cases.some((c) => c.id == savedCaseId)) {
+          caseSelector.value = savedCaseId;
+        }
+      })
+      .catch(console.error);
+
+    caseSelector.addEventListener("change", function () {
+      const caseId = this.value;
+      if (caseId) {
+        localStorage.setItem("selectedCaseId", caseId);
+        // Reload page to show selected case
+        window.location.href = "/timeline/?case_id=" + caseId;
+      }
+    });
+  }
+
+  /**
+   * Initialize collapsible panes
+   */
+  function initCollapsiblePanes() {
+    const panes = document.querySelectorAll(".workspace-pane.collapsible");
+    panes.forEach((pane) => {
+      const collapseButton = pane.querySelector(".collapse-button");
+      const savedState = localStorage.getItem(pane.id + "_state");
+      if (savedState === "collapsed") {
+        pane.classList.add("collapsed");
+      }
+      if (collapseButton) {
+        collapseButton.addEventListener("click", function () {
+          const isCollapsed = pane.classList.toggle("collapsed");
+          localStorage.setItem(
+            pane.id + "_state",
+            isCollapsed ? "collapsed" : "expanded",
+          );
+          this.textContent = isCollapsed ? "▶" : "▼";
+        });
+      }
+    });
+  }
+
+  // Initialize workspace features
+  initCaseSelector();
+  initCollapsiblePanes();
 });
 
 /**

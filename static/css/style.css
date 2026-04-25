@@ -1050,3 +1050,227 @@ a:focus-visible {
 .form-actions a {
     padding: 0.75rem 1.5rem;
 }
+
+/* ========================================
+   Workspace Layout (Three-Pane)
+   ======================================== */
+
+/* Workspace Container */
+.workspace {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+}
+
+/* Workspace Header */
+.workspace-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 2rem;
+    background: var(--bg-navbar);
+    border-bottom: 2px solid var(--primary);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+/* Case Selector Dropdown */
+.case-selector {
+    display: flex;
+    align-items: center;
+}
+
+.case-selector select {
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+    min-width: 150px;
+}
+
+.case-selector select:hover,
+.case-selector select:focus {
+    border-color: var(--primary);
+    outline: none;
+}
+
+/* Workspace Navigation */
+.workspace-nav {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.workspace-nav .nav-button {
+    padding: 0.5rem 1rem;
+}
+
+/* Logo and Toggle Container */
+.logo-and-toggle {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Workspace Body - Three Pane Layout */
+.workspace-body {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr;
+    height: calc(100vh - 60px);
+    overflow: hidden;
+}
+
+/* Workspace Pane Base Styles */
+.workspace-pane {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--border);
+    background: var(--bg);
+    overflow: hidden;
+    color: var(--text);
+}
+
+.workspace-pane:last-child {
+    border-right: none;
+}
+
+.workspace-pane[data-pane="timeline"] {
+    grid-column: 1;
+}
+
+.workspace-pane[data-pane="archive"] {
+    grid-column: 2;
+}
+
+.workspace-pane[data-pane="ai"] {
+    grid-column: 3;
+}
+
+/* Pane Header */
+.pane-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    background: var(--bg-navbar);
+    border-bottom: 1px solid var(--border);
+    min-height: 40px;
+    color: var(--text);
+}
+
+.pane-header h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--primary);
+    margin: 0;
+}
+
+/* Pane Content */
+.pane-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+/* Collapsible Pane Styles */
+.workspace-pane.collapsible {
+    transition: all 0.3s ease;
+}
+
+.workspace-pane.collapsible.collapsed {
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+/* Collapse Button */
+.collapse-button {
+    background: none;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    transition: all 0.3s ease;
+}
+
+.collapse-button:hover {
+    background: var(--primary);
+    color: var(--bg);
+}
+
+.workspace-pane.collapsible .collapse-button {
+    transform: rotate(0deg);
+}
+
+.workspace-pane.collapsible.collapsed .collapse-button {
+    transform: rotate(180deg);
+}
+
+/* Active Pane Indicator */
+.workspace-pane.active {
+    border-right: 2px solid var(--primary);
+}
+
+/* Responsive Workspace */
+@media (max-width: 1200px) {
+    .workspace-body {
+        grid-template-columns: 2fr 1fr;
+    }
+    .workspace-pane[data-pane="ai"] {
+        display: none;
+    }
+}
+
+@media (max-width: 900px) {
+    .workspace-body {
+        grid-template-columns: 1fr;
+    }
+    
+    .workspace-pane[data-pane="timeline"] {
+        grid-column: 1;
+    }
+    
+    .workspace-pane[data-pane="archive"] {
+        grid-column: 1;
+    }
+    
+    .workspace-pane.collapsible {
+        display: none;
+    }
+    
+    .workspace-pane.collapsible.active {
+        display: block;
+    }
+}
+
+@media (max-width: 768px) {
+    .workspace-header {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 1rem;
+        gap: 1rem;
+    }
+    
+    .workspace-nav {
+        order: 3;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .logo-and-toggle {
+        order: 1;
+        justify-content: space-between;
+    }
+    
+    .case-selector {
+        order: 2;
+    }
+}

@@ -6,42 +6,64 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hiver{% endblock %}</title>
     {% if DEBUG %}
-    <!-- Development: Use unminified files for easier debugging -->
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     {% else %}
-    <!-- Production: Use minified files -->
     <link rel="stylesheet" href="{% static 'css/style.min.css' %}">
     {% endif %}
 </head>
 <body>
-    <nav class="navbar">
-        <a href="/" class="logo-link">
-            <img id="site-logo" src="{% static 'core/images/logos/light_mode_LOGO.png' %}" alt="Hiver" width="150">
-        </a>
-        <div class="nav-links">
-            <a href="{% url 'timeline:timeline' %}" class="nav-button">Timeline</a>
-            <a href="{% url 'archive:archive' %}" class="nav-button">Archive</a>
-            {% if user.is_authenticated %}
-            <a href="{% url 'ai_assistant:chat' %}" class="nav-button">AI Assistant</a>
-            <a href="{% url 'admin:logout' %}" class="nav-button">Logout</a>
-            {% else %}
-            <a href="{% url 'admin:login' %}" class="nav-button">Login</a>
-            {% endif %}
+    <div class="workspace">
+        <header class="workspace-header">
+            <div class="case-selector">
+                <select id="case-selector" aria-label="Select case">
+                    <option value="">-- Select Case --</option>
+                </select>
+            </div>
+            <nav class="workspace-nav">
+                <a href="{% url 'timeline:timeline' %}" class="nav-button">Timeline</a>
+                <a href="{% url 'archive:archive' %}" class="nav-button">Archive</a>
+                {% if user.is_authenticated %}
+                <a href="{% url 'ai_assistant:chat' %}" class="nav-button">AI Assistant</a>
+                <a href="{% url 'admin:logout' %}" class="nav-button">Logout</a>
+                {% else %}
+                <a href="{% url 'admin:login' %}" class="nav-button">Login</a>
+                {% endif %}
+            </nav>
+            <div class="logo-and-toggle">
+                <a href="/" class="logo-link">
+                    <img id="site-logo" src="{% static 'core/images/logos/light_mode_LOGO.png' %}" alt="Hiver" width="150">
+                </a>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light mode">
+                    <span class="theme-icon">☀️</span>
+                </button>
+            </div>
+        </header>
+        
+        <div class="workspace-body">
+            <div id="timeline-pane" class="workspace-pane active" data-pane="timeline">
+                <div class="pane-header"><h2>Timeline</h2></div>
+                <div class="pane-content">{% block timeline_content %}{% endblock %}</div>
+            </div>
+            <div id="archive-pane" class="workspace-pane collapsible" data-pane="archive">
+                <div class="pane-header">
+                    <h2>Archive</h2>
+                    <button class="collapse-button" aria-label="Toggle archive">▼</button>
+                </div>
+                <div class="pane-content">{% block archive_content %}{% endblock %}</div>
+            </div>
+            <div id="ai-pane" class="workspace-pane collapsible" data-pane="ai">
+                <div class="pane-header">
+                    <h2>AI Assistant</h2>
+                    <button class="collapse-button" aria-label="Toggle AI">▼</button>
+                </div>
+                <div class="pane-content">{% block ai_content %}{% endblock %}</div>
+            </div>
         </div>
-        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light mode">
-            <span class="theme-icon">☀️</span>
-        </button>
-    </nav>
-
-    <main class="container">
-        {% block content %}{% endblock %}
-    </main>
+    </div>
 
     {% if DEBUG %}
-    <!-- Development: Use unminified files -->
     <script src="{% static 'js/theme.js' %}"></script>
     {% else %}
-    <!-- Production: Use minified files -->
     <script src="{% static 'js/theme.min.js' %}"></script>
     {% endif %}
     {% block extra_js %}{% endblock %}
