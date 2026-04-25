@@ -1,0 +1,702 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ case.name }} - Hiver{% endblock %}
+
+{% block timeline_content %}
+<div class="case-detail-container">
+    <div class="case-detail-header">
+        <div class="breadcrumb">
+            <a href="{% url 'core:case_list' %}">⬅️ All Cases</a>
+        </div>
+        
+        <div class="case-detail-title">
+            <div class="case-color-indicator" style="background-color: {{ case.color }};"></div>
+            <div class="case-title-content">
+                <h1>{{ case.name }}</h1>
+                <span class="case-badge {% if case.is_active %}active{% endif %}">
+                    {% if case.is_active %}Active{% else %}Inactive{% endif %}
+                </span>
+            </div>
+        </div>
+        
+        {% if case.description %}
+        <p class="case-description">{{ case.description }}</p>
+        {% endif %}
+        
+        <div class="case-detail-stats">
+            <div class="stat">
+                <span class="stat-value">{{ event_count }}</span>
+                <span class="stat-label">Events</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ document_count }}</span>
+                <span class="stat-label">Documents</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ case.timeline_files.count }}</span>
+                <span class="stat-label">Timeline Files</span>
+            </div>
+            <div class="stat">
+                <span class="stat-value">{{ case.created_at|date:"M d, Y" }}</span>
+                <span class="stat-label">Created</span>
+            </div>
+        </div>
+    </div>
+
+    {% if messages %}
+    <div class="messages-container">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags if message.tags else 'info' }}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="case-detail-tabs">
+        <a href="#overview" class="tab active" data-tab="overview">Overview</a>
+        <a href="#events" class="tab" data-tab="events">Recent Events</a>
+        <a href="#documents" class="tab" data-tab="documents">Recent Documents</a>
+        <a href="#timelines" class="tab" data-tab="timelines">Timeline Files</a>
+    </div>
+
+    <div class="tab-content">
+        <!-- Overview Tab -->
+        <div id="overview" class="tab-pane active">
+            <div class="overview-section">
+                <h2>About This Case</h2>
+                <p>This case contains your legal timeline events, supporting documents, and archive files.</p>
+            </div>
+
+            <div class="overview-section">
+                <h2>Quick Actions</h2>
+                <div class="quick-actions">
+                    <a href="{% url 'timeline:timeline' %}?case_id={{ case.id }}" class="action-card">
+                        <div class="action-icon">📅</div>
+                        <div class="action-content">
+                            <h3>View Timeline</h3>
+                            <p>See all events in this case</p>
+                        </div>
+                    </a>
+                    <a href="{% url 'archive:archive' %}?case_id={{ case.id }}" class="action-card">
+                        <div class="action-icon">📁</div>
+                        <div class="action-content">
+                            <h3>View Archive</h3>
+                            <p>See all documents in this case</p>
+                        </div>
+                    </a>
+                    <a href="{% url 'core:switch_case' case_id=case.id %}" class="action-card">
+                        <div class="action-icon">⚡</div>
+                        <div class="action-content">
+                            <h3>Switch to Case</h3>
+                            <p>Make this your active case</p>
+                        </div>
+                    </a>
+                    <a href="{% url 'core:case_list' %}" class="action-card">
+                        <div class="action-icon">📋</div>
+                        <div class="action-content">
+                            <h3>All Cases</h3>
+                            <p>Return to case list</p>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Events Tab -->
+        <div id="events" class="tab-pane">
+            {% if events %}
+            <div class="events-list">
+                <h2>Recent Events</h2>
+                <a href="{% url 'timeline:timeline' %}?case_id={{ case.id }}" class="view-all">
+                    View All Events →
+                </a>
+                
+                <div class="event-cards">
+                    {% for event in events %}
+                    <div class="event-card">
+                        <div class="event-card-header">
+                            <span class="event-date">{{ event.date|date:"M d, Y" }}</span>
+                            <span class="event-category">{{ event.get_category_display }}</span>
+                        </div>
+                        <h3 class="event-title">{{ event.event }}</h3>
+                        {% if event.notes %}
+                        <p class="event-notes">{{ event.notes|truncatechars:150 }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-section">
+                <div class="empty-icon">📅</div>
+                <h2>No Events Yet</h2>
+                <p>This case doesn't have any timeline events yet.</p>
+                <a href="{% url 'timeline:upload' %}?case_id={{ case.id }}" class="btn-primary">
+                    Upload Timeline
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Recent Documents Tab -->
+        <div id="documents" class="tab-pane">
+            {% if documents %}
+            <div class="documents-list">
+                <h2>Recent Documents</h2>
+                <a href="{% url 'archive:archive' %}?case_id={{ case.id }}" class="view-all">
+                    View All Documents →
+                </a>
+                
+                <div class="document-cards">
+                    {% for doc in documents %}
+                    <div class="document-card">
+                        <div class="document-icon">
+                            {% if doc.is_pdf %}📕{% elif doc.is_image %}🖼️{% else %}📄{% endif %}
+                        </div>
+                        <div class="document-info">
+                            <h3 class="document-title">{{ doc.title }}</h3>
+                            <p class="document-meta">
+                                Uploaded {{ doc.upload_date|date:"M d, Y" }} • 
+                                {{ doc.category|default:"Uncategorized" }}
+                            </p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-section">
+                <div class="empty-icon">📄</div>
+                <h2>No Documents Yet</h2>
+                <p>This case doesn't have any documents yet.</p>
+                <a href="{% url 'archive:upload' %}?case_id={{ case.id }}" class="btn-primary">
+                    Upload Document
+                </a>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Timeline Files Tab -->
+        <div id="timelines" class="tab-pane">
+            {% if timeline_files %}
+            <div class="timelines-list">
+                <h2>Timeline Files</h2>
+                
+                <div class="timeline-file-cards">
+                    {% for tf in timeline_files %}
+                    <div class="timeline-file-card">
+                        <div class="timeline-file-header">
+                            <span class="timeline-file-icon">📄</span>
+                            <h3 class="timeline-file-name">{{ tf.name }}</h3>
+                        </div>
+                        <p class="timeline-file-path">{{ tf.file_path|truncatechars:60 }}</p>
+                        <p class="timeline-file-description">{{ tf.description|truncatechars:150 }}</p>
+                        <div class="timeline-file-meta">
+                            <span>Updated {{ tf.updated_at|date:"M d, Y" }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="empty-section">
+                <div class="empty-icon">📝</div>
+                <h2>No Timeline Files Yet</h2>
+                <p>This case doesn't have any timeline files yet.</p>
+                <a href="{% url 'timeline:upload' %}?case_id={{ case.id }}" class="btn-primary">
+                    Upload Timeline File
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Danger Zone -->
+    <div class="danger-zone">
+        <h2>⚠️ Danger Zone</h2>
+        <div class="danger-actions">
+            {% if case.can_delete %}
+            <form method="post" action="{% url 'core:delete_case' case_id=case.id %}" 
+                  class="delete-form" 
+                  onsubmit="return confirm('Are you SURE you want to delete this case and ALL its data? This cannot be undone.')">
+                {% csrf_token %}
+                <input type="hidden" name="confirm" value="yes">
+                <button type="submit" class="btn-danger">
+                    🗑️ Delete This Case
+                </button>
+                <p class="delete-warning">
+                    This will permanently delete all events, documents, and timeline files in this case.
+                </p>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .case-detail-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+    
+    .breadcrumb {
+        margin-bottom: 1.5rem;
+    }
+    
+    .breadcrumb a {
+        color: var(--primary);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .breadcrumb a:hover {
+        text-decoration: underline;
+    }
+    
+    .case-detail-header {
+        margin-bottom: 2rem;
+    }
+    
+    .case-detail-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    
+    .case-color-indicator {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    
+    .case-title-content {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .case-detail-title h1 {
+        color: var(--text);
+        margin: 0;
+        font-size: 2rem;
+        font-weight: 700;
+    }
+    
+    .case-badge {
+        padding: 0.375rem 1rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .case-badge.active {
+        background: rgba(76, 175, 80, 0.2);
+        color: #4CAF50;
+    }
+    
+    .case-badge:not(.active) {
+        background: var(--bg-alt);
+        color: var(--text-secondary);
+    }
+    
+    .case-description {
+        color: var(--text-secondary);
+        font-size: 1.1rem;
+        line-height: 1.6;
+        margin-bottom: 1.5rem;
+        max-width: 800px;
+    }
+    
+    .case-detail-stats {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+        padding: 1rem;
+        background: var(--bg-card);
+        border-radius: 12px;
+        border: 1px solid var(--border);
+    }
+    
+    .stat {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        min-width: 100px;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--primary);
+    }
+    
+    .stat-label {
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Tabs */
+    .case-detail-tabs {
+        display: flex;
+        gap: 0.25rem;
+        border-bottom: 2px solid var(--border);
+        margin-bottom: 1.5rem;
+        overflow-x: auto;
+    }
+    
+    .tab {
+        padding: 0.75rem 1.5rem;
+        color: var(--text-secondary);
+        text-decoration: none;
+        border: 2px solid transparent;
+        border-bottom: none;
+        border-radius: 8px 8px 0 0;
+        font-size: 0.95rem;
+        font-weight: 500;
+        white-space: nowrap;
+        transition: all 0.2s ease;
+    }
+    
+    .tab:hover {
+        color: var(--text);
+        background: var(--bg-card);
+    }
+    
+    .tab.active {
+        color: var(--primary);
+        border-color: var(--border);
+        background: var(--bg-card);
+    }
+    
+    .tab-content {
+        margin-bottom: 2rem;
+    }
+    
+    .tab-pane {
+        display: none;
+        animation: fadeIn 0.3s ease;
+    }
+    
+    .tab-pane.active {
+        display: block;
+    }
+    
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* Quick Actions */
+    .overview-section {
+        margin-bottom: 2rem;
+    }
+    
+    .overview-section h2 {
+        color: var(--text);
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+    
+    .action-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.5rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        text-decoration: none;
+        color: var(--text);
+        transition: all 0.2s ease;
+    }
+    
+    .action-card:hover {
+        background: var(--bg-alt);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .action-icon {
+        font-size: 2rem;
+        flex-shrink: 0;
+    }
+    
+    .action-content h3 {
+        color: var(--text);
+        font-size: 1rem;
+        margin: 0 0 0.25rem 0;
+        font-weight: 600;
+    }
+    
+    .action-content p {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+        margin: 0;
+    }
+    
+    /* View All Links */
+    .view-all {
+        display: inline-block;
+        color: var(--primary);
+        text-decoration: none;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
+    
+    .view-all:hover {
+        text-decoration: underline;
+    }
+    
+    /* Events and Documents Lists */
+    .event-cards,
+    .document-cards,
+    .timeline-file-cards {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .event-card,
+    .document-card,
+    .timeline-file-card {
+        padding: 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+    
+    .event-card:hover,
+    .document-card:hover,
+    .timeline-file-card:hover {
+        background: var(--bg-alt);
+        border-color: var(--primary);
+    }
+    
+    .event-card-header,
+    .timeline-file-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    
+    .event-date {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    
+    .event-category {
+        padding: 0.25rem 0.5rem;
+        background: var(--bg-alt);
+        border-radius: 4px;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+    }
+    
+    .event-title,
+    .document-title,
+    .timeline-file-name {
+        color: var(--text);
+        font-size: 1rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem 0;
+    }
+    
+    .event-notes,
+    .document-meta,
+    .timeline-file-path,
+    .timeline-file-description,
+    .timeline-file-meta {
+        color: var(--text-secondary);
+        font-size: 0.875rem;
+    }
+    
+    /* Empty Sections */
+    .empty-section {
+        text-align: center;
+        padding: 3rem 2rem;
+        background: var(--bg-card);
+        border: 2px dashed var(--border);
+        border-radius: 12px;
+    }
+    
+    .empty-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+    
+    .empty-section h2 {
+        color: var(--text);
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-section p {
+        color: var(--text-secondary);
+        margin-bottom: 1.5rem;
+    }
+    
+    .empty-section .btn-primary {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+    }
+    
+    /* Messages */
+    .messages-container {
+        margin-bottom: 1.5rem;
+    }
+    
+    .alert {
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .alert-info {
+        background: rgba(0, 100, 170, 0.15);
+        border: 1px solid var(--accent);
+        color: var(--accent);
+    }
+    
+    .alert-success {
+        background: rgba(76, 175, 80, 0.15);
+        border: 1px solid #4CAF50;
+        color: #4CAF50;
+    }
+    
+    .alert-error {
+        background: rgba(244, 67, 54, 0.15);
+        border: 1px solid #F44336;
+        color: #F44336;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    /* Danger Zone */
+    .danger-zone {
+        margin-top: 2rem;
+        padding: 1.5rem;
+        background: rgba(244, 67, 54, 0.05);
+        border: 1px solid rgba(244, 67, 54, 0.2);
+        border-radius: 12px;
+    }
+    
+    .danger-zone h2 {
+        color: #F44336;
+        font-size: 1.1rem;
+        margin-bottom: 1rem;
+    }
+    
+    .delete-form {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .btn-danger {
+        padding: 0.75rem 1.5rem;
+        background: #F44336;
+        color: white;
+        border: 2px solid #F44336;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-danger:hover {
+        background: #d32f2f;
+        box-shadow: 0 0 10px rgba(244, 67, 54, 0.3);
+    }
+    
+    .delete-warning {
+        color: #F44336;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .case-detail-stats {
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .quick-actions {
+            grid-template-columns: 1fr;
+        }
+        
+        .case-detail-tabs {
+            flex-wrap: nowrap;
+            overflow-x: auto;
+        }
+    }
+</style>
+
+<script>
+// Tab switching functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.tab');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    
+    tabs.forEach(tab => {
+        tab.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Deactivate all tabs
+            tabs.forEach(t => t.classList.remove('active'));
+            
+            // Deactivate all panes
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+            
+            // Activate clicked tab and corresponding pane
+            this.classList.add('active');
+            const tabId = this.getAttribute('data-tab');
+            const targetPane = document.getElementById(tabId);
+            if (targetPane) {
+                targetPane.classList.add('active');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

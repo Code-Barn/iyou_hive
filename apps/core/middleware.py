@@ -32,17 +32,36 @@ class RustDIDAuthenticationMiddleware(MiddlewareMixin):
         Returns:
             bool: True if Rust-DID is available, False otherwise
         """
-        import os
         from django.conf import settings
-        use_rust_did = os.getenv('DID_BACKEND', '').lower() == 'rust'
+        import os
+        
+        # Check if Rust-DID backend is configured
+        use_rust_did = getattr(settings, 'DID_BACKEND', 'python').lower() == 'rust'
+        
+        # Also check environment variable
+        if not use_rust_did:
+            use_rust_did = os.getenv('DID_BACKEND', '').lower() == 'rust'
+        
         has_lib_path = hasattr(settings, 'RUST_DID_LIB_PATH') and settings.RUST_DID_LIB_PATH
         
-        if use_rust_did and has_lib_path:
+        # If Rust-DID is enabled, check if the library can be loaded
+        if use_rust_did:
             try:
-                from apps.core.did_rust_wrapper import did_wrapper
-                return did_wrapper is not None
+                from apps.core.did_rust_wrapper import get_did_wrapper
+                return get_did_wrapper() is not None
             except Exception:
                 return False
+        else:
+            # Even if not explicitly set to 'rust', check if library exists
+            # This allows fallback to Rust-DID if the library is present
+            if has_lib_path:
+                lib_path = str(settings.RUST_DID_LIB_PATH)
+                if os.path.exists(lib_path):
+                    try:
+                        from apps.core.did_rust_wrapper import get_did_wrapper
+                        return get_did_wrapper() is not None
+                    except Exception:
+                        return False
         return False
     
     def process_request(self, request):

@@ -111,6 +111,42 @@ class Case(models.Model):
             default_case.save()
         
         return default_case
+    
+    def can_access(self, user):
+        """
+        Check if a user can access this case.
+        
+        Args:
+            user: Django User object
+            
+        Returns:
+            bool: True if user can access this case
+        """
+        return user.is_authenticated and user.id == self.user_id
+    
+    def can_edit(self, user):
+        """
+        Check if a user can edit this case.
+        
+        Args:
+            user: Django User object
+            
+        Returns:
+            bool: True if user can edit this case
+        """
+        return self.can_access(user)
+    
+    def can_delete(self, user):
+        """
+        Check if a user can delete this case.
+        
+        Args:
+            user: Django User object
+            
+        Returns:
+            bool: True if user can delete this case
+        """
+        return self.can_access(user)
 
 
 class TimelineFile(models.Model):

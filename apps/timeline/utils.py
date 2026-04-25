@@ -4,7 +4,9 @@ Timeline utilities for parsing Markdown files and extracting headings.
 This module provides:
 - Markdown file parsing with python-markdown
 - Heading extraction for dynamic timeline display
+- Timeline event parsing with support for tables, lists, images
 - Helper functions for timeline rendering
+- Robust error handling for malformed files
 """
 
 import os
@@ -24,48 +26,121 @@ except ImportError:
     BEAUTIFULSOUP_AVAILABLE = False
 
 
+class MarkdownParseError(Exception):
+    """Exception raised when Markdown parsing fails."""
+    pass
+
+
+class MarkdownValidationError(Exception):
+    """Exception raised when Markdown content is invalid."""
+    pass
+
+
+def validate_markdown_content(content):
+    """
+    Validate Markdown content for required fields.
+    
+    Args:
+        content (str): Markdown content to validate
+        
+    Raises:
+        MarkdownValidationError: If content is invalid
+        
+    Returns:
+        bool: True if valid
+    """
+    if not content or not content.strip():
+        raise MarkdownValidationError("Markdown file is empty")
+    
+    # Check for at least one heading
+    if '#' not in content:
+        raise MarkdownValidationError("No headings found in Markdown file")
+    
+    return True
+
+
 def parse_markdown_file(file_path):
     """
-    Parse a Markdown file and extract headings and structure.
+    Parse a Markdown file and extract headings, events, and structure.
+    
+    Supports:
+    - Headings (H1-H6) for document structure
+    - Timeline events with **Date:**, **Event:**, **Category:**, **Notes:**
+    - Tables, lists, images (when python-markdown is available)
+    - Inline HTML for advanced formatting
     
     Args:
         file_path (str): Absolute path to the Markdown file
         
     Returns:
-        dict: Parsed content with headings, sections, and metadata
+        dict: Parsed content with headings, sections, events, and metadata
             {
-                'headings': [{'level': 'h1', 'text': 'Main Heading', 'anchor': 'main-heading'}, ...],
+                'headings': [{'level': int, 'text': str, 'anchor': str}, ...],
                 'first_heading': str or None,
-                'sections': [{'heading': str, 'content': str}, ...],
+                'sections': [{'heading': str, 'content': str, 'level': int}, ...],
+                'events': [{'title': str, 'date': str, 'category': str, 'notes': str, 
+                          'description': str, 'documents': list}, ...],
                 'raw_content': str,
-                'html': str or None
+                'html': str or None,
+                'images': [{'url': str, 'alt': str}, ...],
+                'tables': [dict, ...],
+                'warnings': [str, ...]
             }
+        
+    Raises:
+        MarkdownParseError: If file cannot be read
+        MarkdownValidationError: If content is invalid
     """
+    # Check if file exists
     if not os.path.exists(file_path):
-        return {
-            'headings': [],
-            'first_heading': None,
-            'sections': [],
-            'raw_content': '',
-            'html': None
-        }
+        raise MarkdownParseError(f"Markdown file not found: {file_path}")
     
-    with open(file_path, 'r', encoding='utf-8') as file:
-        raw_content = file.read()
+    # Try to read file
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            raw_content = file.read()
+    except IOError as e:
+        raise MarkdownParseError(f"Failed to read file {file_path}: {e}")
+    except UnicodeDecodeError as e:
+        raise MarkdownParseError(f"Failed to decode file {file_path} as UTF-8: {e}")
+    
+    # Validate content
+    warnings = []
+    try:
+        validate_markdown_content(raw_content)
+    except MarkdownValidationError as e:
+        warnings.append(f"Validation warning: {e}")
     
     result = {
         'headings': [],
         'first_heading': None,
         'sections': [],
+        'events': [],
         'raw_content': raw_content,
-        'html': None
+        'html': None,
+        'images': [],
+        'tables': [],
+        'warnings': warnings
     }
     
-    # Parse with markdown if available
+    # Parse with markdown if available (with extensions for tables, etc.)
     if MARKDOWN_AVAILABLE:
-        result['html'] = markdown.markdown(raw_content)
+        try:
+            result['html'] = markdown.markdown(
+                raw_content,
+                extensions=[
+                    'tables',
+                    'fenced_code',
+                    'codehilite',
+                    'footnotes',
+                    'md_in_html',
+                ]
+            )
+        except Exception as e:
+            result['warnings'].append(f"Markdown parsing error: {e}")
+            result['html'] = None
     
-    # Extract headings using regex (works with or without markdown library)
+    # Extract headings using regex
     heading_pattern = r'^(#{1,6})\s+(.+?)\s*$'
     headings = []
     
@@ -73,7 +148,7 @@ def parse_markdown_file(file_path):
         match = re.match(heading_pattern, line)
         if match:
             level_hashes, text = match.groups()
-            level = f'h{len(level_hashes)}'
+            level = int(level_hashes[1:])  # Convert # to integer (h1 -> 1)
             anchor = re.sub(r'[^\w\-]+', '-', text.lower()).strip('-')
             headings.append({
                 'level': level,
@@ -82,12 +157,12 @@ def parse_markdown_file(file_path):
             })
     
     result['headings'] = headings
-    result['first_heading'] = headings[0]['text'] if headings else None
+    result['first_heading'] = headings[0]['text'] if headings else "Legal Timeline"
     
     # Extract sections (content between headings)
     sections = []
     lines = raw_content.split('\n')
-    current_section = {'heading': None, 'contentlines': []}
+    current_section = {'heading': None, 'contentlines': [], 'level': 0}
     
     for line in lines:
         heading_match = re.match(heading_pattern, line)
@@ -96,12 +171,15 @@ def parse_markdown_file(file_path):
             if current_section['heading'] is not None:
                 sections.append({
                     'heading': current_section['heading'],
-                    'content': '\n'.join(current_section['contentlines'])
+                    'content': '\n'.join(current_section['contentlines']),
+                    'level': current_section['level']
                 })
             # Start new section
+            level = int(heading_match.group(1)[1:])
             current_section = {
                 'heading': heading_match.group(2).strip(),
-                'contentlines': []
+                'contentlines': [],
+                'level': level
             }
         else:
             current_section['contentlines'].append(line)
@@ -110,12 +188,168 @@ def parse_markdown_file(file_path):
     if current_section['heading'] is not None:
         sections.append({
             'heading': current_section['heading'],
-            'content': '\n'.join(current_section['contentlines'])
+            'content': '\n'.join(current_section['contentlines']),
+            'level': current_section['level']
         })
     
     result['sections'] = sections
     
+    # Parse events from sections
+    events = []
+    for section in sections:
+        # Check if this section looks like an event (has Date, Event, etc.)
+        section_events = parse_section_events(section)
+        events.extend(section_events)
+    
+    # If no events parsed from sections, try parsing the whole content
+    if not events:
+        events = parse_timeline_events_from_markdown(raw_content)
+    
+    result['events'] = events
+    
+    # Extract images if HTML is available
+    if result['html'] and BEAUTIFULSOUP_AVAILABLE:
+        try:
+            soup = BeautifulSoup(result['html'], 'html.parser')
+            for img in soup.find_all('img'):
+                result['images'].append({
+                    'url': img.get('src', ''),
+                    'alt': img.get('alt', '')
+                })
+        except Exception as e:
+            result['warnings'].append(f"Image extraction error: {e}")
+    
+    # Extract tables if HTML is available
+    if result['html'] and BEAUTIFULSOUP_AVAILABLE:
+        try:
+            soup = BeautifulSoup(result['html'], 'html.parser')
+            for table in soup.find_all('table'):
+                table_data = []
+                for row in table.find_all('tr'):
+                    cells = [cell.get_text(strip=True) for cell in row.find_all(['th', 'td'])]
+                    table_data.append(cells)
+                result['tables'].append(table_data)
+        except Exception as e:
+            result['warnings'].append(f"Table extraction error: {e}")
+    
     return result
+
+
+def parse_section_events(section):
+    """
+    Parse timeline events from a section of Markdown content.
+    
+    Expected format within a section:
+    ## Event Title
+    **Date:** 2024-01-15
+    **Category:** contract
+    **Notes:** Some notes here
+    
+    Or with description:
+    ## Event Title
+    Date: 2024-01-15
+    Category: contract
+    Notes: Some notes
+    Description: More details here
+    
+    Args:
+        section (dict): Section dict with 'heading', 'content', 'level' keys
+        
+    Returns:
+        list: List of event dicts
+    """
+    events = []
+    content = section.get('content', '')
+    heading = section.get('heading', '')
+    
+    # If this is an H2 section, treat heading as event title
+    if section.get('level', 0) == 2:
+        event = {
+            'title': heading,
+            'date': None,
+            'category': 'other',
+            'notes': '',
+            'description': content.strip(),
+            'documents': [],
+            'section_level': section.get('level', 0)
+        }
+        
+        # Parse content for event fields
+        for line in content.split('\n'):
+            line = line.strip()
+            
+            # Try both **Field:** and Field: formats
+            if line.lower().startswith('**date:**'):
+                event['date'] = line[8:].strip()
+            elif line.lower().startswith('date:'):
+                event['date'] = line[5:].strip()
+            elif line.lower().startswith('**category:**'):
+                event['category'] = line[12:].strip().lower()
+            elif line.lower().startswith('category:'):
+                event['category'] = line[9:].strip().lower()
+            elif line.lower().startswith('**notes:**'):
+                event['notes'] = line[8:].strip()
+            elif line.lower().startswith('notes:'):
+                event['notes'] = line[6:].strip()
+            elif line.lower().startswith('**description:**'):
+                event['description'] = line[14:].strip()
+            elif line.lower().startswith('description:'):
+                event['description'] = line[11:].strip()
+            elif line.lower().startswith('**documents:**') or line.lower().startswith('**supporting docs:**'):
+                # Try to parse documents
+                docs_part = line.split(':', 1)[1].strip()
+                if '[' in docs_part and ']' in docs_part:
+                    # Try to parse as markdown links
+                    event['documents'] = extract_documents_from_text(docs_part)
+                elif ',' in docs_part:
+                    event['documents'] = [d.strip() for d in docs_part.split(',')]
+                else:
+                    event['documents'] = [docs_part]
+            elif line.lower().startswith('documents:') or line.lower().startswith('supporting docs:'):
+                docs_part = line.split(':', 1)[1].strip()
+                if '[' in docs_part and ']' in docs_part:
+                    event['documents'] = extract_documents_from_text(docs_part)
+                elif ',' in docs_part:
+                    event['documents'] = [d.strip() for d in docs_part.split(',')]
+                else:
+                    event['documents'] = [docs_part]
+        
+        events.append(event)
+    
+    return events
+
+
+def extract_documents_from_text(text):
+    """
+    Extract document references from text.
+    
+    Supports formats:
+    - [Document 1](url1), [Document 2](url2)
+    - Document 1, Document 2
+    - url1, url2
+    
+    Args:
+        text (str): Text containing document references
+        
+    Returns:
+        list: List of document dicts or strings
+    """
+    documents = []
+    
+    # Try to parse as markdown links
+    link_pattern = r'\[(.*?)\]\((.*?)\)'
+    matches = re.findall(link_pattern, text)
+    for title, url in matches:
+        documents.append({'title': title.strip(), 'url': url.strip()})
+    
+    # If no links found, try comma-separated
+    if not documents and text.strip():
+        parts = [p.strip() for p in text.split(',')]
+        for part in parts:
+            if part:
+                documents.append(part)
+    
+    return documents
 
 
 def extract_headings(html_content=None, markdown_content=None):
@@ -170,8 +404,11 @@ def get_main_heading(markdown_content=None, file_path=None):
         str: The first H1 heading text, or a default
     """
     if file_path:
-        parsed = parse_markdown_file(file_path)
-        return parsed['first_heading']
+        try:
+            parsed = parse_markdown_file(file_path)
+            return parsed.get('first_heading', 'Legal Timeline')
+        except (MarkdownParseError, MarkdownValidationError):
+            return "Legal Timeline"
     
     if markdown_content:
         for line in markdown_content.split('\n'):

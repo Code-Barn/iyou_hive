@@ -50,15 +50,14 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'config.urls'
 
 # Authentication settings
-# Use custom DID authentication
+# Use Django's built-in authentication with DID as an alternative
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/timeline/'
 LOGOUT_REDIRECT_URL = '/timeline/'
 
 # Rust-DID configuration
-DID_BACKEND = os.getenv('DID_BACKEND', 'python')  # 'rust' or 'python'
-RUST_DID_LIB_PATH = Path(os.getenv('RUST_DID_LIB_PATH', str(Path(__file__).parent.parent / 'rust_did' / 'target' / 'release' / 'libdid_ffi.so')))
-
+DID_BACKEND = os.getenv('DID_BACKEND', 'rust')  # 'rust' or 'python'
+RUST_DID_LIB_PATH = Path(os.getenv('RUST_DID_LIB_PATH', str(Path(__file__).parent.parent / 'rust_did' / 'target' / 'release' / 'libdid_rust.so')))
 # Session settings
 SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
 SESSION_COOKIE_SECURE = True  # Only send over HTTPS

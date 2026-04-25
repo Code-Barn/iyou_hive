@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Create Case - Hiver{% endblock %}
+
+{% block timeline_content %}
+<div class="create-case-container">
+    <div class="create-case-header">
+        <h1>Create New Case</h1>
+        <p class="create-case-subtitle">
+            Organize your legal work into separate cases for better isolation and focus.
+        </p>
+    </div>
+
+    <div class="create-case-form-container">
+        <form method="post" class="create-case-form">
+            {% csrf_token %}
+
+            {% if messages %}
+            <div class="alert-group">
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags if message.tags else 'error' }}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="form-section">
+                <h2>Case Information</h2>
+                
+                <div class="form-group">
+                    <label for="name">Case Name *</label>
+                    <input type="text" id="name" name="name" 
+                           placeholder="e.g., Smith vs. Jones Lawsuit"
+                           required autofocus>
+                    <p class="help-text">Give your case a descriptive name. This will be used throughout the application.</p>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description" 
+                              placeholder="Brief description of the case..."
+                              rows="4"></textarea>
+                    <p class="help-text">Optional. Describe what this case is about for your reference.</p>
+                </div>
+            </div>
+
+            <div class="form-section">
+                <h2>Appearance</h2>
+                
+                <div class="form-group">
+                    <label for="color">Case Color</label>
+                    <div class="color-picker">
+                        {% for option in color_options %}
+                        <label class="color-option" style="--option-color: {{ option.color }};">
+                            <input type="radio" name="color" value="{{ option.color }}" 
+                                   {% if forloop.first %}checked{% endif %}>
+                            <span class="color-swatch" style="background-color: {{ option.color }};"></span>
+                            <span class="color-name">{{ option.name }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                    <p class="help-text">Choose a color to help you identify this case in the interface.</p>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" name="is_active" value="true">
+                        <span>Make this my active case</span>
+                    </label>
+                    <p class="help-text">If checked, this will become your active case and other cases will be deactivated.</p>
+                </div>
+            </div>
+
+            <div class="form-actions">
+                <a href="{% url 'core:case_list' %}" class="btn-secondary cancel-btn">
+                    Cancel
+                </a>
+                <button type="submit" class="btn-primary create-btn">
+                    Create Case
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<style>
+    .create-case-container {
+        max-width: 700px;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+    }
+    
+    .create-case-header {
+        margin-bottom: 2rem;
+    }
+    
+    .create-case-header h1 {
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .create-case-subtitle {
+        color: var(--text-secondary);
+        font-size: 1rem;
+    }
+    
+    .create-case-form-container {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 2rem;
+    }
+    
+    .create-case-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    
+    .form-section {
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .form-section:last-of-type {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+    
+    .form-section h2 {
+        color: var(--text);
+        font-size: 1rem;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+    
+    .form-group label {
+        display: block;
+        color: var(--text);
+        font-size: 0.95rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    .form-group input[type="text"],
+    .form-group textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 1rem;
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        font-family: inherit;
+    }
+    
+    .form-group input:focus,
+    .form-group textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+        box-shadow: 0 0 0 4px rgba(255, 140, 0, 0.15);
+    }
+    
+    .form-group textarea {
+        resize: vertical;
+        min-height: 100px;
+    }
+    
+    .help-text {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+        line-height: 1.4;
+    }
+    
+    /* Color Picker */
+    .color-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+    
+    .color-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        border: 2px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: var(--bg-alt);
+        min-width: 120px;
+    }
+    
+    .color-option:hover {
+        border-color: var(--border);
+        background: rgba(255, 255, 255, 0.05);
+    }
+    
+    .color-option input[type="radio"] {
+        display: none;
+    }
+    
+    .color-option input[type="radio"]:checked + .color-swatch {
+        box-shadow: 0 0 0 3px white, 0 0 0 5px var(--option-color);
+    }
+    
+    .color-swatch {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        transition: all 0.2s ease;
+    }
+    
+    .color-name {
+        font-size: 0.875rem;
+        color: var(--text);
+    }
+    
+    /* Checkbox Group */
+    .checkbox-group label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        cursor: pointer;
+        font-weight: normal;
+        padding: 0.5rem 1rem;
+        background: var(--bg-alt);
+        border-radius: 8px;
+        border: 2px solid transparent;
+        transition: all 0.2s ease;
+        width: fit-content;
+    }
+    
+    .checkbox-group label:hover {
+        border-color: var(--border);
+    }
+    
+    .checkbox-group input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary);
+    }
+    
+    /* Form Actions */
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 1rem;
+        padding-top: 1rem;
+    }
+    
+    .btn-primary.create-btn,
+    .btn-secondary.cancel-btn {
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .btn-primary.create-btn {
+        background: var(--primary);
+        color: white;
+        border: 2px solid var(--primary);
+    }
+    
+    .btn-primary.create-btn:hover {
+        background: #e67e00;
+        box-shadow: 0 0 15px rgba(255, 140, 0, 0.3);
+    }
+    
+    .btn-secondary.cancel-btn {
+        background: transparent;
+        color: var(--text);
+        border: 2px solid var(--border);
+    }
+    
+    .btn-secondary.cancel-btn:hover {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    
+    /* Alert Messages */
+    .alert-group {
+        margin-bottom: 1rem;
+    }
+    
+    .alert {
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 0.75rem;
+        animation: slideIn 0.3s ease;
+    }
+    
+    .alert-error {
+        background: rgba(244, 67, 54, 0.15);
+        border: 1px solid #F44336;
+        color: #F44336;
+    }
+    
+    .alert-success {
+        background: rgba(76, 175, 80, 0.15);
+        border: 1px solid #4CAF50;
+        color: #4CAF50;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    /* Responsive */
+    @media (max-width: 600px) {
+        .create-case-form-container {
+            padding: 1.5rem 1rem;
+        }
+        
+        .form-actions {
+            flex-direction: column-reverse;
+        }
+        
+        .btn-primary.create-btn,
+        .btn-secondary.cancel-btn {
+            width: 100%;
+            text-align: center;
+        }
+        
+        .color-option {
+            min-width: 100px;
+        }
+    }
+</style>
+{% endblock %}

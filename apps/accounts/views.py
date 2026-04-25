@@ -7,18 +7,47 @@ Handles Rust-DID based authentication with:
 - Session management
 """
 from django.shortcuts import render, redirect
-from django.contrib.auth import login, logout
+from django.contrib.auth import login, logout, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
+from django.contrib.auth.views import LoginView, LogoutView
+from django.urls import reverse_lazy
 from apps.core.middleware import RustDIDAuthenticationMiddleware
 import uuid
 import json
 
 # Get User model
 User = get_user_model()
+
+
+class CustomLoginView(LoginView):
+    """Custom login view that redirects to timeline after login."""
+    template_name = 'accounts/login.html'
+    redirect_authenticated_user = True
+    
+    def get_success_url(self):
+        return reverse_lazy('timeline:timeline')
+    
+    def form_valid(self, form):
+        messages.success(self.request, f'Welcome back, {form.get_user().username}!')
+        return super().form_valid(form)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['rust_did_available'] = RustDIDAuthenticationMiddleware.rust_did_available()
+        return context
+
+
+class CustomLogoutView(LogoutView):
+    """Custom logout view that redirects to timeline after logout."""
+    next_page = reverse_lazy('timeline:timeline')
+    
+    def dispatch(self, request, *args, **kwargs):
+        messages.success(request, 'You have been logged out.')
+        return super().dispatch(request, *args, **kwargs)
 
 
 def generate_challenge(request):

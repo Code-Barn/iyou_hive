@@ -63,6 +63,9 @@
     </div>
     {% endif %}
     
+    <div class="back-link">
+        <p>Or <a href="{% url 'accounts:login' %}">sign in with username/password</a></p>
+    </div>
     <a href="/admin/" class="admin-link">Admin Login</a>
 </div>
 
@@ -186,6 +189,25 @@
     
     .admin-link:hover {
         color: var(--primary);
+    }
+    
+    .back-link {
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+    
+    .back-link p {
+        color: var(--text-secondary);
+        margin: 0;
+    }
+    
+    .back-link a {
+        color: var(--primary);
+        text-decoration: underline;
+    }
+    
+    .back-link a:hover {
+        color: var(--accent);
     }
 </style>
 {% endblock %}
