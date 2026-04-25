@@ -21,6 +21,7 @@ from apps.timeline.views import timeline_view
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', timeline_view, name='home'),
+    path('accounts/', include('apps.accounts.urls')),
     path('timeline/', include('apps.timeline.urls')),
     path('archive/', include('apps.archive.urls')),
     path('ai/', include('apps.ai_assistant.urls')),

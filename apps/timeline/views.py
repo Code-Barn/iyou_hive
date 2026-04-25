@@ -1,18 +1,23 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse
+from django.contrib.auth.decorators import login_required
 from .models import TimelineEvent
 import markdown
 
 
+@login_required
 def timeline_view(request):
     events = TimelineEvent.objects.all()
     return render(request, 'timeline/timeline.html', {'events': events})
 
 
+
+@login_required
 def home(request):
     return timeline_view(request)
 
 
+@login_required
 def upload_markdown(request):
     if request.method == 'POST':
         content = request.POST.get('markdown_content', '')
@@ -23,6 +28,7 @@ def upload_markdown(request):
     return render(request, 'timeline/upload.html')
 
 
+@login_required
 def event_detail(request, pk):
     event = get_object_or_404(TimelineEvent, pk=pk)
     return render(request, 'timeline/event_detail.html', {'event': event})

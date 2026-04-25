@@ -9,6 +9,7 @@ import urllib.request
 import urllib.parse
 
 
+@login_required
 def ai_chat_view(request):
     """Render the AI assistant chat interface."""
     api_key = settings.MISTRAL_API_KEY

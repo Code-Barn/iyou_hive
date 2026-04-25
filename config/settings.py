@@ -27,6 +27,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'apps.core',
+    'apps.accounts',
     'apps.timeline',
     'apps.archive',
     'apps.conversation_logs',
@@ -49,9 +50,14 @@ MIDDLEWARE = [
 ROOT_URLCONF = 'config.urls'
 
 # Authentication settings
-LOGIN_URL = '/admin/login/'
+# Use custom DID authentication
+LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/timeline/'
-LOGOUT_REDIRECT_URL = '/admin/login/'
+LOGOUT_REDIRECT_URL = '/timeline/'
+
+# Rust-DID configuration
+DID_BACKEND = os.getenv('DID_BACKEND', 'python')  # 'rust' or 'python'
+RUST_DID_LIB_PATH = Path(os.getenv('RUST_DID_LIB_PATH', str(Path(__file__).parent.parent / 'rust_did' / 'target' / 'release' / 'libdid_ffi.so')))
 
 # Session settings
 SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds

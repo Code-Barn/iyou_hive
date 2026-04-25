@@ -100,6 +100,7 @@ def run_filemapper(directory):
     return None
 
 
+@login_required
 def archive_view(request):
     """Display all archived documents."""
     documents = ArchiveDocument.objects.all().order_by('-upload_date')
@@ -206,6 +207,7 @@ def upload_document(request):
     return render(request, 'archive/upload.html', {'form': form})
 
 
+@login_required
 def document_detail(request, pk):
     """Display a single document with metadata."""
     document = get_object_or_404(ArchiveDocument, pk=pk)
@@ -230,6 +232,7 @@ def document_detail(request, pk):
     })
 
 
+@login_required
 def document_file(request, pk):
     """Serve the actual document file."""
     document = get_object_or_404(ArchiveDocument, pk=pk)
@@ -257,6 +260,7 @@ def document_file(request, pk):
     return response
 
 
+@login_required
 def document_thumbnail(request, pk):
     """Generate or serve a thumbnail for an image document."""
     document = get_object_or_404(ArchiveDocument, pk=pk)

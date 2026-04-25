@@ -24,6 +24,27 @@ class RustDIDAuthenticationMiddleware(MiddlewareMixin):
     For development, it uses a simple session-based fallback.
     """
     
+    @staticmethod
+    def rust_did_available():
+        """
+        Check if Rust-DID library is configured and available.
+        
+        Returns:
+            bool: True if Rust-DID is available, False otherwise
+        """
+        import os
+        from django.conf import settings
+        use_rust_did = os.getenv('DID_BACKEND', '').lower() == 'rust'
+        has_lib_path = hasattr(settings, 'RUST_DID_LIB_PATH') and settings.RUST_DID_LIB_PATH
+        
+        if use_rust_did and has_lib_path:
+            try:
+                from apps.core.did_rust_wrapper import did_wrapper
+                return did_wrapper is not None
+            except Exception:
+                return False
+        return False
+    
     def process_request(self, request):
         """
         Process each request to check authentication.
@@ -33,8 +54,8 @@ class RustDIDAuthenticationMiddleware(MiddlewareMixin):
         """
         # Skip authentication for certain paths
         exempt_paths = [
-            reverse('admin:login'),
-            reverse('admin:logout'),
+            '/accounts/login/',
+            '/accounts/logout/',
             '/static/',
             '/media/',
             '/favicon.ico',
@@ -70,12 +91,16 @@ class RustDIDAuthenticationMiddleware(MiddlewareMixin):
                 return None
         
         # Require authentication for certain apps
-        if path.startswith('/timeline/') or \
-           path.startswith('/archive/') or \
-           path.startswith('/ai/'):
+        if (path.startswith('/timeline/') or 
+           path.startswith('/archive/') or 
+           path.startswith('/ai/') or
+           path.startswith('/')):
             
             # Check if user is authenticated
             if not request.user.is_authenticated:
+                # Skip redirect for login/logout pages
+                if path.startswith('/accounts/'):
+                    return None
                 # Redirect to login
                 return redirect(f"{settings.LOGIN_URL}?next={request.path}")
         
