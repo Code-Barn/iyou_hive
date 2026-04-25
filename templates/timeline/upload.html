@@ -1,0 +1,15 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Timeline - Hiver{% endblock %}
+
+{% block content %}
+<div class="upload-page">
+    <h1>Upload Timeline</h1>
+    <form method="post">
+        {% csrf_token %}
+        <label>Timeline Markdown</label>
+        <textarea name="markdown_content" rows="20" required></textarea>
+        <button type="submit" class="btn-primary">Upload</button>
+    </form>
+</div>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Assistant - Hiver{% endblock %}
+
+{% block content %}
+<div class="ai-container">
+    <h1>AI Research Assistant</h1>
+
+    {% if not api_configured %}
+    <div class="alert">
+        Mistral API key not configured. Set <code>MISTRAL_API_KEY</code> in your <code>.env</code> file.
+    </div>
+    {% endif %}
+
+    <div class="chat-interface">
+        <div class="chat-history" id="chat-history">
+            <div class="message assistant">Hello! How can I help with your legal research today?</div>
+        </div>
+
+        <form id="chat-form" class="chat-input">
+            <input type="text" id="user-input" placeholder="Ask a question..." {% if not api_configured %}disabled{% endif %}>
+            <button type="submit" class="btn-primary" {% if not api_configured %}disabled{% endif %}>Send</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

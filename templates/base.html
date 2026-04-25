@@ -1,0 +1,32 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Hiver{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <img src="{% static 'core/images/logos/light_mode_LOGO.png' %}" alt="Hiver" class="logo">
+        </div>
+        <div class="nav-links">
+            <a href="{% url 'timeline:timeline' %}">Timeline</a>
+            <a href="{% url 'archive:archive' %}">Archive</a>
+            <a href="{% url 'ai_assistant:chat' %}">AI Assistant</a>
+        </div>
+        <button id="theme-toggle" class="theme-btn">
+            <span class="theme-icon">🌙</span>
+        </button>
+    </nav>
+
+    <main class="container">
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="{% static 'js/theme.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

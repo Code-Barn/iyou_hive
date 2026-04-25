@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Timeline - Hiver{% endblock %}
+
+{% block content %}
+<div class="timeline-page">
+    <h1>Legal Timeline</h1>
+    <a href="{% url 'timeline:upload' %}" class="btn-primary">Upload Timeline</a>
+
+    <div class="timeline">
+        {% for event in events %}
+        <div class="timeline-event" onclick="showPopup({{ event.pk }})">
+            <span class="event-date">{{ event.date }}</span>
+            <span class="event-name">{{ event.event }}</span>
+            <span class="event-category">{{ event.category }}</span>
+        </div>
+
+        <div id="popup-{{ event.pk }}" class="popup">
+            <button class="popup-close" onclick="closePopup({{ event.pk }})">×</button>
+            <h3>{{ event.event }}</h3>
+            <p><strong>Date:</strong> {{ event.date }}</p>
+            <p><strong>Category:</strong> {{ event.category }}</p>
+            {% if event.notes %}<p><strong>Notes:</strong> {{ event.notes }}</p>{% endif %}
+            {% if event.supporting_docs %}<p><strong>Docs:</strong> {{ event.supporting_docs }}</p>{% endif %}
+        </div>
+        {% empty %}
+        <p>No timeline events yet. Upload a markdown file to get started.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
