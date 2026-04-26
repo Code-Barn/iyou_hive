@@ -90,6 +90,48 @@ Supporting documents: [Contract.pdf](contracts/contract1.pdf), [Amendment.pdf](c
 **Notes:** Initial complaint filed
 ```
 
+#### Method 2B: Standardized Table Format
+
+For structured data, use the 5-column table format. Headings are preserved for navigation, and tables are parsed as timeline events:
+
+```markdown
+# Main Case Title
+
+This is the main description of the case.
+
+## Contract Phase
+
+All contracts and amendments related to the initial agreement.
+
+| Date | Event | Description | Category | Documents |
+|------|-------|-------------|----------|-----------|
+| 2024-01-15 | Contract Signed | Initial agreement executed | contract | contract1.pdf, contract2.pdf |
+| 2024-03-20 | Amendment 1 | Payment terms modified | contract | amendment1.pdf |
+
+## Litigation Phase
+
+All court filings and litigation documents.
+
+| Date | Event | Description | Category | Documents |
+|------|-------|-------------|----------|-----------|
+| 2024-04-05 | Complaint Filed | Initial complaint submitted | court_filing | complaint.pdf |
+| 2024-05-10 | Answer Filed | Defendant's response | court_filing | answer.pdf |
+```
+
+**Benefits of Table Format:**
+- Headings (H1-H6) appear as **clickable navigation** at the top
+- Tables are parsed into **structured timeline events**
+- Each row becomes an event with: Date, Event, Description, Category, Documents
+- Documents are **comma-separated** in the table
+- Date format must be **YYYY-MM-DD** (validated automatically)
+
+**Table Format Requirements:**
+1. **5 columns**: Date, Event, Description, Category, Documents
+2. **First row**: Header row (ignored during parsing)
+3. **Date format**: YYYY-MM-DD (e.g., 2024-01-15)
+4. **Category**: One of: contract, email, court_filing, communication, meeting, deadline, other
+5. **Documents**: Comma-separated list of filenames or URLs
+
 ### Timeline Selection
 
 If you have multiple timeline files:

@@ -194,18 +194,33 @@ def parse_markdown_file(file_path):
     
     result['sections'] = sections
     
-    # Parse events from sections
-    events = []
+    # Parse events from tables (5-column format) - takes precedence
+    table_events = []
+    if result['html']:
+        # Associate tables with their section headings
+        for section in sections:
+            section_heading = section.get('heading', '')
+            section_content = section.get('content', '')
+            
+            # Parse table events from this section's HTML
+            section_events = parse_timeline_events_from_table(result['html'], section_heading)
+            table_events.extend(section_events)
+    
+    # Parse events from sections (backward compatibility)
+    section_events = []
     for section in sections:
         # Check if this section looks like an event (has Date, Event, etc.)
-        section_events = parse_section_events(section)
-        events.extend(section_events)
+        sec_events = parse_section_events(section)
+        section_events.extend(sec_events)
     
-    # If no events parsed from sections, try parsing the whole content
-    if not events:
-        events = parse_timeline_events_from_markdown(raw_content)
+    # If no table events found, try parsing the whole content
+    if not table_events:
+        # Try to find tables in the raw markdown
+        if result['html']:
+            table_events = parse_timeline_events_from_table(result['html'])
     
-    result['events'] = events
+    # Combine events: prefer table events, fallback to section events
+    result['events'] = table_events if table_events else section_events
     
     # Extract images if HTML is available
     if result['html'] and BEAUTIFULSOUP_AVAILABLE:
@@ -219,7 +234,7 @@ def parse_markdown_file(file_path):
         except Exception as e:
             result['warnings'].append(f"Image extraction error: {e}")
     
-    # Extract tables if HTML is available
+    # Extract tables for display (not for events)
     if result['html'] and BEAUTIFULSOUP_AVAILABLE:
         try:
             soup = BeautifulSoup(result['html'], 'html.parser')
@@ -529,3 +544,105 @@ def get_timeline_file_info(file_path):
         'heading_count': len(parsed['headings']),
         'headings': parsed['headings']
     }
+
+
+def parse_timeline_events_from_table(html_content, current_section=None):
+    """
+    Parse timeline events from HTML table rows (5 columns).
+    
+    Expected table format:
+    | Date | Event | Description | Category | Documents |
+    |------|-------|-------------|----------|-----------|
+    | 2024-01-15 | Contract Signed | Signed with client | contract | doc1.pdf, doc2.pdf |
+    
+    Args:
+        html_content (str): HTML content to parse
+        current_section (str, optional): Current section heading for grouping
+        
+    Returns:
+        list: List of event dicts with keys: section, date, event, description, category, documents
+    """
+    if not BEAUTIFULSOUP_AVAILABLE:
+        return []
+    
+    events = []
+    try:
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        for table in soup.find_all('table'):
+            rows = table.find_all('tr')
+            
+            # Skip tables with fewer than 2 rows (header + at least one data row)
+            if len(rows) < 2:
+                continue
+            
+            # Process each data row
+            for row in rows[1:]:  # Skip header row
+                cells = row.find_all(['td', 'th'])
+                
+                # Need at least 5 cells for the standard format
+                if len(cells) < 5:
+                    continue
+                
+                # Extract text from each cell
+                date = cells[0].get_text().strip()
+                event = cells[1].get_text().strip()
+                description = cells[2].get_text().strip()
+                category = cells[3].get_text().strip().lower()
+                documents_raw = cells[4].get_text().strip()
+                
+                # Parse documents - split by comma, strip whitespace
+                documents = [d.strip() for d in documents_raw.split(',') if d.strip()]
+                
+                events.append({
+                    'section': current_section,
+                    'date': date,
+                    'event': event,
+                    'description': description,
+                    'category': category,
+                    'documents': documents
+                })
+    except Exception as e:
+        # Log error but don't fail
+        pass
+    
+    return events
+
+
+def validate_timeline_events(events):
+    """
+    Validate timeline events for required fields and date format.
+    
+    Expected format: Each event should have date, event, description, category, documents.
+    Date should be in YYYY-MM-DD format.
+    
+    Args:
+        events (list): List of event dicts to validate
+        
+    Raises:
+        ValueError: If events are missing required fields or have invalid dates
+        
+    Returns:
+        bool: True if all events are valid
+    """
+    from datetime import datetime
+    
+    for i, event in enumerate(events):
+        # Check required fields
+        required_fields = ['date', 'event', 'description', 'category', 'documents']
+        for field in required_fields:
+            if field not in event or not event[field]:
+                raise ValueError(
+                    f"Event {i} missing required field '{field}': {event}"
+                )
+        
+        # Validate date format
+        try:
+            datetime.strptime(event['date'], '%Y-%m-%d')
+        except ValueError:
+            raise ValueError(
+                f"Event {i} has invalid date format '{event['date']}'. "
+                f"Expected YYYY-MM-DD."
+            )
+    
+    return True

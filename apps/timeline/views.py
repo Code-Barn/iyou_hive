@@ -11,7 +11,8 @@ from .utils import (
     parse_timeline_events_from_markdown,
     extract_headings,
     find_markdown_files,
-    get_timeline_file_info
+    get_timeline_file_info,
+    validate_timeline_events
 )
 import os
 import json
@@ -91,18 +92,35 @@ def timeline_view(request):
     # Merge timeline files
     all_timeline_files = timeline_files + timeline_files_from_events
     
-    # Get headings from the first timeline file
+    # Parse markdown file for headings and events
+    markdown_events = []
+    markdown_headings = []
+    
     if all_timeline_files and all_timeline_files[0].get('file_path'):
-        parsed = parse_markdown_file(all_timeline_files[0]['file_path'])
-        headings = parsed['headings']
-    else:
-        headings = []
+        try:
+            parsed = parse_markdown_file(all_timeline_files[0]['file_path'])
+            markdown_headings = parsed.get('headings', [])
+            markdown_events = parsed.get('events', [])
+            
+            # Validate events if present
+            if markdown_events:
+                try:
+                    validate_timeline_events(markdown_events)
+                except ValueError as e:
+                    # Add warning but don't fail
+                    pass
+        except Exception as e:
+            markdown_events = []
+            markdown_headings = []
+    
+    # Use markdown events if available, otherwise fall back to database events
+    display_events = markdown_events if markdown_events else list(events)
     
     context = {
-        'events': events,
+        'events': display_events,
         'case': case,
         'main_heading': main_heading,
-        'headings': headings,
+        'headings': markdown_headings,
         'timeline_files': all_timeline_files,
         'selected_case_id': case_id or (case.id if case else None),
     }

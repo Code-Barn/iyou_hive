@@ -289,18 +289,24 @@ Markdown File
       ↓
 [3] HTML Conversion (markdown.markdown with extensions)
       ↓
-[4] Heading Extraction (regex for # headings)
+[4] Heading Extraction (regex for # headings) → headings list
       ↓
-[5] Section Parsing (split by headings)
+[5] Section Parsing (split by headings) → sections list
       ↓
-[6] Event Extraction (parse_section_events or parse_timeline_events_from_markdown)
+[6] Table Event Extraction (parse_timeline_events_from_table) → table-based events
       ↓
-[7] Image Extraction (BeautifulSoup find_all 'img')
+[7] Section Event Extraction (parse_section_events) → section-based events (fallback)
       ↓
-[8] Table Extraction (BeautifulSoup find_all 'table')
+[8] Event Validation (validate_timeline_events) → validated events or error
+      ↓
+[9] Image Extraction (BeautifulSoup find_all 'img') → images list
+      ↓
+[10] Table Data Extraction (for display) → tables list
       ↓
 Parsed Content { headings, sections, events, images, tables, warnings }
 ```
+
+**Priority:** Table-based events (step 6) take precedence over section-based events (step 7).
 
 ### Key Functions (apps/timeline/utils.py)
 
@@ -316,9 +322,9 @@ Parses a markdown file and returns structured data.
 {
     'headings': [
         {
-            'level': 1,  # Integer 1-6
+            'level': 1,      # Integer 1-6 (H1-H6)
             'text': 'Main Heading',
-            'anchor': 'main-heading'
+            'anchor': 'main-heading'  # URL-friendly anchor
         },
         ...
     ],
@@ -332,6 +338,16 @@ Parses a markdown file and returns structured data.
         ...
     ],
     'events': [
+        # Table-based format (preferred):
+        {
+            'section': 'Contract Phase',  # Parent heading
+            'date': '2024-01-15',         # YYYY-MM-DD format
+            'event': 'Contract Signed',   # Event title
+            'description': 'Initial agreement',  # Description
+            'category': 'contract',        # Lowercase category
+            'documents': ['doc1.pdf', 'doc2.pdf']  # List of document names/URLs
+        },
+        # OR Section-based format (legacy, fallback):
         {
             'title': 'Event Title',
             'date': '2024-01-15',
@@ -350,6 +366,8 @@ Parses a markdown file and returns structured data.
     'warnings': ['Validation warning...']
 }
 ```
+
+**Note:** Event format depends on source. Table-based parsing produces standardized 5-column format. Section-based parsing maintains backward compatibility.
 
 **Supported Formats:**
 - **Format A**: Simple headings with content
@@ -391,6 +409,72 @@ Parses events from a section of markdown.
 Notes: Some notes here
 Description: More details
 Supporting Docs: [Doc1](url1), [Doc2](url2)
+```
+
+#### parse_timeline_events_from_table(html_content, current_section=None)
+
+Parses timeline events from HTML tables (5-column format). This is the **preferred** format for structured timeline data.
+
+**Parameters:**
+- `html_content` (str): HTML content from markdown conversion
+- `current_section` (str, optional): Section heading for grouping events
+
+**Returns:** List of event dicts with standardized structure:
+```python
+[{
+    'section': 'Contract Phase',
+    'date': '2024-01-15',
+    'event': 'Contract Signed',
+    'description': 'Initial agreement executed',
+    'category': 'contract',
+    'documents': ['contract1.pdf', 'contract2.pdf']
+}, ...]
+```
+
+**Format:**
+```markdown
+| Date | Event | Description | Category | Documents |
+|------|-------|-------------|----------|-----------|
+| 2024-01-15 | Contract Signed | Initial agreement | contract | doc1.pdf, doc2.pdf |
+| 2024-03-20 | Amendment | Payment terms | contract | amendment.pdf |
+```
+
+**Parsing Rules:**
+- Row 1 is treated as header and skipped
+- Each data row must have at least 5 cells
+- Documents field is split by comma and stripped
+- Category is converted to lowercase
+- Section is associated from the parent heading
+
+#### validate_timeline_events(events)
+
+Validates timeline events for required fields and date format.
+
+**Parameters:**
+- `events` (list): List of event dicts to validate
+
+**Returns:** True if all events are valid
+
+**Raises:** `ValueError` if validation fails
+
+**Validation Rules:**
+1. Required fields: `date`, `event`, `description`, `category`, `documents`
+2. Date format: `YYYY-MM-DD` (strict validation)
+3. All fields must be non-empty
+
+**Usage:**
+```python
+from apps.timeline.utils import parse_markdown_file, validate_timeline_events
+
+parsed = parse_markdown_file('timeline.md')
+try:
+    validate_timeline_events(parsed['events'])
+    # Events are valid, proceed with display
+    return render(request, 'timeline.html', {'events': parsed['events']})
+except ValueError as e:
+    # Handle validation error
+    messages.error(request, str(e))
+    return redirect('timeline:upload')
 ```
 
 ### Error Handling

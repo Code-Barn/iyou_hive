@@ -47,13 +47,25 @@
     <div class="timeline-wrapper">
         {% for event in events %}
         <!-- Sticky Year Header - appears when scrolling past events of that year -->
+        {% if event.pk %}
         {% ifchanged event.date|date:"Y" %}
         <div class="year-marker" data-year="{{ event.date|date:'Y' }}">
             <span class="year-text">{{ event.date|date:'Y' }}</span>
         </div>
         {% endifchanged %}
+        {% else %}
+        {% ifchanged event.date %}
+        {% with year=event.date|slice:":4" %}
+        <div class="year-marker" data-year="{{ year }}">
+            <span class="year-text">{{ year }}</span>
+        </div>
+        {% endwith %}
+        {% endifchanged %}
+        {% endif %}
 
         <!-- Individual Event Card -->
+        {% if event.pk %}
+        <!-- Database event -->
         <div class="timeline-event" 
              data-event-id="{{ event.pk }}"
              data-date="{{ event.date|date:'Y-m-d' }}"
@@ -83,6 +95,39 @@
             <!-- Visual Connector Line -->
             <div class="event-connector"></div>
         </div>
+        {% else %}
+        <!-- Markdown event (dictionary format) -->
+        {% with year=event.date|slice:":4" month=event.date|slice:"5:7" day=event.date|slice:"8:10" %}
+        <div class="timeline-event" 
+             data-date="{{ event.date }}"
+             data-year="{{ year }}"
+             data-section="{{ event.section|default:'' }}">
+            
+            <!-- Date Badge -->
+            <div class="event-date-badge">
+                <span class="date-month">{{ month }}</span>
+                <span class="date-day">{{ day }}</span>
+                <span class="date-year">{{ year }}</span>
+            </div>
+
+            <!-- Event Content -->
+            <div class="event-content">
+                <h3 class="event-title">{{ event.event }}</h3>
+                <p class="event-category">{{ event.category|title }}</p>
+                <p class="event-description">{{ event.description|truncatechars:150 }}</p>
+                {% if event.documents and event.documents|length > 0 %}
+                <div class="event-docs-indicator">
+                    <span class="docs-icon">📎</span>
+                    <span class="docs-count">{{ event.documents|length }} document(s)</span>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Visual Connector Line -->
+            <div class="event-connector"></div>
+        </div>
+        {% endwith %}
+        {% endif %}
         {% empty %}
         <div class="empty-timeline">
             <p>No timeline events yet. Upload a markdown file to get started.</p>
