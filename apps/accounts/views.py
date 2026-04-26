@@ -14,7 +14,9 @@ from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.views import LoginView, LogoutView
+from django.contrib.auth.forms import UserCreationForm
 from django.urls import reverse_lazy
+from django.views.generic import CreateView
 from apps.core.middleware import RustDIDAuthenticationMiddleware
 import uuid
 import json
@@ -48,6 +50,46 @@ class CustomLogoutView(LogoutView):
     def dispatch(self, request, *args, **kwargs):
         messages.success(request, 'You have been logged out.')
         return super().dispatch(request, *args, **kwargs)
+
+
+class RegisterView(CreateView):
+    """User registration view with form validation."""
+    model = User
+    form_class = UserCreationForm
+    template_name = 'accounts/register.html'
+    success_url = reverse_lazy('timeline:timeline')
+    
+    def get_success_url(self):
+        messages.success(self.request, 'Registration successful! You are now logged in.')
+        return super().get_success_url()
+    
+    def form_valid(self, form):
+        # Save the user
+        response = super().form_valid(form)
+        
+        # Log the user in after registration
+        username = form.cleaned_data.get('username')
+        password = form.cleaned_data.get('password1')
+        user = authenticate(
+            username=username,
+            password=password
+        )
+        if user is not None:
+            login(self.request, user)
+        
+        return response
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['rust_did_available'] = RustDIDAuthenticationMiddleware.rust_did_available()
+        return context
+
+
+class CustomUserCreationForm(UserCreationForm):
+    """Custom user creation form with additional fields."""
+    class Meta:
+        model = User
+        fields = ('username', 'email')
 
 
 def generate_challenge(request):

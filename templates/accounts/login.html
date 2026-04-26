@@ -111,6 +111,9 @@
 
     <!-- Admin Link -->
     <div class="admin-link-container">
+        <p class="need-account">Don't have an account? 
+            <a href="{% url 'accounts:register' %}">Sign up</a>
+        </p>
         <a href="{% url 'admin:index' %}" class="admin-link">
             Admin Panel
         </a>
