@@ -12,8 +12,12 @@ from .utils import (
     extract_headings,
     find_markdown_files,
     get_timeline_file_info,
-    validate_timeline_events
+    validate_timeline_events,
+    parse_timeline_events_from_table
 )
+from django.utils import timezone
+import tempfile
+import os
 import os
 import json
 
@@ -160,8 +164,40 @@ def upload_markdown(request):
         # Create events
         created_count = 0
         for event_data in events:
+            # Normalize date - try to extract YYYY-MM-DD or use start date of range
+            date_str = event_data.get('date', '')
+            
+            # Handle date ranges like "2013–2016" or "2013-2016"
+            if '--' in date_str or '–' in date_str:
+                # Extract the start year
+                parts = date_str.replace('–', '-').split('-')
+                if parts and parts[0].strip().isdigit():
+                    date_str = f"{parts[0].strip()}-01-01"  # Use Jan 1 of start year
+                else:
+                    date_str = timezone.now().date()
+            
+            # Handle year-only dates like "2016"
+            elif len(date_str) == 4 and date_str.isdigit():
+                date_str = f"{date_str}-01-01"  # Use Jan 1
+            
+            # Try to parse the date
+            try:
+                from datetime import datetime
+                # Try multiple formats
+                for fmt in ['%Y-%m-%d', '%Y-%m', '%Y']:
+                    try:
+                        parsed_date = datetime.strptime(date_str, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                else:
+                    # If all formats fail, use today
+                    parsed_date = timezone.now().date()
+            except Exception:
+                parsed_date = timezone.now().date()
+            
             event = TimelineEvent.objects.create(
-                date=event_data.get('date'),
+                date=parsed_date,
                 event=event_data.get('event', event_data.get('title', '')),
                 category=event_data.get('category', 'other'),
                 notes=event_data.get('notes', ''),
@@ -195,16 +231,104 @@ def event_detail(request, pk):
 
 def parse_markdown(content):
     """
-    Legacy function: Parse markdown content into event dicts.
+    Parse markdown content into timeline events.
+    Supports both legacy format and new 5-column table format.
     
-    Expected format:
+    Expected formats:
+    
+    Legacy format:
     # Date
     **Event:** Event Title
     **Category:** category_name
     **Notes:** Event notes
     **Supporting Docs:** doc1, doc2
+    
+    OR Table format (5 columns):
+    | Date | Event | Description | Category | Documents |
+    |------|-------|-------------|----------|-----------|
+    | 2024-01-15 | Event Title | Description | category | doc1, doc2 |
     """
+    import markdown
+    from bs4 import BeautifulSoup
+    
     events = []
+    
+    # Try to parse as table-based format first
+    try:
+        html = markdown.markdown(content, extensions=['tables'])
+        soup = BeautifulSoup(html, 'html.parser')
+        
+        for table in soup.find_all('table'):
+            rows = table.find_all('tr')
+            if len(rows) < 2:
+                continue
+            
+            # Get header row to determine column mapping
+            header_cells = rows[0].find_all(['th', 'td'])
+            header_text = [cell.get_text().strip().lower() for cell in header_cells]
+            
+            # Find column indices by searching for keywords in header text
+            col_date = next((i for i, h in enumerate(header_text) if 'date' in h), 0)
+            col_event = next((i for i, h in enumerate(header_text) if 'event' in h or 'incident' in h), 1)
+            col_category = next((i for i, h in enumerate(header_text) if 'category' in h), 2)
+            col_docs = next((i for i, h in enumerate(header_text) if 'doc' in h or 'support' in h), None)
+            col_notes = next((i for i, h in enumerate(header_text) if 'note' in h), None)
+            col_description = next((i for i, h in enumerate(header_text) if 'description' in h), None)
+            
+            # Default column positions for standard format
+            if col_docs is None:
+                col_docs = 4
+            if col_notes is None and col_description is None:
+                # Try to find the last column that's not already assigned
+                all_cols = {col_date, col_event, col_category, col_docs}
+                for i in range(len(header_text) - 1, -1, -1):
+                    if i not in all_cols:
+                        col_notes = i
+                        break
+            
+            # Process data rows
+            for row in rows[1:]:  # Skip header
+                cells = row.find_all(['td', 'th'])
+                if len(cells) < 5:
+                    continue
+                
+                date = cells[col_date].get_text().strip() if col_date < len(cells) else ''
+                event = cells[col_event].get_text().strip() if col_event < len(cells) else ''
+                category = cells[col_category].get_text().strip().lower() if col_category < len(cells) else 'other'
+                
+                # Get documents
+                if col_docs is not None and col_docs < len(cells):
+                    documents = cells[col_docs].get_text().strip()
+                else:
+                    documents = ''
+                
+                # Get notes/description
+                if col_notes is not None and col_notes < len(cells):
+                    notes = cells[col_notes].get_text().strip()
+                elif col_description is not None and col_description < len(cells):
+                    notes = cells[col_description].get_text().strip()
+                elif 2 < len(cells):
+                    # Try column 2 as fallback for description
+                    notes = cells[2].get_text().strip()
+                else:
+                    notes = ''
+                
+                events.append({
+                    'date': date,
+                    'event': event,
+                    'category': category,
+                    'notes': notes,
+                    'supporting_docs': documents
+                })
+        
+        # If we found table events, return them
+        if events:
+            return events
+    except Exception:
+        # Fall back to legacy parsing
+        pass
+    
+    # Legacy format parsing
     lines = content.split('\n')
     current_event = {}
 
@@ -216,6 +340,7 @@ def parse_markdown(content):
             try:
                 current_event = {'date': line[2:], 'event': '', 'category': '', 'supporting_docs': None, 'notes': ''}
             except ValueError:
+                current_event = {}
                 continue
         elif line.startswith('**Event:**'):
             current_event['event'] = line[10:].strip()
