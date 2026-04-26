@@ -38,16 +38,15 @@ def timeline_view(request):
         case_id = request.GET['case_id']
         request.session['selected_case_id'] = case_id
     
-    # Get case and events
+    # Get case and events - ALWAYS filter by user for compartmentalization
     case = None
-    events = TimelineEvent.objects.all()
+    events = TimelineEvent.objects.filter(created_by=request.user)
     
     if case_id:
         try:
             case = Case.objects.get(id=case_id, user=request.user)
-            events = events.filter(
-                Q(case=case) | Q(case__isnull=True)
-            )
+            # Filter events by this case, but only if they belong to the user
+            events = events.filter(case=case)
         except Case.DoesNotExist:
             pass
     else:
@@ -55,18 +54,17 @@ def timeline_view(request):
         case = Case.get_default_case(request.user)
         if case:
             request.session['selected_case_id'] = case.id
-            events = events.filter(
-                Q(case=case) | Q(case__isnull=True)
-            )
+            events = events.filter(case=case)
     
     # Get timeline file information for this case
     timeline_files = []
     main_heading = "Legal Timeline"
     
     if case:
-        # Get all timeline files for this case
+        # Get all timeline files for this case - ONLY user's files
         timeline_files_qs = TimelineFile.objects.filter(
-            Q(case=case) | Q(user=request.user, case__isnull=True)
+            user=request.user,
+            case=case
         ).order_by('-updated_at')
         
         for tf in timeline_files_qs:
@@ -191,13 +189,17 @@ def upload_markdown(request):
         # Parse events from markdown
         events = parse_markdown(content)
         
-        # Get case if specified
+        # Get case if specified, otherwise use default case
         case = None
         if case_id:
             try:
                 case = Case.objects.get(id=case_id, user=request.user)
             except Case.DoesNotExist:
                 pass
+        
+        # Always ensure we have a case for compartmentalization
+        if case is None:
+            case = Case.get_default_case(request.user)
         
         # Create events
         created_count = 0
@@ -254,8 +256,17 @@ def upload_markdown(request):
     
     # GET request - show form
     cases = Case.objects.filter(user=request.user).order_by('-updated_at')
+    # Get current case if available
+    current_case = None
+    current_case_id = request.session.get('selected_case_id')
+    if current_case_id:
+        try:
+            current_case = Case.objects.get(id=current_case_id, user=request.user)
+        except Case.DoesNotExist:
+            pass
     return render(request, 'timeline/upload.html', {
         'cases': cases,
+        'current_case': current_case,
         'timeline_files': TimelineFile.objects.filter(user=request.user)
     })
 

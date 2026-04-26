@@ -64,10 +64,19 @@ def case_detail(request, case_id):
     """
     case = get_object_or_404(Case, id=case_id, user=request.user)
     
-    # Get related data
-    events = TimelineEvent.objects.filter(case=case).order_by('-date')[:10]
-    documents = ArchiveDocument.objects.filter(case=case).order_by('-upload_date')[:10]
-    timeline_files = TimelineFile.objects.filter(case=case).order_by('-updated_at')
+    # Get related data - filter by case AND user for compartmentalization
+    events = TimelineEvent.objects.filter(
+        case=case,
+        created_by=request.user
+    ).order_by('-date')[:10]
+    documents = ArchiveDocument.objects.filter(
+        case=case,
+        user=request.user
+    ).order_by('-upload_date')[:10]
+    timeline_files = TimelineFile.objects.filter(
+        case=case,
+        user=request.user
+    ).order_by('-updated_at')
     
     context = {
         'case': case,

@@ -14,11 +14,15 @@ def ai_chat_view(request):
     """Render the AI assistant chat interface."""
     api_key = settings.MISTRAL_API_KEY
     
-    # Get recent timeline events for context
-    recent_events = TimelineEvent.objects.all().order_by('-date')[:5]
+    # Get recent timeline events for context - ONLY USER'S EVENTS
+    recent_events = TimelineEvent.objects.filter(
+        created_by=request.user
+    ).order_by('-date')[:5]
     
-    # Get recent documents
-    recent_docs = ArchiveDocument.objects.all().order_by('-upload_date')[:5]
+    # Get recent documents - ONLY USER'S DOCUMENTS
+    recent_docs = ArchiveDocument.objects.filter(
+        user=request.user
+    ).order_by('-upload_date')[:5]
     
     return render(request, 'ai_assistant/chat.html', {
         'api_configured': bool(api_key),
@@ -34,8 +38,12 @@ def analyze_document(request):
         text = request.POST.get('text', '')
         
         if document_id:
-            # Analyze archive document
-            document = get_object_or_404(ArchiveDocument, pk=document_id)
+            # Analyze archive document - ensure user owns it
+            document = get_object_or_404(
+                ArchiveDocument,
+                pk=document_id,
+                user=request.user if request.user.is_authenticated else None
+            )
             # For now, we can't extract text from PDFs without additional libraries
             # This is a placeholder for future implementation
             text = f"Document: {document.title}\nCategory: {document.category}\nTags: {document.tags}"
@@ -71,8 +79,12 @@ def query_timeline(request):
         event_id = request.POST.get('event_id')
         
         if event_id:
-            # Query about specific event
-            event = get_object_or_404(TimelineEvent, pk=event_id)
+            # Query about specific event - ensure user owns it
+            event = get_object_or_404(
+                TimelineEvent,
+                pk=event_id,
+                created_by=request.user
+            )
             context = f"""Timeline Event Context:
 Date: {event.date}
 Event: {event.event}
@@ -85,8 +97,10 @@ User Query: {query}
 Please provide a comprehensive answer based on this event and suggest any relevant connections or follow-up actions.
 """
         else:
-            # Query about all timeline events
-            events = TimelineEvent.objects.all().order_by('date')
+            # Query about all timeline events - ONLY USER'S EVENTS
+            events = TimelineEvent.objects.filter(
+                created_by=request.user
+            ).order_by('date')
             event_items = []
             for e in events:
                 event_items.append(f"Date: {e.date}\nEvent: {e.event}\nCategory: {e.category}\nNotes: {e.notes}")
@@ -114,9 +128,13 @@ Please analyze the timeline and provide insights, connections, and recommendatio
 def suggest_events(request):
     """Generate AI suggestions for new timeline events based on existing data."""
     if request.method == 'POST':
-        # Get last N events for context
-        events = TimelineEvent.objects.all().order_by('-date')[:10]
-        documents = ArchiveDocument.objects.all().order_by('-upload_date')[:10]
+        # Get last N events for context - ONLY USER'S DATA
+        events = TimelineEvent.objects.filter(
+            created_by=request.user
+        ).order_by('-date')[:10]
+        documents = ArchiveDocument.objects.filter(
+            user=request.user
+        ).order_by('-upload_date')[:10]
         
         event_items = []
         for e in events:

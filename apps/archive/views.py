@@ -102,8 +102,8 @@ def run_filemapper(directory):
 
 @login_required
 def archive_view(request):
-    """Display all archived documents."""
-    documents = ArchiveDocument.objects.all().order_by('-upload_date')
+    """Display all archived documents for the current user."""
+    documents = ArchiveDocument.objects.filter(user=request.user).order_by('-upload_date')
     
     # Get archive map if it exists
     archive_map = None
@@ -277,8 +277,8 @@ def document_thumbnail(request, pk):
 
 @login_required
 def api_document_list(request):
-    """API endpoint to list all documents."""
-    documents = ArchiveDocument.objects.all().values(
+    """API endpoint to list all documents for current user."""
+    documents = ArchiveDocument.objects.filter(user=request.user).values(
         'id', 'title', 'file_type', 'upload_date', 'category', 'description'
     )
     return JsonResponse(list(documents), safe=False)
@@ -286,11 +286,11 @@ def api_document_list(request):
 
 @login_required
 def api_document_search(request):
-    """API endpoint to search documents."""
+    """API endpoint to search documents for current user."""
     query = request.GET.get('q', '')
     category = request.GET.get('category', '')
     
-    documents = ArchiveDocument.objects.all()
+    documents = ArchiveDocument.objects.filter(user=request.user)
     
     if query:
         documents = documents.filter(
