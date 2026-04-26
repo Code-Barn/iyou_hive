@@ -181,7 +181,127 @@ document.addEventListener("DOMContentLoaded", function () {
   initCaseSelector();
   initCollapsiblePanes();
   initTimelineSelector();
+  initSubTimelineSelector();
 });
+
+/**
+ * Initialize sub-timeline selector dropdown
+ * Allows users to switch between different timelines within the same file
+ * (e.g., timelines grouped by heading/subheading)
+ */
+function initSubTimelineSelector() {
+  const subTimelineSelector = document.getElementById("sub-timeline-selector");
+  if (!subTimelineSelector) return;
+
+  // Check URL for timeline parameter
+  const urlParams = new URLSearchParams(window.location.search);
+  const timelineParam = urlParams.get("timeline");
+
+  if (timelineParam) {
+    // Set dropdown to match URL
+    const option = subTimelineSelector.querySelector(
+      `option[value="${timelineParam}"]`,
+    );
+    if (option) {
+      subTimelineSelector.value = timelineParam;
+      // Trigger switch to render the correct timeline
+      switchSubTimeline(timelineParam);
+    }
+  }
+
+  subTimelineSelector.addEventListener("change", function () {
+    switchSubTimeline(this.value);
+  });
+}
+
+/**
+ * Switch to a different sub-timeline within the current timeline file
+ * @param {string} timelineName - Name of the timeline to switch to
+ */
+function switchSubTimeline(timelineName) {
+  const timelineSelector = document.getElementById("sub-timeline-selector");
+  const eventsContainer = document.getElementById("timeline-events-container");
+  const headingEl = document.getElementById("timeline-heading");
+
+  if (!timelineSelector || !eventsContainer || !window.timelinesData) return;
+
+  // Update the selected option in dropdown
+  const option = timelineSelector.querySelector(
+    `option[value="${timelineName}"]`,
+  );
+  if (option) {
+    timelineSelector.value = timelineName;
+  }
+
+  // Update heading if needed
+  if (headingEl && timelineName !== headingEl.textContent) {
+    headingEl.textContent = timelineName;
+  }
+
+  // Update URL to allow bookmarking and sharing
+  const url = new URL(window.location.href);
+  url.searchParams.set("timeline", timelineName);
+  window.history.pushState({}, "", url);
+
+  // Re-render events for selected timeline
+  const events = window.timelinesData[timelineName] || [];
+
+  if (events.length === 0) {
+    eventsContainer.innerHTML =
+      '<div class="empty-timeline"><p>No events in this timeline.</p></div>';
+    return;
+  }
+
+  // Build HTML for events
+  let html = "";
+  let currentYear = null;
+
+  for (const event of events) {
+    const year = event.date ? event.date.slice(0, 4) : "";
+
+    // Add year marker if year changed
+    if (year !== currentYear) {
+      currentYear = year;
+      html += `<div class="year-marker" data-year="${year}"><span class="year-text">${year}</span></div>`;
+    }
+
+    // Extract date parts
+    const month = event.date ? event.date.slice(5, 7) : "01";
+    const day = event.date ? event.date.slice(8, 10) : "01";
+
+    // Build event card
+    html += `
+      <div class="timeline-event" data-date="${event.date || ""}" data-year="${year}" data-section="${event.section || ""}">
+        <div class="event-date-badge">
+          <span class="date-month">${month}</span>
+          <span class="date-day">${day}</span>
+          <span class="date-year">${year}</span>
+        </div>
+        <div class="event-content">
+          <h3 class="event-title">${event.event || "Untitled"}</h3>
+          <p class="event-category">${(event.category || "other").replace(/\b\w/, (l) => l.toUpperCase())}</p>
+          <p class="event-description">${(event.description || event.notes || "").substring(0, 150)}</p>
+        `;
+
+    // Add documents indicator if present
+    if (event.documents && event.documents.length > 0) {
+      html += `
+        <div class="event-docs-indicator">
+          <span class="docs-icon">📎</span>
+          <span class="docs-count">${event.documents.length} document(s)</span>
+        </div>
+      `;
+    }
+
+    html += `
+        </div>
+        <div class="event-connector"></div>
+      </div>
+    `;
+  }
+
+  eventsContainer.innerHTML = html;
+}
 
 /**
  * Timeline Popup Functionality

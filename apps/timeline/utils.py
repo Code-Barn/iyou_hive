@@ -12,6 +12,7 @@ This module provides:
 import os
 import re
 from pathlib import Path
+from collections import defaultdict
 
 try:
     import markdown
@@ -194,33 +195,74 @@ def parse_markdown_file(file_path):
     
     result['sections'] = sections
     
-    # Parse events from tables (5-column format) - takes precedence
-    table_events = []
+    # Initialize timelines: each heading gets its own timeline
+    timelines = defaultdict(list)
+    
+    # Parse events from tables (5-column format) - associate with section headings
     if result['html']:
-        # Associate tables with their section headings
+        # Track current section from HTML parsing
+        soup = BeautifulSoup(result['html'], 'html.parser')
+        current_section_heading = None
+        
+        # Find all headings in the HTML
+        all_headings = soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+        
+        # Process each element, tracking current section
+        for element in soup.find_all():
+            if element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
+                current_section_heading = element.get_text().strip()
+            elif element.name == 'table':
+                # Parse this table's events
+                rows = element.find_all('tr')
+                if len(rows) >= 2:  # Has header + data rows
+                    section_events = []
+                    for row in rows[1:]:  # Skip header
+                        cells = row.find_all(['td', 'th'])
+                        if len(cells) >= 5:
+                            date = cells[0].get_text().strip()
+                            event_title = cells[1].get_text().strip()
+                            description = cells[2].get_text().strip()
+                            category = cells[3].get_text().strip().lower()
+                            documents_raw = cells[4].get_text().strip()
+                            documents = [d.strip() for d in documents_raw.split(',') if d.strip()]
+                            
+                            section_events.append({
+                                'date': date,
+                                'event': event_title,
+                                'description': description,
+                                'category': category,
+                                'documents': documents
+                            })
+                    
+                    if section_events:
+                        # If we're inside a section, use that heading
+                        if current_section_heading:
+                            timelines[current_section_heading].extend(section_events)
+                        else:
+                            # Use first heading or "Main Timeline"
+                            first_heading = headings[0]['text'] if headings else 'Main Timeline'
+                            timelines[first_heading].extend(section_events)
+    
+    # Parse events from sections (backward compatibility) - for non-table format
+    if not any(timelines.values()):  # No table events found
         for section in sections:
             section_heading = section.get('heading', '')
-            section_content = section.get('content', '')
-            
-            # Parse table events from this section's HTML
-            section_events = parse_timeline_events_from_table(result['html'], section_heading)
-            table_events.extend(section_events)
+            sec_events = parse_section_events(section)
+            if sec_events:
+                if section_heading:
+                    timelines[section_heading].extend(sec_events)
+                else:
+                    first_heading = headings[0]['text'] if headings else 'Main Timeline'
+                    timelines[first_heading].extend(sec_events)
     
-    # Parse events from sections (backward compatibility)
-    section_events = []
-    for section in sections:
-        # Check if this section looks like an event (has Date, Event, etc.)
-        sec_events = parse_section_events(section)
-        section_events.extend(sec_events)
+    # Convert defaultdict to regular dict
+    result['timelines'] = dict(timelines)
     
-    # If no table events found, try parsing the whole content
-    if not table_events:
-        # Try to find tables in the raw markdown
-        if result['html']:
-            table_events = parse_timeline_events_from_table(result['html'])
-    
-    # Combine events: prefer table events, fallback to section events
-    result['events'] = table_events if table_events else section_events
+    # Create flat events list (for backward compatibility)
+    all_events = []
+    for heading, events in timelines.items():
+        all_events.extend(events)
+    result['events'] = all_events
     
     # Extract images if HTML is available
     if result['html'] and BEAUTIFULSOUP_AVAILABLE:

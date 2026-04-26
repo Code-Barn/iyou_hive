@@ -363,16 +363,25 @@ Parses a markdown file and returns structured data.
     'html': '<html>...</html>',
     'images': [{'url': 'path', 'alt': 'text'}],
     'tables': [[['row1cell1', 'row1cell2'], ['row2cell1', 'row2cell2']]],
-    'warnings': ['Validation warning...']
+    'warnings': ['Validation warning...'],
+    'timelines': {
+        'Housing Timeline': [
+            {'date': '2024-01-15', 'event': 'Contract Signed', ...},
+            ...
+        ],
+        'Education Timeline': [...],
+        'Master Timeline': [...]  # Added by view, combines all events sorted by date
+    }
 }
 ```
 
-**Note:** Event format depends on source. Table-based parsing produces standardized 5-column format. Section-based parsing maintains backward compatibility.
+**Note:** Event format depends on source. Table-based parsing produces standardized 5-column format. Events are now grouped by their parent heading in the `timelines` dictionary.
 
 **Supported Formats:**
 - **Format A**: Simple headings with content
 - **Format B**: H2 headings as events with **Date:**, **Event:**, etc.
 - **Format C**: Mixed content with embedded markdown
+- **Format D**: Multiple tables under different headings → Each heading becomes a separate timeline
 
 #### parse_timeline_events_from_markdown(markdown_content)
 
@@ -475,6 +484,28 @@ except ValueError as e:
     # Handle validation error
     messages.error(request, str(e))
     return redirect('timeline:upload')
+```
+
+#### validate_timeline_events(timelines)
+
+Validates timeline events for required fields and date format when events are grouped by timeline.
+
+**Parameters:**
+- `timelines` (dict): Dictionary of timeline_name -> list of event dicts
+
+**Returns:** True if all events are valid
+
+**Raises:** `ValueError` if validation fails
+
+**Usage:**
+```python
+from apps.timeline.utils import parse_markdown_file, validate_timeline_events
+
+parsed = parse_markdown_file('timeline.md')
+try:
+    validate_timeline_events(parsed['timelines'])
+except ValueError as e:
+    messages.error(request, str(e))
 ```
 
 ### Error Handling

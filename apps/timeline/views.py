@@ -96,15 +96,17 @@ def timeline_view(request):
     # Merge timeline files
     all_timeline_files = timeline_files + timeline_files_from_events
     
-    # Parse markdown file for headings and events
-    markdown_events = []
+    # Parse markdown file for headings, events, and timelines
+    markdown_timelines = {}
     markdown_headings = []
+    markdown_events = []
     
     if all_timeline_files and all_timeline_files[0].get('file_path'):
         try:
             parsed = parse_markdown_file(all_timeline_files[0]['file_path'])
             markdown_headings = parsed.get('headings', [])
             markdown_events = parsed.get('events', [])
+            markdown_timelines = parsed.get('timelines', {})
             
             # Validate events if present
             if markdown_events:
@@ -116,6 +118,39 @@ def timeline_view(request):
         except Exception as e:
             markdown_events = []
             markdown_headings = []
+            markdown_timelines = {}
+    
+    # Create master timeline from all timelines
+    if markdown_timelines:
+        # Sort all events from all timelines by date
+        from datetime import datetime
+        def safe_date(event):
+            try:
+                return datetime.strptime(event['date'], '%Y-%m-%d')
+            except (ValueError, TypeError):
+                return datetime.min
+        
+        all_timeline_events = []
+        for heading, events in markdown_timelines.items():
+            all_timeline_events.extend(events)
+        
+        # Sort by date
+        all_timeline_events.sort(key=safe_date)
+        
+        # Add master timeline
+        markdown_timelines['Master Timeline'] = all_timeline_events
+    
+    # Get current timeline name from request or default to Master Timeline
+    current_timeline_name = request.GET.get('timeline', 'Master Timeline')
+    
+    # Get events for the current timeline
+    current_timeline_events = []
+    if markdown_timelines and current_timeline_name in markdown_timelines:
+        current_timeline_events = markdown_timelines[current_timeline_name]
+    elif markdown_events:
+        current_timeline_events = markdown_events
+    else:
+        current_timeline_events = list(events)
     
     # Use markdown events if available, otherwise fall back to database events
     display_events = markdown_events if markdown_events else list(events)
@@ -127,6 +162,9 @@ def timeline_view(request):
         'headings': markdown_headings,
         'timeline_files': all_timeline_files,
         'selected_case_id': case_id or (case.id if case else None),
+        'timelines': markdown_timelines,
+        'current_timeline': current_timeline_name,
+        'current_timeline_events': current_timeline_events,
     }
     
     return render(request, 'timeline/timeline.html', context)

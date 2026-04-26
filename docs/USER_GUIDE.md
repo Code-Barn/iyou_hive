@@ -145,6 +145,40 @@ If you have multiple timeline files:
 - **Use browser search** (Ctrl+F) to find specific text
 - **Sticky year markers** help you track your position as you scroll
 
+### Multi-Timeline View
+
+When your Markdown file contains multiple headings with tables, each heading becomes a **separate sub-timeline**:
+
+- **Sub-Timeline Selector**: Dropdown menu appears below the main title
+- **Master Timeline**: Combines all events from all sub-timelines, sorted by date
+- **Individual Timelines**: View only events from a specific heading/section
+
+**Example:**
+```markdown
+# VIOLETTE DONATELLO TIMELINE
+
+## Housing Timeline
+| Date | Event | Description | Category | Documents |
+|------|-------|-------------|----------|-----------|
+| 2013-2016 | Residence at Address 1 | Lived with Pauletta | Housing | lease1.pdf |
+
+## Education Timeline  
+| Date | Event | Description | Category | Documents |
+|------|-------|-------------|----------|-----------|
+| 2015-09 | Started School | Kindergarten | Education | report.pdf |
+
+## Medical Timeline
+| Date | Event | Description | Category | Documents |
+|------|-------|-------------|----------|-----------|
+| 2016-03 | Hospital Visit | Emergency care | Medical | medical.pdf |
+```
+
+**Result:**
+- Sub-Timeline Selector shows: `Master Timeline`, `Housing Timeline`, `Education Timeline`, `Medical Timeline`
+- Select `Housing Timeline` to see only housing-related events
+- Select `Master Timeline` to see all events combined and sorted by date
+- All events maintain their association with their source timeline
+
 ### Filtering and Sorting
 
 - Timeline events are **sorted by date** (oldest first)
