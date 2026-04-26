@@ -53,8 +53,53 @@
         {% endif %}
         
         <div class="timeline-actions">
+            <button class="btn-secondary upload-btn" onclick="showAddEventPopup()">Add Event</button>
             <a href="{% url 'timeline:upload' %}" class="btn-primary upload-btn">Upload Timeline</a>
             <a href="{% url 'archive:upload' %}" class="btn-secondary upload-btn">Upload Document</a>
+            <button class="btn-secondary upload-btn print-btn" onclick="printTimeline()" title="Print to PDF">🖨️</button>
+        </div>
+    </div>
+
+    <!-- Add Event Popup -->
+    <div class="event-popup-overlay" id="addEventPopup" style="display:none;">
+        <div class="event-popup">
+            <div class="popup-header">
+                <h2>Add Event</h2>
+                <button class="close-btn" onclick="closeAddEventPopup()">✕</button>
+            </div>
+            <form id="addEventForm" class="event-form">
+                <div class="form-group">
+                    <label>Date *</label>
+                    <input type="date" name="date" required>
+                </div>
+                <div class="form-group">
+                    <label>Event *</label>
+                    <input type="text" name="event" placeholder="Event title" required>
+                </div>
+                <div class="form-group">
+                    <label>Category</label>
+                    <select name="category">
+                        <option value="personal">Personal</option>
+                        <option value="legal">Legal</option>
+                        <option value="medical">Medical</option>
+                        <option value="financial">Financial</option>
+                        <option value="education">Education</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea name="description" rows="3" placeholder="Event description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Section</label>
+                    <input type="text" name="section" placeholder="e.g., 2012-2015">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn-secondary" onclick="closeAddEventPopup()">Cancel</button>
+                    <button type="submit" class="btn-primary">Add Event</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -350,5 +395,79 @@ function initTimelineSelector() {
 document.addEventListener('DOMContentLoaded', function() {
   initTimelineSelector();
 });
+</script>
+
+<style>
+.timeline-actions { display: flex; gap: 0.5rem; align-items: center; }
+.print-btn { padding: 0.5rem 0.75rem; font-size: 1rem; }
+
+.event-popup-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.8); z-index: 2000;
+    display: none; align-items: center; justify-content: center;
+}
+.event-popup-overlay.active { display: flex; }
+
+.event-popup {
+    background: var(--bg-card); border: 2px solid var(--primary);
+    border-radius: 12px; padding: 1.5rem; width: 90%; max-width: 450px;
+}
+.popup-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.popup-header h2 { color: var(--primary); margin: 0; }
+.close-btn { background: none; border: 1px solid var(--border); color: var(--text); width: 2rem; height: 2rem; border-radius: 50%; cursor: pointer; }
+.close-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+.event-form { display: flex; flex-direction: column; gap: 1rem; }
+.form-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.form-group label { font-weight: 600; font-size: 0.9rem; color: var(--text); }
+.form-group input, .form-group select, .form-group textarea {
+    padding: 0.5rem; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--bg); color: var(--text); font-size: 1rem;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    outline: none; border-color: var(--primary);
+}
+.form-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
+.btn-secondary { padding: 0.5rem 1rem; background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 6px; cursor: pointer; }
+.btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+.btn-primary { padding: 0.5rem 1rem; background: var(--primary); border: none; color: #000; border-radius: 6px; cursor: pointer; font-weight: 600; }
+</style>
+
+<script>
+function showAddEventPopup() {
+    document.getElementById('addEventPopup').classList.add('active');
+}
+function closeAddEventPopup() {
+    document.getElementById('addEventPopup').classList.remove('active');
+}
+function printTimeline() {
+    alert('Print to PDF - will be implemented with script');
+}
+document.getElementById('addEventForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var formData = new FormData(this);
+    fetch('{% url "timeline:create_event" %}', {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-CSRFToken': getCSRFToken() }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            location.reload();
+        } else {
+            alert(data.error || 'Failed to add event');
+        }
+    })
+    .catch(err => { alert('Error: ' + err); });
+});
+function getCSRFToken() {
+    var cs = document.cookie.split(';');
+    for (var i = 0; i < cs.length; i++) {
+        var c = cs[i].trim();
+        if (c.startsWith('csrftoken=')) return c.substring(9);
+    }
+    return '';
+}
 </script>
 {% endblock %}

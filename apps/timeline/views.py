@@ -274,6 +274,46 @@ def event_detail(request, pk):
     return render(request, 'timeline/event_detail.html', {'event': event})
 
 
+@login_required
+def create_event(request):
+    """Create a single timeline event via AJAX."""
+    from django.http import JsonResponse
+    
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST only'}, status=405)
+    
+    case_id = request.session.get('selected_case_id')
+    if not case_id:
+        return JsonResponse({'error': 'No case selected'}, status=400)
+    
+    try:
+        from apps.core.models import Case
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        return JsonResponse({'error': 'Case not found'}, status=404)
+    
+    date = request.POST.get('date')
+    event = request.POST.get('event', '').strip()
+    category = request.POST.get('category', 'other')
+    description = request.POST.get('description', '').strip()
+    section = request.POST.get('section', '').strip()
+    
+    if not date or not event:
+        return JsonResponse({'error': 'Date and event are required'}, status=400)
+    
+    TimelineEvent.objects.create(
+        date=date,
+        event=event,
+        category=category,
+        notes=description,
+        supporting_docs=[],
+        case=case,
+        created_by=request.user,
+    )
+    
+    return JsonResponse({'status': 'success'})
+
+
 def parse_markdown(content):
     """
     Parse markdown content into timeline events.
