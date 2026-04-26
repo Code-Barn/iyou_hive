@@ -892,6 +892,198 @@ Configured in `apps/core/middleware.py`:
 - `X-XSS-Protection`: Enable XSS filter
 - `Content-Security-Policy`: Restrict resource loading
 
+### Data Compartmentalization
+
+Hiver implements **strict multi-tenant data isolation** at every layer:
+
+#### 1. Model-Level Security
+
+All models enforce user ownership:
+
+```python
+# apps/core/models.py
+class Case(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,  # Cascade delete for data cleanup
+        related_name='cases'
+    )
+    # Each user has their own isolated cases
+
+class TimelineFile(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='timeline_files'
+    )
+    case = models.ForeignKey(
+        'Case',
+        on_delete=models.CASCADE,
+        related_name='timeline_files'
+    )
+    # Files belong to both user AND case
+
+# apps/timeline/models.py
+class TimelineEvent(models.Model):
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name='timeline_events_created'
+    )
+    case = models.ForeignKey(
+        'core.Case',
+        on_delete=models.SET_NULL,
+        related_name='events'
+    )
+    # Events tracked by creator and case
+
+# apps/archive/models.py  
+class ArchiveDocument(models.Model):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='archive_documents'
+    )
+    case = models.ForeignKey(
+        'core.Case',
+        on_delete=models.SET_NULL,
+        related_name='archive_documents'
+    )
+    # Documents owned by user, optionally linked to case
+```
+
+**Key Design Decisions:**
+- `CASCADE` for user deletion: Removes all user data
+- `SET_NULL` for case deletion on TimelineEvent/TimelineFile: Prevents accidental mass deletion
+- `CASCADE` for case deletion on ArchiveDocument: Documents are case-specific
+
+#### 2. Query-Level Security
+
+**ALL queries MUST filter by user**. Never use `.all()` on user-owned models:
+
+```python
+# ❌ WRONG - Security vulnerability!
+documents = ArchiveDocument.objects.all()
+events = TimelineEvent.objects.all()
+
+# ✅ CORRECT - Always filter by user
+documents = ArchiveDocument.objects.filter(user=request.user)
+events = TimelineEvent.objects.filter(created_by=request.user)
+
+# ✅ CORRECT - Filter by case with user ownership check
+case = get_object_or_404(Case, id=case_id, user=request.user)
+events = TimelineEvent.objects.filter(
+    case=case,
+    created_by=request.user
+)
+```
+
+#### 3. Permission Methods
+
+Models include object-level permission checks:
+
+```python
+# apps/core/models.py
+class Case(models.Model):
+    def can_access(self, user):
+        """Check if user can access this case."""
+        return user.is_authenticated and user.id == self.user_id
+    
+    def can_edit(self, user):
+        """Check if user can edit this case."""
+        return self.can_access(user)
+    
+    def can_delete(self, user):
+        """Check if user can delete this case."""
+        return self.can_access(user)
+```
+
+**Usage in Views:**
+```python
+@login_required
+def case_detail(request, case_id):
+    case = get_object_or_404(Case, id=case_id)
+    if not case.can_access(request.user):
+        raise PermissionDenied()
+    return render(request, 'case_detail.html', {'case': case})
+```
+
+#### 4. View-Level Enforcement
+
+All views enforce user isolation:
+
+```python
+# apps/timeline/views.py
+def timeline_view(request):
+    # ALWAYS filter by user first
+    events = TimelineEvent.objects.filter(created_by=request.user)
+    
+    # Then filter by case if specified
+    if case_id:
+        case = get_object_or_404(Case, id=case_id, user=request.user)
+        events = events.filter(case=case)
+
+# apps/archive/views.py
+def archive_view(request):
+    # ONLY user's documents
+    documents = ArchiveDocument.objects.filter(user=request.user)
+
+# apps/ai_assistant/views.py
+def query_timeline(request):
+    # User-specific context
+    events = TimelineEvent.objects.filter(
+        created_by=request.user
+    )
+    if event_id:
+        event = get_object_or_404(
+            TimelineEvent,
+            pk=event_id,
+            created_by=request.user  # Double-check ownership
+        )
+```
+
+#### 5. API Endpoint Security
+
+All JSON API endpoints filter by user:
+
+```python
+# apps/archive/views.py
+@login_required
+def api_document_list(request):
+    """API: List ONLY user's documents."""
+    documents = ArchiveDocument.objects.filter(
+        user=request.user
+    ).values('id', 'title', 'file_type', 'upload_date', 'category')
+    return JsonResponse(list(documents), safe=False)
+
+@login_required  
+def api_document_search(request):
+    """API: Search ONLY user's documents."""
+    documents = ArchiveDocument.objects.filter(user=request.user)
+    # ... apply search filters
+    return JsonResponse(list(results), safe=False)
+```
+
+#### 6. Security Testing Checklist
+
+✅ All views have `@login_required` decorator   
+✅ All queries filter by `request.user`   
+✅ All `get_object_or_404` calls check user ownership   
+✅ No `.all()` on user-owned models in production views   
+✅ API endpoints return only user's data   
+✅ Uploaded files are stored in user-specific directories   
+✅ Session data is user-scoped   
+
+#### 7. Common Security Pitfalls (and Fixes)
+
+| Pitfall | Example | Fix |
+|---------|---------|-----|
+| `.all()` on user models | `ArchiveDocument.objects.all()` | `.filter(user=request.user)` |
+| Missing login check | No `@login_required` | Add decorator |
+| Case-only filter | `.filter(case=case)` | Add `.filter(created_by=request.user)` |
+| No user check in get() | `get_object_or_404(Case, id=id)` | Add `, user=request.user` |
+| Insecure file access | `open(path)` | Use `get_user_archive_dir(user)` |
+
 ---
 
 ## 📞 Support

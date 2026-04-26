@@ -243,6 +243,42 @@ Cases help you organize your legal work into isolated workspaces. Each case has 
 - Switching to a new case automatically deactivates the previous one
 - Your session remembers which case you're viewing
 
+### Data Privacy & Security
+
+Hiver enforces **strict data isolation** to ensure your information remains private:
+
+🔒 **Case Compartmentalization**
+- Each case is completely isolated from other users
+- You can ONLY see cases that you created
+- Other users cannot access your cases, timelines, or documents
+- Even administrators cannot access your data without direct database access
+
+🔒 **Timeline Privacy**
+- Timeline events are visible ONLY to the case owner
+- Events without a case are tied to your user account
+- Uploaded timelines are automatically assigned to your current case
+
+🔒 **Document Security**
+- Archive documents are private to your account
+- Only you can view, download, or analyze your documents
+- AI analysis uses only your documents and events as context
+
+🔒 **Session Protection**
+- All views require authentication (`@login_required`)
+- Your selected case is saved in your session
+- Switching cases updates your session automatically
+
+🔒 **URL-Based Access Control**
+- You cannot access another user's data by guessing IDs
+- All database queries filter by your user ID
+- API endpoints return only your data
+
+**Best Practices:**
+- Always log out when using shared computers
+- Use strong, unique passwords
+- Regularly review your cases in `/core/cases/`
+- Delete cases you no longer need
+
 ---
 
 ## 📂 Document Archive
