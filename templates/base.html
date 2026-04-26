@@ -26,7 +26,8 @@
                 <a href="{% url 'ai_assistant:chat' %}" class="nav-button">AI Assistant</a>
                 <a href="{% url 'accounts:did_logout' %}" class="nav-button">Logout</a>
                 {% else %}
-                <a href="{% url 'accounts:did_login' %}" class="nav-button">Login</a>
+                <a href="{% url 'accounts:login' %}" class="nav-button">Login</a>
+                <a href="{% url 'accounts:register' %}" class="nav-button">Register</a>
                 {% endif %}
             </nav>
             <div class="logo-and-toggle">
