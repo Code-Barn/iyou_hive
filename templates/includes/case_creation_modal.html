@@ -2,8 +2,7 @@
     <div class="modal-content">
         <h2>Welcome to Hiver!</h2>
         <p>To get started, name your first Hive:</p>
-        <form id="createHiveForm" method="post" action="{% url 'core:create_case' %}">
-            {% csrf_token %}
+        <form id="createHiveForm" method="post" action="{% url 'core:create_case' %}">{% csrf_token %}
             <input type="text" id="hiveName" name="name" placeholder="Enter Hive name" required autofocus>
             <button type="submit" class="btn btn-primary">Create Hive</button>
         </form>
@@ -121,9 +120,10 @@ document.addEventListener('DOMContentLoaded', function() {
             e.preventDefault();
             
             var formData = new FormData(form);
-            var csrfToken = form.querySelector('[name="csrfmiddlewaretoken"]').value;
+            var csrfInput = form.querySelector('[name="csrfmiddlewaretoken"]');
+            var csrfToken = csrfInput ? csrfInput.value : '';
             
-            fetch(form.action, {
+            fetch('{% url "core:create_case" %}', {
                 method: 'POST',
                 body: formData,
                 headers: {
@@ -139,8 +139,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 throw new Error('Network response was not ok');
             })
             .then(function(text) {
-                if (text && text.includes('core/case_list')) {
-                    window.location.href = '/core/cases/';
+                if (text && text.includes('timeline')) {
+                    window.location.href = '{% url "timeline:timeline" %}';
+                } else if (text && text.includes('error') || text && text.includes('Failed')) {
+                    var name = encodeURIComponent(formData.get('name'));
+                    window.location.href = '{% url "core:create_case" %}?name=' + name;
                 }
             })
             .catch(function(error) {

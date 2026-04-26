@@ -103,29 +103,20 @@ def run_filemapper(directory):
 
 @login_required
 def archive_view(request):
-    """Display all archived documents for the current user."""
+    """Display all archived documents for the current case."""
+    # Get case from session - required
     case_id = request.session.get('selected_case_id')
-    if 'case_id' in request.GET:
-        case_id = request.GET['case_id']
-        request.session['selected_case_id'] = case_id
+    if not case_id:
+        return redirect('core:case_list')
     
-    documents = ArchiveDocument.objects.filter(user=request.user)
-    case = None
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        request.session.pop('selected_case_id', None)
+        return redirect('core:case_list')
     
-    if case_id:
-        try:
-            case = Case.objects.get(id=case_id, user=request.user)
-            documents = documents.filter(case=case)
-        except Case.DoesNotExist:
-            request.session.pop('selected_case_id', None)
-    
-    if case is None and case_id is None:
-        existing_cases = Case.objects.filter(user=request.user).first()
-        if existing_cases:
-            case = existing_cases
-            request.session['selected_case_id'] = case.id
-            documents = documents.filter(case=case)
-    
+    # Filter documents by case
+    documents = ArchiveDocument.objects.filter(case=case, user=request.user)
     documents = documents.order_by('-upload_date')
     
     # Get archive map if it exists
@@ -149,24 +140,18 @@ def archive_view(request):
 def upload_document(request):
     """
     Upload a document to the archive.
-    
-    For PDF files, automatically:
-    1. Save the PDF
-    2. Convert to Markdown using pdf_to_md_conversion.py
-    3. Save the Markdown file
-    4. Update the archive map using filemapper.py
+    Requires case to be selected (middleware enforces this).
     """
+    # Get case from session - required
     case_id = request.session.get('selected_case_id')
-    case = None
-    if case_id:
-        try:
-            case = Case.objects.get(id=case_id, user=request.user)
-        except Case.DoesNotExist:
-            case = Case.get_default_case(request.user)
-    else:
-        case = Case.get_default_case(request.user)
-        if case:
-            request.session['selected_case_id'] = case.id
+    if not case_id:
+        return redirect('core:case_list')
+    
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        request.session.pop('selected_case_id', None)
+        return redirect('core:case_list')
     
     if request.method == 'POST':
         form = ArchiveDocumentForm(request.POST, request.FILES)
@@ -500,14 +485,26 @@ def api_file_preview(request, pk):
             'title': document.title,
             'url': document.get_file_url()
         })
-    else:
-        return JsonResponse({
-            'type': 'other',
-            'title': document.title,
-            'description': document.description,
-            'category': document.category,
-            'tags': document.tags
-        })
+    elif document.file_type == 'markdown' or document.file_type == 'text':
+        is_md = document.file_type == 'markdown' or (document.file and document.file.name and document.file.name.lower().endswith('.md'))
+        if is_md:
+            content = ''
+            if document.file:
+                try:
+                    fp = document.file.path
+                    if fp and os.path.exists(fp):
+                        content = open(fp, 'r', encoding='utf-8', errors='ignore').read()
+                except Exception:
+                    pass
+            return JsonResponse({'type': 'markdown', 'title': document.title, 'content': content})
+    
+    return JsonResponse({
+        'type': 'other',
+        'title': document.title,
+        'description': document.description,
+        'category': document.category,
+        'tags': document.tags
+    })
 
 
 @login_required

@@ -33,6 +33,7 @@
                     <label for="name">Case Name *</label>
                     <input type="text" id="name" name="name" 
                            placeholder="e.g., Smith vs. Jones Lawsuit"
+                           value="{{ form_name|default:'' }}"
                            required autofocus>
                     <p class="help-text">Give your case a descriptive name. This will be used throughout the application.</p>
                 </div>
@@ -41,7 +42,7 @@
                     <label for="description">Description</label>
                     <textarea id="description" name="description" 
                               placeholder="Brief description of the case..."
-                              rows="4"></textarea>
+                              rows="4">{{ form_description|default:'' }}</textarea>
                     <p class="help-text">Optional. Describe what this case is about for your reference.</p>
                 </div>
             </div>
@@ -66,7 +67,7 @@
 
                 <div class="form-group checkbox-group">
                     <label>
-                        <input type="checkbox" name="is_active" value="true">
+                        <input type="checkbox" name="is_active" value="true" checked>
                         <span>Make this my active case</span>
                     </label>
                     <p class="help-text">If checked, this will become your active case and other cases will be deactivated.</p>

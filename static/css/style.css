@@ -1239,12 +1239,25 @@ a:focus-visible {
     gap: 1rem;
 }
 
-/* Workspace Body - Three Pane Layout */
+/* Workspace Body - Three Pane Layout - All Visible by Default */
 .workspace-body {
     display: grid;
     grid-template-columns: 2fr 1fr 1fr;
     height: calc(100vh - 60px);
     overflow: hidden;
+}
+
+/* When one pane is collapsed, expand others */
+.workspace-body:has(.workspace-pane.collapsed:nth-child(1)) {
+    grid-template-columns: 1fr 1fr;
+}
+
+.workspace-body:has(.workspace-pane.collapsed:nth-child(2)) {
+    grid-template-columns: 2fr 1fr;
+}
+
+.workspace-body:has(.workspace-pane.collapsed:nth-child(3)) {
+    grid-template-columns: 2fr 1fr;
 }
 
 /* Workspace Pane Base Styles */
@@ -1338,6 +1351,39 @@ a:focus-visible {
 /* Active Pane Indicator */
 .workspace-pane.active {
     border-right: 2px solid var(--primary);
+}
+
+/* Collapsed Pane Styles */
+.workspace-pane.collapsed {
+    width: 40px !important;
+    min-width: 40px !important;
+    overflow: hidden;
+}
+
+.workspace-pane.collapsed .pane-content {
+    display: none !important;
+}
+
+.workspace-pane.collapsed .pane-header {
+    padding: 0.5rem 0.25rem;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.workspace-pane.collapsed .pane-header h2 {
+    writing-mode: horizontal-tb;
+    transform: rotate(-90deg);
+    white-space: nowrap;
+    margin: auto 0;
+    font-size: 0.9rem;
+}
+
+.workspace-pane.collapsed .collapse-button {
+    transform: rotate(90deg);
+    margin-top: 0.5rem;
+    flex-shrink: 0;
 }
 
 /* Responsive Workspace */

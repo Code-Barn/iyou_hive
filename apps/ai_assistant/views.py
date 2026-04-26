@@ -1,4 +1,4 @@
-from django.shortcuts import render, get_object_or_404
+from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
@@ -13,33 +13,23 @@ import urllib.parse
 
 @login_required
 def ai_chat_view(request):
-    """Render the AI assistant chat interface."""
+    """Render the AI assistant chat interface for the current case."""
     api_key = settings.MISTRAL_API_KEY
     
+    # Get case from session - required
     case_id = request.session.get('selected_case_id')
-    if 'case_id' in request.GET:
-        case_id = request.GET['case_id']
-        request.session['selected_case_id'] = case_id
+    if not case_id:
+        return redirect('core:case_list')
     
-    case = None
-    recent_events = TimelineEvent.objects.filter(created_by=request.user)
-    recent_docs = ArchiveDocument.objects.filter(user=request.user)
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        request.session.pop('selected_case_id', None)
+        return redirect('core:case_list')
     
-    if case_id:
-        try:
-            case = Case.objects.get(id=case_id, user=request.user)
-            recent_events = recent_events.filter(case=case)
-            recent_docs = recent_docs.filter(case=case)
-        except Case.DoesNotExist:
-            request.session.pop('selected_case_id', None)
-    
-    if case is None and case_id is None:
-        existing_cases = Case.objects.filter(user=request.user).first()
-        if existing_cases:
-            case = existing_cases
-            request.session['selected_case_id'] = case.id
-            recent_events = recent_events.filter(case=case)
-            recent_docs = recent_docs.filter(case=case)
+    # Get data scoped to case
+    recent_events = TimelineEvent.objects.filter(case=case, created_by=request.user)
+    recent_docs = ArchiveDocument.objects.filter(case=case, user=request.user)
     
     recent_events = recent_events.order_by('-date')[:5]
     recent_docs = recent_docs.order_by('-upload_date')[:5]

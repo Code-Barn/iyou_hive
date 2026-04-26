@@ -26,35 +26,22 @@ def timeline_view(request):
     """
     Display the timeline view with events.
     
-    Supports:
-    - Case filtering via case_id query parameter or session
-    - Markdown file based headings
-    - Timeline selection
+    Requires a case to be selected (enforced by middleware).
     """
-    # Get selected case from session or query param
+    # Get selected case from session - middleware ensures this exists
     case_id = request.session.get('selected_case_id')
-    if 'case_id' in request.GET:
-        case_id = request.GET['case_id']
-        request.session['selected_case_id'] = case_id
+    if not case_id:
+        return redirect('core:case_list')
     
-    # Get case and events - ALWAYS filter by user for compartmentalization
-    case = None
-    events = TimelineEvent.objects.filter(created_by=request.user)
+    # Get case - verify it belongs to user
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        request.session.pop('selected_case_id', None)
+        return redirect('core:case_list')
     
-    if case_id:
-        try:
-            case = Case.objects.get(id=case_id, user=request.user)
-            events = events.filter(case=case)
-        except Case.DoesNotExist:
-            request.session.pop('selected_case_id', None)
-    
-    # Only use default case if user has existing cases
-    if case is None and case_id is None:
-        existing_cases = Case.objects.filter(user=request.user).first()
-        if existing_cases:
-            case = existing_cases
-            request.session['selected_case_id'] = case.id
-            events = events.filter(case=case)
+    # Get events for this case only
+    events = TimelineEvent.objects.filter(case=case, created_by=request.user)
     
     # Get timeline file information for this case
     timeline_files = []
@@ -178,31 +165,28 @@ def home(request):
 def upload_markdown(request):
     """
     Upload or parse markdown content to create timeline events.
-    
-    Supports both POST with content and GET for form display.
+    Requires case to be selected (middleware ensures this).
     """
+    # Get case from session - required
+    case_id = request.session.get('selected_case_id')
+    if not case_id:
+        return JsonResponse({'error': 'No case selected'}, status=403)
+    
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        return JsonResponse({'error': 'Invalid case'}, status=403)
+    
     if request.method == 'POST':
         content = request.POST.get('markdown_content', '')
         timeline_file_path = request.POST.get('timeline_file_path', '')
-        case_id = request.POST.get('case_id', '')
         
         # Parse events from markdown
         events = parse_markdown(content)
         
-        # Get case if specified, otherwise use default case
-        case = None
-        if case_id:
-            try:
-                case = Case.objects.get(id=case_id, user=request.user)
-            except Case.DoesNotExist:
-                pass
-        
-        # Always ensure we have a case for compartmentalization
-        if case is None:
-            case = Case.get_default_case(request.user)
-        
         # Create events
         created_count = 0
+        skipped_count = 0
         for event_data in events:
             # Normalize date - try to extract YYYY-MM-DD or use start date of range
             date_str = event_data.get('date', '')
@@ -236,9 +220,21 @@ def upload_markdown(request):
             except Exception:
                 parsed_date = timezone.now().date()
             
+            event_title = event_data.get('event', event_data.get('title', ''))
+            
+            existing = TimelineEvent.objects.filter(
+                case=case,
+                date=parsed_date,
+                event=event_title
+            ).first()
+            
+            if existing:
+                skipped_count += 1
+                continue
+            
             event = TimelineEvent.objects.create(
                 date=parsed_date,
-                event=event_data.get('event', event_data.get('title', '')),
+                event=event_title,
                 category=event_data.get('category', 'other'),
                 notes=event_data.get('notes', ''),
                 supporting_docs=event_data.get('supporting_docs'),
@@ -248,11 +244,11 @@ def upload_markdown(request):
             )
             created_count += 1
         
-        return JsonResponse({
-            'status': 'success',
-            'created': created_count,
-            'redirect': '/timeline/'
-        })
+        result = {'status': 'success', 'created': created_count, 'redirect': '/timeline/'}
+        if skipped_count > 0:
+            result['skipped'] = skipped_count
+        
+        return JsonResponse(result)
     
     # GET request - show form
     cases = Case.objects.filter(user=request.user).order_by('-updated_at')

@@ -7,14 +7,6 @@ class AIConversation(models.Model):
     Model for storing AI assistant conversations.
     
     Each conversation is linked to a case for compartmentalization.
-    
-    Attributes:
-        case: The case this conversation belongs to
-        title: Title of the conversation
-        messages: JSON array of message objects
-        created_at: When the conversation was created
-        updated_at: When the conversation was last updated
-        user: The user who owns this conversation
     """
 
     title = models.CharField(
@@ -25,7 +17,7 @@ class AIConversation(models.Model):
 
     case = models.ForeignKey(
         'core.Case',
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
         related_name='ai_conversations',

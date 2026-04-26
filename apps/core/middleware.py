@@ -5,11 +5,13 @@ This module provides:
 - Authentication middleware for Rust-DID integration
 - Session management
 - Request logging
+- Case selection enforcement
 """
 
 from django.utils.deprecation import MiddlewareMixin
 from django.shortcuts import redirect, reverse
 from django.conf import settings
+from django.http import HttpResponseRedirect
 import os
 
 
@@ -202,5 +204,64 @@ class RequestLoggingMiddleware(MiddlewareMixin):
             from django.utils.log import getLogger
             logger = getLogger('hiver.request')
             logger.debug(f"{request.method} {request.path} from {request.META.get('REMOTE_ADDR')}")
+        
+        return None
+
+
+class CaseSelectionMiddleware(MiddlewareMixin):
+    """
+    Middleware to enforce case selection.
+    
+    If a user is authenticated and has cases but no case is selected,
+    redirect to case selection.
+    """
+    
+    EXEMPT_URLS = [
+        '/accounts/',
+        '/admin/',
+        '/static/',
+        '/media/',
+        '/core/cases/',
+        '/core/api/',
+    ]
+    
+    def process_request(self, request):
+        """Check if case selection is required."""
+        path = request.path_info
+        
+        # Skip for exempt URLs
+        for exempt in self.EXEMPT_URLS:
+            if path.startswith(exempt):
+                return None
+        
+        # Skip if user not authenticated
+        if not request.user or not request.user.is_authenticated:
+            return None
+        
+        # Skip if user has no cases
+        from apps.core.models import Case
+        user_cases = Case.objects.filter(user=request.user)
+        if not user_cases.exists():
+            return None
+        
+        # Check if case is selected in session
+        selected_case_id = request.session.get('selected_case_id')
+        if not selected_case_id:
+            # Auto-select the first case
+            first_case = user_cases.order_by('-updated_at').first()
+            if first_case:
+                request.session['selected_case_id'] = first_case.id
+            return None
+        
+        # Verify the selected case belongs to this user
+        try:
+            case = Case.objects.get(id=selected_case_id, user=request.user)
+        except Case.DoesNotExist:
+            # Auto-select the first case
+            first_case = user_cases.order_by('-updated_at').first()
+            if first_case:
+                request.session['selected_case_id'] = first_case.id
+            else:
+                request.session.pop('selected_case_id', None)
         
         return None

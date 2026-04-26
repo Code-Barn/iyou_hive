@@ -85,33 +85,23 @@ class Case(models.Model):
         return self.documents.count()
     
     @classmethod
-    def get_default_case(cls, user):
+    def get_user_case(cls, user):
         """
-        Get or create a default case for a user.
-        
-        Creates a 'Default Case' if none exists.
+        Get the first case for a user (or None if no cases exist).
+        Returns the most recently updated case if user has multiple.
         """
         if not user or not user.is_authenticated:
             return None
         
-        default_case, created = cls.objects.get_or_create(
-            user=user,
-            name='Default Case',
-            defaults={
-                'description': 'Your default legal case',
-                'color': '#FF8C00',
-                'is_active': True
-            }
-        )
-        
-        # Ensure it's marked as active
-        if not default_case.is_active:
-            # Deactivate other cases for this user
-            cls.objects.filter(user=user).update(is_active=False)
-            default_case.is_active = True
-            default_case.save()
-        
-        return default_case
+        return cls.objects.filter(user=user).order_by('-updated_at').first()
+    
+    @classmethod
+    def get_default_case(cls, user):
+        """
+        DEPRECATED: Use get_user_case() instead.
+        This method now simply returns the user's first/most recent case.
+        """
+        return cls.get_user_case(user)
     
     def can_access(self, user):
         """

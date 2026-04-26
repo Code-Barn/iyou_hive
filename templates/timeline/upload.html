@@ -5,11 +5,111 @@
 {% block timeline_content %}
 <div class="upload-page">
     <h1>Upload Timeline</h1>
-    <form method="post">
+    <form id="uploadForm" method="post">
         {% csrf_token %}
         <label>Timeline Markdown</label>
-        <textarea name="markdown_content" rows="20" required></textarea>
-        <button type="submit" class="btn-primary">Upload</button>
+        <textarea name="markdown_content" id="markdownContent" rows="20" placeholder="Paste your timeline Markdown here..." required></textarea>
+        <button type="submit" class="btn btn-primary">Upload</button>
     </form>
+    <div id="status" class="status-message"></div>
 </div>
+
+<style>
+    .upload-page {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 1rem;
+    }
+    
+    .upload-page h1 {
+        color: var(--primary);
+        margin-bottom: 1rem;
+    }
+    
+    .upload-page label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+    
+    .upload-page textarea {
+        width: 100%;
+        padding: 0.75rem;
+        border: 2px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+        resize: vertical;
+    }
+    
+    .upload-page textarea:focus {
+        outline: none;
+        border-color: var(--primary);
+    }
+    
+    .status-message {
+        margin-top: 1rem;
+        padding: 0.75rem;
+        border-radius: 4px;
+    }
+    
+    .status-message.success {
+        background: rgba(76, 175, 80, 0.2);
+        color: #4CAF50;
+    }
+    
+    .status-message.error {
+        background: rgba(244, 67, 54, 0.2);
+        color: #F44336;
+    }
+</style>
+
+<script>
+document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const form = this;
+    const formData = new FormData(form);
+    const statusDiv = document.getElementById('status');
+    const submitBtn = form.querySelector('button[type="submit"]');
+    
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Processing...';
+    statusDiv.className = 'status-message';
+    statusDiv.textContent = '';
+    
+    fetch(form.action || '/timeline/upload/', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': form.querySelector('[name="csrfmiddlewaretoken"]').value
+        }
+    })
+    .then(function(response) {
+        return response.json();
+    })
+    .then(function(data) {
+        if (data.status === 'success') {
+            statusDiv.className = 'status-message success';
+            statusDiv.textContent = 'Successfully created ' + data.created + ' timeline events!';
+            
+            // Redirect after a short delay
+            setTimeout(function() {
+                window.location.href = data.redirect || '/timeline/';
+            }, 1000);
+        } else {
+            throw new Error(data.error || 'Upload failed');
+        }
+    })
+    .catch(function(error) {
+        statusDiv.className = 'status-message error';
+        statusDiv.textContent = 'Error: ' + error.message;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Upload';
+    });
+});
+</script>
 {% endblock %}

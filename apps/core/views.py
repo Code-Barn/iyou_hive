@@ -124,28 +124,43 @@ def create_case(request):
         
         try:
             with transaction.atomic():
-                # Deactivate current active case if this should be active
-                is_active = request.POST.get('is_active', 'false').lower() == 'true'
-                
-                if is_active:
-                    Case.objects.filter(user=request.user).update(is_active=False)
-                
                 case = Case.objects.create(
                     name=name,
                     description=description,
                     color=color,
                     user=request.user,
-                    is_active=is_active
+                    is_active=True
                 )
                 
-                messages.success(request, f'Case "{name}" created successfully!')
-                return redirect('core:case_detail', case_id=case.id)
+                request.session['selected_case_id'] = case.id
                 
+                messages.success(request, f'Case "{name}" created and selected!')
+                return redirect('timeline:timeline')
         except Exception as e:
             messages.error(request, f'Failed to create case: {e}')
+            # Re-render form with pre-filled values
+            context = {
+                'form_name': name,
+                'form_description': description,
+                'form_color': color,
+                'color_options': [
+                    {'value': '#FF8C00', 'name': 'Honey-Orange', 'color': '#FF8C00'},
+                    {'value': '#0064AA', 'name': 'Byers Blue', 'color': '#0064AA'},
+                    {'value': '#4CAF50', 'name': 'Green', 'color': '#4CAF50'},
+                    {'value': '#F44336', 'name': 'Red', 'color': '#F44336'},
+                    {'value': '#9C27B0', 'name': 'Purple', 'color': '#9C27B0'},
+                    {'value': '#FF9800', 'name': 'Orange', 'color': '#FF9800'},
+                    {'value': '#2196F3', 'name': 'Blue', 'color': '#2196F3'},
+                    {'value': '#E91E63', 'name': 'Pink', 'color': '#E91E63'},
+                ]
+            }
+            return render(request, 'core/create_case.html', context)
     
-    # GET request - show form
+    # GET request - show form (with optional pre-filled name)
+    form_name = request.GET.get('name', '').strip()
+    
     context = {
+        'form_name': form_name,
         'color_options': [
             {'value': '#FF8C00', 'name': 'Honey-Orange', 'color': '#FF8C00'},
             {'value': '#0064AA', 'name': 'Byers Blue', 'color': '#0064AA'},

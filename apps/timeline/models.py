@@ -60,12 +60,10 @@ class TimelineEvent(models.Model):
         help_text="Path to the Markdown file this event belongs to"
     )
     
-    # Case compartmentalization
+    # Case compartmentalization (required for data isolation)
     case = models.ForeignKey(
         'core.Case',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.CASCADE,
         related_name='events',
         db_index=True,
         help_text="Case this event belongs to"

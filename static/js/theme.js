@@ -108,23 +108,36 @@ document.addEventListener("DOMContentLoaded", function () {
    * Initialize collapsible panes
    */
   function initCollapsiblePanes() {
-    const panes = document.querySelectorAll(".workspace-pane.collapsible");
-    panes.forEach((pane) => {
-      const collapseButton = pane.querySelector(".collapse-button");
-      const savedState = localStorage.getItem(pane.id + "_state");
-      if (savedState === "collapsed") {
-        pane.classList.add("collapsed");
+    console.log('initCollapsiblePanes called, buttons:', document.querySelectorAll('.collapse-button').length);
+    const buttons = document.querySelectorAll('.collapse-button');
+    if (buttons.length === 0) {
+        console.log('No collapse buttons found in DOM');
+        return;
+    }
+    buttons.forEach((button) => {
+      const targetId = button.getAttribute('data-target');
+      const pane = targetId ? document.getElementById(targetId) : button.closest('.workspace-pane');
+      if (!pane) {
+          console.log('No pane found for button', button);
+          return;
       }
-      if (collapseButton) {
-        collapseButton.addEventListener("click", function () {
-          const isCollapsed = pane.classList.toggle("collapsed");
-          localStorage.setItem(
-            pane.id + "_state",
-            isCollapsed ? "collapsed" : "expanded",
-          );
-          this.textContent = isCollapsed ? "▶" : "▼";
-        });
+      console.log('Setting up collapse for pane:', pane.id);
+      
+      const savedState = localStorage.getItem(pane.id + '_state');
+      if (savedState === 'collapsed') {
+        pane.classList.add('collapsed');
+        button.textContent = '▶';
+      } else {
+        button.textContent = '◀';
       }
+      
+      button.onclick = function(e) {
+        e.stopPropagation();
+        console.log('Collapse clicked for:', pane.id);
+        const isCollapsed = pane.classList.toggle('collapsed');
+        localStorage.setItem(pane.id + '_state', isCollapsed ? 'collapsed' : 'expanded');
+        button.textContent = isCollapsed ? '▶' : '◀';
+      };
     });
   }
 

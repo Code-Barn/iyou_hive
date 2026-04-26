@@ -26,10 +26,11 @@
                 </select>
             </div>
             <nav class="workspace-nav">
-                <a href="{% url 'timeline:timeline' %}" class="nav-button">Timeline</a>
-                <a href="{% url 'archive:archive' %}" class="nav-button">Archive</a>
+                <a href="{% url 'core:case_list' %}" class="nav-button" title="Manage Cases">🏠 Home</a>
+                <a href="#" class="nav-button" onclick="togglePane('timeline-pane'); return false;">Timeline</a>
+                <a href="#" class="nav-button" onclick="togglePane('archive-pane'); return false;">Archive</a>
                 {% if user.is_authenticated %}
-                <a href="{% url 'ai_assistant:chat' %}" class="nav-button">AI Assistant</a>
+                <a href="#" class="nav-button" onclick="togglePane('ai-pane'); return false;">AI</a>
                 <a href="{% url 'accounts:did_logout' %}" class="nav-button">Logout</a>
                 {% else %}
                 <a href="{% url 'accounts:login' %}" class="nav-button">Login</a>
@@ -47,23 +48,30 @@
         </header>
         
         <div class="workspace-body">
-            <div id="timeline-pane" class="workspace-pane active" data-pane="timeline">
-                <div class="pane-header"><h2>Timeline</h2></div>
+            <div id="timeline-pane" class="workspace-pane" data-pane="timeline">
+                <div class="pane-header">
+                    <h2>Timeline</h2>
+                    <button class="collapse-button" data-target="timeline-pane" aria-label="Toggle timeline">◀</button>
+                </div>
                 <div class="pane-content">{% block timeline_content %}{% endblock %}</div>
             </div>
-            <div id="archive-pane" class="workspace-pane collapsible" data-pane="archive">
+            <div id="archive-pane" class="workspace-pane" data-pane="archive">
                 <div class="pane-header">
                     <h2>Archive</h2>
-                    <button class="collapse-button" aria-label="Toggle archive">▼</button>
+                    <button class="collapse-button" data-target="archive-pane" aria-label="Toggle archive">◀</button>
                 </div>
-                <div class="pane-content">{% block archive_content %}{% endblock %}</div>
+                <div class="pane-content">
+                    {% include 'archive/archive_pane.html' %}
+                </div>
             </div>
-            <div id="ai-pane" class="workspace-pane collapsible" data-pane="ai">
+            <div id="ai-pane" class="workspace-pane" data-pane="ai">
                 <div class="pane-header">
                     <h2>AI Assistant</h2>
-                    <button class="collapse-button" aria-label="Toggle AI">▼</button>
+                    <button class="collapse-button" data-target="ai-pane" aria-label="Toggle AI">◀</button>
                 </div>
-                <div class="pane-content">{% block ai_content %}{% endblock %}</div>
+                <div class="pane-content">
+                    {% include 'ai_assistant/ai_pane.html' %}
+                </div>
             </div>
         </div>
     </div>
@@ -78,6 +86,16 @@
             window.location.href = '/core/cases/create/';
         } else if (caseId) {
             window.location.href = '/core/cases/' + caseId + '/switch/';
+        }
+    }
+    
+    function togglePane(paneId) {
+        var pane = document.getElementById(paneId);
+        var button = pane ? pane.querySelector('.collapse-button') : null;
+        if (pane && pane.classList.contains('collapsed')) {
+            pane.classList.remove('collapsed');
+            if (button) button.textContent = '◀';
+            localStorage.setItem(paneId + '_state', 'expanded');
         }
     }
     </script>
