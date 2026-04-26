@@ -30,7 +30,7 @@ class TimelineEvent(models.Model):
         ('other', 'Other'),
     ]
     
-    date = models.DateField(help_text="Date of the event")
+    date = models.DateField(help_text="Date of the event", db_index=True)
     event = models.CharField(max_length=255, help_text="Title or name of the event")
     category = models.CharField(
         max_length=100, 
@@ -67,6 +67,7 @@ class TimelineEvent(models.Model):
         null=True,
         blank=True,
         related_name='events',
+        db_index=True,
         help_text="Case this event belongs to"
     )
     

@@ -18,7 +18,6 @@ from .utils import (
 from django.utils import timezone
 import tempfile
 import os
-import os
 import json
 
 
@@ -45,14 +44,15 @@ def timeline_view(request):
     if case_id:
         try:
             case = Case.objects.get(id=case_id, user=request.user)
-            # Filter events by this case, but only if they belong to the user
             events = events.filter(case=case)
         except Case.DoesNotExist:
-            pass
-    else:
-        # Get default case for user
-        case = Case.get_default_case(request.user)
-        if case:
+            request.session.pop('selected_case_id', None)
+    
+    # Only use default case if user has existing cases
+    if case is None and case_id is None:
+        existing_cases = Case.objects.filter(user=request.user).first()
+        if existing_cases:
+            case = existing_cases
             request.session['selected_case_id'] = case.id
             events = events.filter(case=case)
     

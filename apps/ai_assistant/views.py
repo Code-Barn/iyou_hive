@@ -4,6 +4,8 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument
+from apps.core.models import Case
+from apps.ai_assistant.models import AIConversation
 import json
 import urllib.request
 import urllib.parse
@@ -14,20 +16,48 @@ def ai_chat_view(request):
     """Render the AI assistant chat interface."""
     api_key = settings.MISTRAL_API_KEY
     
-    # Get recent timeline events for context - ONLY USER'S EVENTS
-    recent_events = TimelineEvent.objects.filter(
-        created_by=request.user
-    ).order_by('-date')[:5]
+    case_id = request.session.get('selected_case_id')
+    if 'case_id' in request.GET:
+        case_id = request.GET['case_id']
+        request.session['selected_case_id'] = case_id
     
-    # Get recent documents - ONLY USER'S DOCUMENTS
-    recent_docs = ArchiveDocument.objects.filter(
-        user=request.user
-    ).order_by('-upload_date')[:5]
+    case = None
+    recent_events = TimelineEvent.objects.filter(created_by=request.user)
+    recent_docs = ArchiveDocument.objects.filter(user=request.user)
+    
+    if case_id:
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+            recent_events = recent_events.filter(case=case)
+            recent_docs = recent_docs.filter(case=case)
+        except Case.DoesNotExist:
+            request.session.pop('selected_case_id', None)
+    
+    if case is None and case_id is None:
+        existing_cases = Case.objects.filter(user=request.user).first()
+        if existing_cases:
+            case = existing_cases
+            request.session['selected_case_id'] = case.id
+            recent_events = recent_events.filter(case=case)
+            recent_docs = recent_docs.filter(case=case)
+    
+    recent_events = recent_events.order_by('-date')[:5]
+    recent_docs = recent_docs.order_by('-upload_date')[:5]
+    
+    conversations = []
+    if case:
+        conversations = AIConversation.objects.filter(
+            user=request.user,
+            case=case
+        ).order_by('-updated_at')[:10]
     
     return render(request, 'ai_assistant/chat.html', {
         'api_configured': bool(api_key),
         'recent_events': recent_events,
         'recent_docs': recent_docs,
+        'case': case,
+        'selected_case_id': case_id or (case.id if case else None),
+        'conversations': conversations,
     })
 
 

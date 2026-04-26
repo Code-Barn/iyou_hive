@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from .models import ArchiveDocument
 from .forms import ArchiveDocumentForm
+from apps.core.models import Case
 import os
 import sys
 import subprocess
@@ -103,7 +104,29 @@ def run_filemapper(directory):
 @login_required
 def archive_view(request):
     """Display all archived documents for the current user."""
-    documents = ArchiveDocument.objects.filter(user=request.user).order_by('-upload_date')
+    case_id = request.session.get('selected_case_id')
+    if 'case_id' in request.GET:
+        case_id = request.GET['case_id']
+        request.session['selected_case_id'] = case_id
+    
+    documents = ArchiveDocument.objects.filter(user=request.user)
+    case = None
+    
+    if case_id:
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+            documents = documents.filter(case=case)
+        except Case.DoesNotExist:
+            request.session.pop('selected_case_id', None)
+    
+    if case is None and case_id is None:
+        existing_cases = Case.objects.filter(user=request.user).first()
+        if existing_cases:
+            case = existing_cases
+            request.session['selected_case_id'] = case.id
+            documents = documents.filter(case=case)
+    
+    documents = documents.order_by('-upload_date')
     
     # Get archive map if it exists
     archive_map = None
@@ -116,7 +139,9 @@ def archive_view(request):
     
     return render(request, 'archive/archive.html', {
         'documents': documents,
-        'archive_map': archive_map
+        'archive_map': archive_map,
+        'case': case,
+        'selected_case_id': case_id or (case.id if case else None),
     })
 
 
@@ -131,11 +156,25 @@ def upload_document(request):
     3. Save the Markdown file
     4. Update the archive map using filemapper.py
     """
+    case_id = request.session.get('selected_case_id')
+    case = None
+    if case_id:
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+        except Case.DoesNotExist:
+            case = Case.get_default_case(request.user)
+    else:
+        case = Case.get_default_case(request.user)
+        if case:
+            request.session['selected_case_id'] = case.id
+    
     if request.method == 'POST':
         form = ArchiveDocumentForm(request.POST, request.FILES)
         if form.is_valid():
             document = form.save(commit=False)
             document.uploader = request.user
+            document.user = request.user
+            document.case = case
             
             # Get user's archive directory
             user_archive_dir = get_user_archive_dir(request.user)
@@ -184,7 +223,8 @@ def upload_document(request):
                                 category=category_match.group(1).lower() if category_match else 'other',
                                 notes=f"Converted from PDF: {document.title}",
                                 supporting_docs=str(document.id),
-                                created_by=request.user
+                                created_by=request.user,
+                                case=case
                             )
                             
                             # Link the document to the event
@@ -205,6 +245,66 @@ def upload_document(request):
         form = ArchiveDocumentForm()
     
     return render(request, 'archive/upload.html', {'form': form})
+
+
+@login_required
+def bulk_upload(request):
+    """
+    Bulk upload multiple files or folder structures.
+    Accepts multiple files and preserves folder hierarchy via path.
+    """
+    case_id = request.session.get('selected_case_id')
+    case = None
+    if case_id:
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+        except Case.DoesNotExist:
+            case = Case.get_default_case(request.user)
+    else:
+        case = Case.get_default_case(request.user)
+        if case:
+            request.session['selected_case_id'] = case.id
+    
+    if request.method == 'POST':
+        files = request.FILES.getlist('files')
+        base_path = request.POST.get('base_path', '')
+        
+        uploaded_count = 0
+        for uploaded_file in files:
+            # Determine if this is a draft
+            is_draft = 'drafts/' in base_path or uploaded_file.name.startswith('drafts/')
+            
+            # Auto-detect file type
+            file_ext = uploaded_file.name.lower().split('.')[-1] if '.' in uploaded_file.name else ''
+            file_type_map = {
+                'pdf': 'pdf', 'png': 'image', 'jpg': 'image', 'jpeg': 'image',
+                'gif': 'image', 'webp': 'image', 'svg': 'image',
+                'doc': 'word', 'docx': 'word',
+                'txt': 'text', 'md': 'text',
+                'eml': 'email', 'msg': 'email',
+            }
+            file_type = file_type_map.get(file_ext, 'other')
+            
+            # Create the document
+            doc = ArchiveDocument.objects.create(
+                title=uploaded_file.name,
+                file=uploaded_file,
+                path=base_path + uploaded_file.name if base_path else uploaded_file.name,
+                file_type=file_type,
+                is_draft=is_draft,
+                is_immutable=not is_draft,
+                case=case,
+                user=request.user,
+                uploader=request.user
+            )
+            uploaded_count += 1
+        
+        return JsonResponse({
+            'status': 'success',
+            'uploaded': uploaded_count
+        })
+    
+    return JsonResponse({'error': 'POST required'}, status=405)
 
 
 @login_required
@@ -368,4 +468,179 @@ def link_to_timeline(request, document_id, event_id):
         'status': 'success',
         'event_id': event_id,
         'document_id': document_id
+    })
+
+
+@login_required
+def api_file_tree(request):
+    """API endpoint to get file tree HTML for the archive."""
+    from django.template.loader import render_to_string
+    
+    documents = ArchiveDocument.objects.filter(user=request.user).order_by('-upload_date')
+    
+    html = render_to_string('archive/file_tree_partial.html', {'documents': documents})
+    return HttpResponse(html)
+
+
+@login_required
+def api_file_preview(request, pk):
+    """API endpoint to preview a document."""
+    document = get_object_or_404(ArchiveDocument, pk=pk, user=request.user)
+    
+    if document.is_pdf():
+        return JsonResponse({
+            'type': 'pdf',
+            'title': document.title,
+            'url': document.get_file_url(),
+            'message': 'PDF preview requires a PDF viewer'
+        })
+    elif document.is_image():
+        return JsonResponse({
+            'type': 'image',
+            'title': document.title,
+            'url': document.get_file_url()
+        })
+    else:
+        return JsonResponse({
+            'type': 'other',
+            'title': document.title,
+            'description': document.description,
+            'category': document.category,
+            'tags': document.tags
+        })
+
+
+@login_required
+def api_get_content(request, pk):
+    """API endpoint to get document content for canvas editing."""
+    document = get_object_or_404(ArchiveDocument, pk=pk, user=request.user)
+    
+    content = ''
+    if document.file:
+        file_path = document.file.path
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    content = f.read()
+            except Exception:
+                content = f'# {document.title}\n\n[Content could not be loaded]'
+    
+    return JsonResponse({
+        'title': document.title,
+        'content': content
+    })
+
+
+@login_required
+def api_save_canvas(request):
+    """API endpoint to save canvas content as a document."""
+    if request.method == 'POST':
+        import json
+        data = json.loads(request.body)
+        title = data.get('title', 'Untitled')
+        content = data.get('content', '')
+        
+        from django.core.files.base import ContentFile
+        content_file = ContentFile(content.encode('utf-8'))
+        
+        document = ArchiveDocument.objects.create(
+            title=title,
+            file=content_file,
+            file_type='text',
+            user=request.user,
+            uploader=request.user
+        )
+        
+        return JsonResponse({'status': 'success', 'document_id': document.pk})
+    
+    return JsonResponse({'error': 'POST required'}, status=405)
+
+
+@login_required
+def save_document(request, pk):
+    """
+    Save document, enforcing read-only for immutable files.
+    Only draft documents can be edited.
+    """
+    document = get_object_or_404(ArchiveDocument, pk=pk, user=request.user)
+    
+    if document.is_immutable:
+        return JsonResponse({
+            'status': 'error', 
+            'message': 'This file is read-only to preserve integrity.'
+        }, status=403)
+    
+    if request.method == 'POST':
+        import json
+        data = json.loads(request.body)
+        content = data.get('content', '')
+        
+        # Save the new content
+        from django.core.files.base import ContentFile
+        document.file.save(document.title, ContentFile(content.encode('utf-8')), save=True)
+        
+        return JsonResponse({'status': 'success'})
+    
+    return JsonResponse({'error': 'POST required'}, status=405)
+
+
+@login_required
+def download_archive(request, case_id):
+    """
+    Download entire archive as a ZIP file.
+    """
+    import io
+    import zipfile
+    
+    case = get_object_or_404(Case, id=case_id, user=request.user)
+    documents = ArchiveDocument.objects.filter(case=case)
+    
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+        for doc in documents:
+            if doc.file:
+                filename = doc.path or doc.title
+                zip_file.writestr(filename, doc.file.read())
+    
+    response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+    response['Content-Disposition'] = f'attachment; filename="{case.name}_archive.zip"'
+    return response
+
+
+@login_required
+def create_sync_config(request):
+    """Create a sync configuration for external storage."""
+    if request.method == 'POST':
+        import json
+        data = json.loads(request.body)
+        
+        case_id = request.session.get('selected_case_id')
+        case = Case.get_default_case(request.user)
+        
+        sync_config = SyncedArchive.objects.create(
+            case=case,
+            user=request.user,
+            provider=data.get('provider'),
+            external_path=data.get('external_path'),
+            access_token=data.get('access_token', '')
+        )
+        
+        return JsonResponse({
+            'status': 'success',
+            'sync_id': sync_config.pk
+        })
+    
+    return JsonResponse({'error': 'POST required'}, status=405)
+
+
+@login_required
+def sync_archive(request, sync_id):
+    """Trigger sync for a sync configuration."""
+    sync_config = get_object_or_404(SyncedArchive, pk=sync_id, user=request.user)
+    
+    synced_count = sync_config.sync()
+    
+    return JsonResponse({
+        'status': 'success',
+        'synced': synced_count
     })

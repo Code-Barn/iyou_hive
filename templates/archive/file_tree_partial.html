@@ -1,0 +1,21 @@
+<div class="file-tree">
+    {% for doc in documents %}
+    <div class="file-item" data-id="{{ doc.pk }}" onclick="selectFile({{ doc.pk }})">
+        <span class="file-icon">
+            {% if doc.file_type == 'pdf' %}📄
+            {% elif doc.file_type == 'image' %}🖼️
+            {% elif doc.file_type == 'word' %}📝
+            {% elif doc.file_type == 'email' %}📧
+            {% else %}📋
+            {% endif %}
+        </span>
+        <span class="file-name">{{ doc.title }}</span>
+        <span class="file-date">{{ doc.upload_date|date:"M j" }}</span>
+    </div>
+    {% empty %}
+    <div class="empty-files">
+        <p>No files yet</p>
+        <a href="{% url 'archive:upload' %}" class="btn btn-primary">Upload First Document</a>
+    </div>
+    {% endfor %}
+</div>

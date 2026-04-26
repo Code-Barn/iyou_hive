@@ -6,6 +6,7 @@ This module tests:
 - Document linking to Archive
 - Markdown parsing
 - API endpoints (in future)
+- Case compartmentalization
 """
 
 from django.test import TestCase, Client
@@ -13,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from .models import TimelineEvent
 from apps.archive.models import ArchiveDocument
+from apps.core.models import Case
 from datetime import date
 import json
 
@@ -259,3 +261,72 @@ class MarkdownParsingTest(TestCase):
         supporting_docs = events[0]['supporting_docs']
         self.assertIn('contract.pdf', supporting_docs)
         self.assertIn('link/to/contract.pdf', supporting_docs)
+
+
+class TimelineEventCompartmentalizationTest(TestCase):
+    """Tests for timeline event case compartmentalization."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.case1 = Case.objects.create(name='Case 1', user=self.user)
+        self.case2 = Case.objects.create(name='Case 2', user=self.user)
+    
+    def test_events_linked_to_case(self):
+        """Test that events can be linked to cases."""
+        event = TimelineEvent.objects.create(
+            date=date(2023, 1, 15),
+            event='Test Event',
+            category='other',
+            case=self.case1,
+            created_by=self.user
+        )
+        self.assertEqual(event.case, self.case1)
+    
+    def test_events_filtered_by_case(self):
+        """Test that events are filtered by case."""
+        event1 = TimelineEvent.objects.create(
+            date=date(2023, 1, 15),
+            event='Event in Case 1',
+            category='other',
+            case=self.case1,
+            created_by=self.user
+        )
+        event2 = TimelineEvent.objects.create(
+            date=date(2023, 2, 15),
+            event='Event in Case 2',
+            category='other',
+            case=self.case2,
+            created_by=self.user
+        )
+        
+        case1_events = TimelineEvent.objects.filter(case=self.case1)
+        case2_events = TimelineEvent.objects.filter(case=self.case2)
+        
+        self.assertEqual(case1_events.count(), 1)
+        self.assertEqual(case2_events.count(), 1)
+        self.assertEqual(case1_events.first().event, 'Event in Case 1')
+        self.assertEqual(case2_events.first().event, 'Event in Case 2')
+    
+    def test_events_isolated_between_cases(self):
+        """Test that events in different cases are isolated."""
+        event1 = TimelineEvent.objects.create(
+            date=date(2023, 1, 15),
+            event='Event 1',
+            category='other',
+            case=self.case1,
+            created_by=self.user
+        )
+        event2 = TimelineEvent.objects.create(
+            date=date(2023, 2, 15),
+            event='Event 2',
+            category='other',
+            case=self.case2,
+            created_by=self.user
+        )
+        
+        self.assertTrue(event1.case != event2.case)

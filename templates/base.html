@@ -15,8 +15,14 @@
     <div class="workspace">
         <header class="workspace-header">
             <div class="case-selector">
-                <select id="case-selector" aria-label="Select case">
+                <select id="case-selector" aria-label="Select case" onchange="switchCase(this.value)">
                     <option value="">-- Select Case --</option>
+                    {% for case in case_list %}
+                    <option value="{{ case.id }}" {% if current_case.id == case.id %}selected{% endif %}>
+                        {{ case.name }}
+                    </option>
+                    {% endfor %}
+                    <option value="new">+ Create New Hive</option>
                 </select>
             </div>
             <nav class="workspace-nav">
@@ -61,6 +67,20 @@
             </div>
         </div>
     </div>
+
+    {% if show_create_modal and user.is_authenticated %}
+    {% include 'includes/case_creation_modal.html' %}
+    {% endif %}
+
+    <script>
+    function switchCase(caseId) {
+        if (caseId === 'new') {
+            window.location.href = '/core/cases/create/';
+        } else if (caseId) {
+            window.location.href = '/core/cases/' + caseId + '/switch/';
+        }
+    }
+    </script>
 
     {% if DEBUG %}
     <script src="{% static 'js/theme.js' %}"></script>

@@ -160,30 +160,31 @@ class SessionSecurityMiddleware(MiddlewareMixin):
     """
     Middleware to enhance session security.
     
-    Sets security-related headers and validates sessions.
+    Adds Content-Security-Policy header. Other security headers are handled
+    by Django's built-in SecurityMiddleware.
     """
     
     def process_response(self, request, response):
         """Add security headers to responses."""
-        # Secure cookies
-        response.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
-        response.setdefault('X-Content-Type-Options', 'nosniff')
-        response.setdefault('X-Frame-Options', 'DENY')
-        response.setdefault('X-XSS-Protection', '1; mode=block')
-        response.setdefault('Referrer-Policy', 'same-origin')
+        # Let Django SecurityMiddleware handle: Strict-Transport-Security, X-Frame-Options,
+        # X-Content-Type-Options, X-XSS-Protection
         
-        # Content Security Policy
-        csp = (
-            "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; "
-            "font-src 'self'; "
-            "connect-src 'self'; "
-            "frame-src 'none'; "
-            "object-src 'none'"
-        )
-        response.setdefault('Content-Security-Policy', csp)
+        # Only add CSP if not already set (by previous middleware or view)
+        if 'Content-Security-Policy' not in response:
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; "
+                "font-src 'self'; "
+                "connect-src 'self'; "
+                "frame-src 'none'; "
+                "object-src 'none'"
+            )
+            response['Content-Security-Policy'] = csp
+        
+        if 'Referrer-Policy' not in response:
+            response['Referrer-Policy'] = 'same-origin'
         
         return response
 

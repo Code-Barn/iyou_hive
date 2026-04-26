@@ -4,6 +4,7 @@ Django settings for Hiver project.
 Interactive legal timelines, document archiving, and AI-assisted research.
 """
 
+import platform
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -30,7 +31,6 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.timeline',
     'apps.archive',
-    'apps.conversation_logs',
     'apps.ai_assistant',
 ]
 
@@ -42,26 +42,31 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    # Hiver custom middleware
     'apps.core.middleware.RustDIDAuthenticationMiddleware',
     'apps.core.middleware.SessionSecurityMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
 
-# Authentication settings
-# Use Django's built-in authentication with DID as an alternative
 LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/timeline/'
 LOGOUT_REDIRECT_URL = '/timeline/'
 
-# Rust-DID configuration
-DID_BACKEND = os.getenv('DID_BACKEND', 'rust')  # 'rust' or 'python'
-RUST_DID_LIB_PATH = Path(os.getenv('RUST_DID_LIB_PATH', str(Path(__file__).parent.parent / 'rust_did' / 'target' / 'release' / 'libdid_rust.so')))
-# Session settings
-SESSION_COOKIE_AGE = 1209600  # 2 weeks in seconds
-SESSION_COOKIE_SECURE = True  # Only send over HTTPS
-SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access
+RUST_DID_LIB_EXTENSION = {
+    'Linux': 'so',
+    'Darwin': 'dylib',
+    'Windows': 'dll'
+}.get(platform.system(), 'so')
+
+RUST_DID_LIB_PATH = os.getenv('RUST_DID_LIB_PATH',
+    BASE_DIR / 'rust_did' / 'target' / 'release' / f'libdid_rust.{RUST_DID_LIB_EXTENSION}'
+)
+
+DID_BACKEND = os.getenv('DID_BACKEND', 'rust')
+
+SESSION_COOKIE_AGE = 1209600
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
 TEMPLATES = [
@@ -74,6 +79,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.core.context_processors.cases_processor',
             ],
         },
     },
@@ -128,7 +134,3 @@ HIVER_THEME = {
 
 # Mistral AI Configuration
 MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY', '')
-
-
-# Rust-DID Configuration
-RUST_DID_LIB_PATH = BASE_DIR / 'rust_did' / 'target' / 'release' / 'libdid_rust.so'

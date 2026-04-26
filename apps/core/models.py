@@ -56,6 +56,7 @@ class Case(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
         related_name='cases',
+        db_index=True,
         help_text="User who owns this case"
     )
     

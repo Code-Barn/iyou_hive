@@ -15,6 +15,8 @@ from django.conf import settings
 from .views import call_ai_api
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument
+from apps.core.models import Case
+from .models import AIConversation
 from datetime import date
 import json
 
@@ -180,3 +182,45 @@ class SuggestionGenerationTest(TestCase):
         data = response.json()
         self.assertEqual(data['status'], 'success')
         self.assertIn('suggestions', data)
+
+
+class AIConversationModelTest(TestCase):
+    """Test AIConversation model."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.case = Case.objects.create(name='Test Case', user=self.user)
+    
+    def test_create_conversation(self):
+        """Test creating an AI conversation."""
+        conv = AIConversation.objects.create(
+            title='Test Conversation',
+            user=self.user,
+            case=self.case,
+            messages=[{'role': 'user', 'content': 'Hello'}]
+        )
+        self.assertEqual(conv.title, 'Test Conversation')
+        self.assertEqual(conv.user, self.user)
+        self.assertEqual(conv.case, self.case)
+    
+    def test_conversations_filtered_by_case(self):
+        """Test that conversations are filtered by case."""
+        conv1 = AIConversation.objects.create(
+            title='Conv 1',
+            user=self.user,
+            case=self.case
+        )
+        conv2 = AIConversation.objects.create(
+            title='Conv 2',
+            user=self.user,
+            case=None
+        )
+        
+        case_convs = AIConversation.objects.filter(case=self.case)
+        self.assertEqual(case_convs.count(), 1)
+        self.assertEqual(case_convs.first(), conv1)

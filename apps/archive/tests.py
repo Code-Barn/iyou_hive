@@ -16,6 +16,7 @@ from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from .models import ArchiveDocument
 from apps.timeline.models import TimelineEvent
+from apps.core.models import Case
 from datetime import date
 from pathlib import Path
 import json
@@ -385,3 +386,61 @@ class DocumentFileTypesTest(TestCase):
             
             self.assertEqual(doc.is_pdf(), is_pdf_expected, f'Failed for {ext}')
             self.assertEqual(doc.is_image(), is_image_expected, f'Failed for {ext}')
+
+
+class ArchiveDocumentCompartmentalizationTest(TestCase):
+    """Tests for archive document case compartmentalization."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.test_file = SimpleUploadedFile(
+            'test_document.pdf',
+            b'Test PDF content',
+            content_type='application/pdf'
+        )
+        self.case1 = Case.objects.create(name='Case 1', user=self.user)
+        self.case2 = Case.objects.create(name='Case 2', user=self.user)
+    
+    def test_documents_linked_to_case(self):
+        """Test that documents can be linked to cases."""
+        doc = ArchiveDocument.objects.create(
+            title='Test Document',
+            file=self.test_file,
+            file_type='pdf',
+            case=self.case1,
+            user=self.user,
+            uploader=self.user
+        )
+        self.assertEqual(doc.case, self.case1)
+    
+    def test_documents_filtered_by_case(self):
+        """Test that documents are filtered by case."""
+        doc1 = ArchiveDocument.objects.create(
+            title='Doc 1',
+            file=self.test_file,
+            file_type='pdf',
+            case=self.case1,
+            user=self.user,
+            uploader=self.user
+        )
+        doc2 = ArchiveDocument.objects.create(
+            title='Doc 2',
+            file=self.test_file,
+            file_type='pdf',
+            case=self.case2,
+            user=self.user,
+            uploader=self.user
+        )
+        
+        case1_docs = ArchiveDocument.objects.filter(case=self.case1)
+        case2_docs = ArchiveDocument.objects.filter(case=self.case2)
+        
+        self.assertEqual(case1_docs.count(), 1)
+        self.assertEqual(case2_docs.count(), 1)
+        self.assertEqual(case1_docs.first().title, 'Doc 1')
+        self.assertEqual(case2_docs.first().title, 'Doc 2')
