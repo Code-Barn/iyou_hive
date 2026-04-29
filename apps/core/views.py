@@ -314,3 +314,54 @@ def api_case_detail(request, case_id):
         'created_at': case.created_at.isoformat() if case.created_at else None,
         'updated_at': case.updated_at.isoformat() if case.updated_at else None,
     })
+
+
+@login_required
+def get_timeline_data(request, case_id):
+    """
+    Returns timeline data for a case, including source_party and category for styling.
+    """
+    from apps.core.models import WikiPage, RawDocument
+    import os
+
+    # Get case and verify access
+    case = get_object_or_404(Case, id=case_id, user=request.user)
+
+    # Fetch WikiPages for the case
+    wiki_pages = WikiPage.objects.filter(case_id=case_id).order_by('last_updated')
+
+    timeline_data = []
+    for page in wiki_pages:
+        # Get the source_party from the associated RawDocument (if any)
+        source_party = "NEUTRAL"  # Default
+
+        # Try to get source_party from citation_references
+        if page.citation_references and len(page.citation_references) > 0:
+            first_citation = page.citation_references[0]
+            try:
+                # Assuming citation source is in format "raw/{case_id}/{filename}"
+                source_path = first_citation.get('source', '')
+                if source_path:
+                    # Extract filename from path
+                    filename = os.path.basename(source_path)
+                    # Try to find the RawDocument
+                    raw_doc = RawDocument.objects.filter(
+                        case=case,
+                        file__endswith=filename
+                    ).first()
+                    if raw_doc:
+                        source_party = raw_doc.source_party
+            except Exception:
+                pass
+
+        timeline_data.append({
+            'id': str(page.id),
+            'title': page.title,
+            'content': page.content,
+            'date': page.last_updated.strftime("%Y-%m-%d"),
+            'category': page.category,
+            'source_party': source_party,
+            'citation': page.citation_references[0].get('source', '') if page.citation_references else '',
+        })
+
+    return JsonResponse({'timeline': timeline_data})

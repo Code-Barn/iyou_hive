@@ -4,11 +4,57 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument
-from apps.core.models import Case
+from apps.core.models import Case, WikiPage, RawDocument
 from apps.ai_assistant.models import AIConversation
+from apps.core.prompts import CROSS_EXAMINATION_PROMPT
+from apps.core.utils import validate_adversarial_disclaimers
 import json
 import urllib.request
 import urllib.parse
+
+
+def get_ai_response(user_query: str, case_id: str) -> str:
+    """
+    Generates a response from the AI Assistant for a user query.
+    Applies cross-examination rules and citations.
+    """
+    # 1. Fetch relevant WikiPages and RawDocuments for the case
+    wiki_pages = WikiPage.objects.filter(case_id=case_id)
+    raw_docs = RawDocument.objects.filter(case_id=case_id)
+
+    # 2. Build context for the LLM (include content + metadata)
+    context = []
+    cited_doc_ids = []
+    for page in wiki_pages:
+        context.append(f"--- WikiPage: {page.title} (Category: {page.category}) ---\n{page.content}")
+    for doc in raw_docs:
+        from apps.core.tasks import load_document_text
+        context.append(f"--- RawDocument: {doc.document_type} (Source: {doc.source_party}) ---\n{load_document_text(doc)}")
+        cited_doc_ids.append(str(doc.id))
+
+    # 3. Construct the full prompt
+    full_prompt = f"""
+{CROSS_EXAMINATION_PROMPT}
+
+---
+### **User Query**
+{user_query}
+
+---
+### **Context**
+{"\n".join(context)}
+"""
+
+    # 4. Call the LLM (placeholder for actual LLM integration)
+    llm_response = call_ai_api(full_prompt)
+
+    # 5. Validate adversarial disclaimers
+    cited_sources = [doc.source_party for doc in raw_docs if str(doc.id) in cited_doc_ids]
+    if not validate_adversarial_disclaimers(llm_response, cited_sources):
+        # Fallback: Prepend a generic disclaimer if validation fails
+        llm_response = f"Note: Some claims may be contested. {llm_response}"
+
+    return llm_response
 
 
 @login_required

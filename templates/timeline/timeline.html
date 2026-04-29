@@ -1,7 +1,11 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static timeline_tags %}
 
 {% block title %}Timeline - Hiver{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/timeline.css' %}">
+{% endblock %}
 
 {% block timeline_content %}
 <!-- Timeline Container with vertical scrolling -->
@@ -126,10 +130,14 @@
 
         <!-- Individual Event Card -->
         {% with year=event.date|slice:":4" month=event.date|slice:"5:7" day=event.date|slice:"8:10" %}
-        <div class="timeline-event" 
+        <div class="timeline-event {{ event.source_party|timeline_class }}" 
              data-date="{{ event.date }}"
              data-year="{{ year }}"
-             data-section="{{ event.section|default:'' }}">
+             data-section="{{ event.section|default:'' }}"
+             data-source-party="{{ event.source_party|default:'NEUTRAL' }}">
+            
+            <!-- Source Party Label -->
+            <span class="source-party">{{ event.source_party|source_party_label|default:"Neutral" }}</span>
             
             <!-- Date Badge -->
             <div class="event-date-badge">
@@ -149,6 +157,9 @@
                     <span class="docs-count">{{ event.documents|length }} document(s)</span>
                 </div>
                 {% endif %}
+                {% if event.citation %}
+                <div class="citation">({{ event.category|title }}: {{ event.citation }})</div>
+                {% endif %}
             </div>
 
             <!-- Visual Connector Line -->
@@ -165,11 +176,13 @@
         {% for event in events %}
         {% if event.pk %}
         <!-- Database event -->
-        <div class="timeline-event" 
+        <div class="timeline-event {{ event.source_party|timeline_class|default:'neutral' }}" 
              data-event-id="{{ event.pk }}"
              data-date="{{ event.date|date:'Y-m-d' }}"
              data-year="{{ event.date|date:'Y' }}"
+             data-source-party="{{ event.source_party|default:'NEUTRAL' }}"
              onclick="openEventPopup({{ event.pk }})">
+            <span class="source-party">{{ event.source_party|source_party_label|default:"Neutral" }}</span>
             <div class="event-date-badge">
                 <span class="date-month">{{ event.date|date:'M' }}</span>
                 <span class="date-day">{{ event.date|date:'j' }}</span>
@@ -185,16 +198,21 @@
                     <span class="docs-count">{{ event.get_document_urls|length }} document(s)</span>
                 </div>
                 {% endif %}
+                {% if event.citation %}
+                <div class="citation">({{ event.category|title }}: {{ event.citation }})</div>
+                {% endif %}
             </div>
             <div class="event-connector"></div>
         </div>
         {% else %}
         <!-- Markdown event -->
         {% with year=event.date|slice:":4" month=event.date|slice:"5:7" day=event.date|slice:"8:10" %}
-        <div class="timeline-event" 
+        <div class="timeline-event {{ event.source_party|timeline_class|default:'neutral' }}" 
              data-date="{{ event.date }}"
              data-year="{{ year }}"
-             data-section="{{ event.section|default:'' }}">
+             data-section="{{ event.section|default:'' }}"
+             data-source-party="{{ event.source_party|default:'NEUTRAL' }}">
+            <span class="source-party">{{ event.source_party|source_party_label|default:"Neutral" }}</span>
             <div class="event-date-badge">
                 <span class="date-month">{{ month }}</span>
                 <span class="date-day">{{ day }}</span>
@@ -209,6 +227,9 @@
                     <span class="docs-icon">📎</span>
                     <span class="docs-count">{{ event.documents|length }} document(s)</span>
                 </div>
+                {% endif %}
+                {% if event.citation %}
+                <div class="citation">({{ event.category|title }}: {{ event.citation }})</div>
                 {% endif %}
             </div>
             <div class="event-connector"></div>
@@ -280,6 +301,7 @@ window.timelinesData = {{ timelines|json_script }};
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/timeline.js' %}"></script>
 <style>
 .archive-pane-container, .ai-pane-container {
     padding: 0.5rem;
