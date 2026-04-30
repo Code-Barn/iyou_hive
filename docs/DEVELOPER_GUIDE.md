@@ -19,7 +19,7 @@ This guide covers the architecture, APIs, and customization options for Hiver de
 
 ## 🏗️ Architecture Overview
 
-Hiver follows Django's MVC pattern with these key components:
+Hiver follows Django's MVC pattern with a **3-Layer LLM Wiki Architecture** for document processing:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -39,12 +39,24 @@ Hiver follows Django's MVC pattern with these key components:
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
+│                        3-Layer Wiki Architecture                │
+├─────────────────────────────────────────────────────────────┤
+│  Layer 1: RawDocument     - Immutable original uploads         │
+│  Layer 2: WikiPage        - Processed/normalized content       │
+│  Layer 3: SchemaRule       - LLM formatting rules              │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
 │                        Application Layer                        │
 ├─────────────────────────────────────────────────────────────┤
 │  apps/                                                           │
-│    ├── core/                 - Case management, middleware    │
-│    │   ├── models.py        - Case, TimelineFile                │
+│    ├── core/                 - Case, Layer 1-3 models, LLM    │
+│    │   ├── models.py        - Case, RawDocument, WikiPage,     │
+│    │   │                     SchemaRule, TimelineFile           │
 │    │   ├── views.py         - Case CRUD, APIs                  │
+│    │   ├── llm_clients.py   - LLM client implementations      │
+│    │   ├── prompts.py       - LLM prompt templates             │
+│    │   ├── tasks.py         - Sync pipeline tasks              │
 │    │   ├── urls.py          - Core URL routing                 │
 │    │   └── middleware.py    - Auth middleware                   │
 │    │                                                    │
@@ -59,9 +71,12 @@ Hiver follows Django's MVC pattern with these key components:
 │    │   ├── views.py         - Archive views                    │
 │    │   └── urls.py          - Archive URL routing              │
 │    │                                                    │
-│    ├── ai_assistant/        - AI integration                    │
-│    │   ├── views.py         - AI views, Mistral API             │
+│    ├── ai_assistant/        - AI integration & conversations    │
+│    │   ├── models.py        - AIConversation                   │
+│    │   ├── views.py         - AI chat, LLM queries             │
 │    │   └── urls.py          - AI URL routing                   │
+│    │                                                    │
+│    ├── conversation_logs/   - Conversation logging (placeholder)│
 │    │                                                    │
 │    └── accounts/            - Authentication                     │
 │        ├── models.py        - (Uses Django User)               │
@@ -88,8 +103,8 @@ Hiver follows Django's MVC pattern with these key components:
 │                        External Systems                        │
 ├─────────────────────────────────────────────────────────────┤
 │  ┌─────────────────┐    ┌─────────────────┐                 │
-│  │ Rust-DID Library │    │ Mistral AI API   │                 │
-│  │ (FFI via ctypes) │    │ (Optional)       │                 │
+│  │ Rust-DID Library │    │ LLM APIs         │                 │
+│  │ (FFI via ctypes) │    │ (Ollama/Gemini)  │                 │
 │  └─────────────────┘    └─────────────────┘                 │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -119,7 +134,8 @@ Hiver follows Django's MVC pattern with these key components:
 #### Case
 ```python
 class Case(models.Model):
-    name = models.CharField(max_length=255)
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     color = models.CharField(max_length=7, default='#FF8C00')
     is_active = models.BooleanField(default=False)
@@ -138,7 +154,7 @@ class Case(models.Model):
     can_delete(user): Check if user can delete this case
  
     # Class Methods
-    get_default_case(user): Get or create default case
+    get_user_case(user): Get most recent case for user (replaces get_default_case)
 ```
 
 #### TimelineFile
@@ -155,6 +171,48 @@ class TimelineFile(models.Model):
     # Methods
     get_absolute_url(): Reverse URL for timeline file
     to_dict(): Convert to dictionary for API responses
+```
+
+#### RawDocument (Layer 1: Immutable Raw Documents)
+```python
+class RawDocument(models.Model):
+    """Immutable raw document storage with metadata."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    case = models.ForeignKey(Case, on_delete=models.CASCADE)
+    file = models.FileField(upload_to=raw_document_upload_path)
+    file_type = models.CharField(max_length=10, choices=[('pdf','PDF'), ('md','Markdown'), ('json','JSON')])
+    source_party = models.CharField(max_length=50, choices=[('CLIENT','Client'), ('OPPOSING','Opposing'), ('NEUTRAL','Neutral')])
+    document_type = models.CharField(max_length=100)  # e.g., "Motion to Dismiss"
+    reliability_note = models.TextField(blank=True, null=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    is_immutable = models.BooleanField(default=True)  # Prevents modification after creation
+```
+
+#### WikiPage (Layer 2: Processed Content)
+```python
+class WikiPage(models.Model):
+    """Processed/normalized content derived from RawDocuments with version history."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    case = models.ForeignKey(Case, on_delete=models.CASCADE)
+    title = models.CharField(max_length=200)  # e.g., "timeline", "witness_list"
+    content = models.TextField()  # Markdown content
+    last_updated = models.DateTimeField(auto_now=True)
+    version_history = models.JSONField(default=list)  # Previous versions with timestamps
+    citation_references = models.JSONField(default=list)  # Claim IDs and sources
+    category = models.CharField(max_length=20, choices=[('VERIFIED','Stipulated/Verified'), ('CONTESTED','Contested Allegation')])
+    # Unique together: case + title
+```
+
+#### SchemaRule (Layer 3: LLM Formatting Rules)
+```python
+class SchemaRule(models.Model):
+    """Rules for LLM formatting and content structure."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    case = models.ForeignKey(Case, on_delete=models.CASCADE)
+    rule_name = models.CharField(max_length=200)  # e.g., "timeline_formatting"
+    rule_description = models.TextField()
+    rule_content = models.TextField()  # Markdown or JSON rules for LLM
+    # Unique together: case + rule_name
 ```
 
 ### Timeline Models (apps/timeline/models.py)
@@ -210,6 +268,66 @@ class ArchiveDocument(models.Model):
     is_image(): Check if file is image
     get_file_extension(): Get file extension
 ```
+
+---
+
+## 🧠 3-Layer Wiki Architecture
+
+Hiver uses a 3-layer architecture for document processing and LLM integration:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 1: RawDocument (Immutable)                             │
+├─────────────────────────────────────────────────────────────┤
+│  • Original uploaded documents (PDF, Markdown, JSON)        │
+│  • Immutable once created (is_immutable=True)               │
+│  • Metadata: source_party (CLIENT/OPPOSING/NEUTRAL)        │
+│  • Stored in media/raw/<case_id>/                          │
+└─────────────────────────────────────────────────────────────┘
+                            ↓ Sync Pipeline
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 2: WikiPage (Processed)                              │
+├─────────────────────────────────────────────────────────────┤
+│  • Normalized content derived from RawDocuments             │
+│  • Version history maintained automatically                │
+│  • Citation references track claims to sources             │
+│  • Category: VERIFIED vs CONTESTED                         │
+│  • Unique per case+title combination                       │
+└─────────────────────────────────────────────────────────────┘
+                            ↓ Schema Rules
+┌─────────────────────────────────────────────────────────────┐
+│  Layer 3: SchemaRule (LLM Formatting)                       │
+├─────────────────────────────────────────────────────────────┤
+│  • Defines how LLM should format/structure content         │
+│  • Applied during document sync and query processing        │
+│  • Unique per case+rule_name combination                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Sync Pipeline (apps/core/tasks.py)
+
+The sync pipeline processes RawDocuments into WikiPages using LLM:
+
+1. **Load Document**: Extract text from PDF/Markdown/JSON
+2. **LLM Analysis**: Use prompts from `prompts.py` to categorize events
+3. **Conflict Detection**: Cross-reference with existing Wiki content
+4. **Wiki Update**: Create/update WikiPage with citations
+5. **Log Contradictions**: Track disputes in `contradictions.md`
+
+### LLM Clients (apps/core/llm_clients.py)
+
+```python
+# Supported backends (configured in settings.py):
+LLM_BACKEND = 'mock'    # MockLLMClient - for testing
+LLM_BACKEND = 'ollama'  # OllamaClient - local LLM (http://localhost:11434)
+LLM_BACKEND = 'gemini'  # GeminiClient - Google Gemini API
+```
+
+### Prompt Templates (apps/core/prompts.py)
+
+- `SYNC_PROMPT_TEMPLATE`: For processing documents into Wiki format
+- Categorizes events as "Stipulated/Verified" or "Contested Allegation"
+- Extracts source party, date, and citation information
 
 ---
 
@@ -270,9 +388,23 @@ class ArchiveDocument(models.Model):
 |--------|----------|-------------|---------------|
 | GET | `/ai/` | AI chat interface | Yes |
 | POST | `/ai/analyze-document/` | Analyze document | Yes |
-| POST | `/ai/query-timeline/` | Query timeline | Yes |
-| POST | `/ai/suggest-events/` | Suggest events | Yes |
+| POST | `/ai/query-timeline/` | Query timeline with LLM | Yes |
+| POST | `/ai/suggest-events/` | Suggest events from docs | Yes |
 | POST | `/ai/analyze-event/<id>/` | Analyze specific event | Yes |
+| GET/POST | `/ai/conversations/` | List/create conversations | Yes |
+| GET | `/ai/conversation/<id>/` | View conversation history | Yes |
+
+#### AIConversation Model (apps/ai_assistant/models.py)
+```python
+class AIConversation(models.Model):
+    title = models.CharField(max_length=255, default="New Conversation")
+    case = models.ForeignKey(Case, on_delete=models.CASCADE, null=True, blank=True)
+    messages = models.JSONField(default=list)  # List of message objects
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    # Meta: ordering = ['-updated_at']
+```
 
 ---
 
@@ -651,8 +783,8 @@ if case:
 ### Adding a New Model
 
 1. Add model to appropriate app's `models.py`
-2. Create migration: `python manage.py makemigrations`
-3. Apply migration: `python manage.py migrate`
+2. Create migration: `uv run python manage.py makemigrations`
+3. Apply migration: `uv run python manage.py migrate`
 4. Add views for CRUD operations
 5. Create templates for display
 6. Add URLs to app's `urls.py`
@@ -822,6 +954,46 @@ def parse_markdown_file(file_path):
     return result
 ```
 
+### Running Commands with uv
+
+All Django management commands should be run using `uv run`:
+```bash
+# Check project health
+uv run python manage.py check
+
+# Create and apply migrations
+uv run python manage.py makemigrations
+uv run python manage.py migrate
+
+# Start development server
+uv run python manage.py runserver
+
+# Collect static files
+uv run python manage.py collectstatic
+```
+
+### Project Dependencies (pyproject.toml)
+
+```toml
+[project]
+name = "hiver-django"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "beautifulsoup4>=4.14.3",
+    "django>=5.2.13",
+    "markdown>=3.10.2",
+    "pdfplumber>=0.11.9",
+    "pytesseract>=0.3.13",
+    "python-dotenv>=1.2.2",
+]
+```
+
+Install dependencies:
+```bash
+uv sync
+```
+
 ### Lazy Loading
 
 1. **Images**: Use `loading="lazy"` attribute
@@ -985,6 +1157,8 @@ Models include object-level permission checks:
 ```python
 # apps/core/models.py
 class Case(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     def can_access(self, user):
         """Check if user can access this case."""
         return user.is_authenticated and user.id == self.user_id
@@ -996,13 +1170,18 @@ class Case(models.Model):
     def can_delete(self, user):
         """Check if user can delete this case."""
         return self.can_access(user)
+    
+    @classmethod
+    def get_user_case(cls, user):
+        """Get the most recent case for a user."""
+        return cls.objects.filter(user=user).order_by('-updated_at').first()
 ```
 
 **Usage in Views:**
 ```python
 @login_required
 def case_detail(request, case_id):
-    case = get_object_or_404(Case, id=case_id)
+    case = get_object_or_404(Case, id=case_id, user=request.user)
     if not case.can_access(request.user):
         raise PermissionDenied()
     return render(request, 'case_detail.html', {'case': case})
@@ -1010,7 +1189,7 @@ def case_detail(request, case_id):
 
 #### 4. View-Level Enforcement
 
-All views enforce user isolation:
+All views enforce user isolation (Case model now uses UUIDField for primary key):
 
 ```python
 # apps/timeline/views.py
@@ -1018,7 +1197,7 @@ def timeline_view(request):
     # ALWAYS filter by user first
     events = TimelineEvent.objects.filter(created_by=request.user)
     
-    # Then filter by case if specified
+    # Then filter by case if specified (case_id is now UUID string)
     if case_id:
         case = get_object_or_404(Case, id=case_id, user=request.user)
         events = events.filter(case=case)
@@ -1030,7 +1209,7 @@ def archive_view(request):
 
 # apps/ai_assistant/views.py
 def query_timeline(request):
-    # User-specific context
+    # User-specific context with LLM integration
     events = TimelineEvent.objects.filter(
         created_by=request.user
     )
@@ -1040,6 +1219,10 @@ def query_timeline(request):
             pk=event_id,
             created_by=request.user  # Double-check ownership
         )
+    
+    # LLM integration via prompts.py and llm_clients.py
+    from apps.core.prompts import SYNC_PROMPT_TEMPLATE
+    from apps.core.tasks import initialize_llm_client
 ```
 
 #### 5. API Endpoint Security
@@ -1092,8 +1275,23 @@ def api_document_search(request):
 - **Django Documentation**: https://docs.djangoproject.com/
 - **Python Markdown**: https://python-markdown.github.io/
 - **BeautifulSoup**: https://www.crummy.com/software/BeautifulSoup/
+- **uv Package Manager**: https://docs.astral.sh/uv/
+- **LLM Integration**: See `apps/core/llm_clients.py`, `apps/core/prompts.py`
+- **3-Layer Wiki**: See `ADVERSARIAL_HANDLING.md`, `SYNC_PIPELINE_README.md`
 
 ---
 
-**Last Updated**: {{ date }}
-**Version**: 1.0
+**Last Updated**: 2026-04-30
+**Version**: 1.1
+
+## 📝 Changelog
+
+### Version 1.1 (2026-04-30)
+- Updated to reflect 3-Layer Wiki Architecture (RawDocument → WikiPage → SchemaRule)
+- Added UUIDField primary keys for Case model
+- Documented LLM integration (llm_clients.py, prompts.py, tasks.py)
+- Added AIConversation model documentation
+- Updated all management commands to use `uv run`
+- Added conversation_logs app (placeholder)
+- Fixed Case.get_default_case() → Case.get_user_case()
+- Documented sync pipeline for document processing

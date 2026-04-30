@@ -55,7 +55,7 @@ class OllamaClient(BaseLLMClient):
 class GeminiClient(BaseLLMClient):
     """Google Gemini LLM client."""
 
-    def __init__(self, api_key: str, model: str = "gemini-pro"):
+    def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
         self.api_key = api_key
         self.model = model
         self.base_url = "https://generativelanguage.googleapis.com/v1"

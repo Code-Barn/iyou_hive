@@ -33,6 +33,7 @@ def get_ai_response(user_query: str, case_id: str) -> str:
         cited_doc_ids.append(str(doc.id))
 
     # 3. Construct the full prompt
+    context_text = "\n".join(context)
     full_prompt = f"""
 {CROSS_EXAMINATION_PROMPT}
 
@@ -42,7 +43,7 @@ def get_ai_response(user_query: str, case_id: str) -> str:
 
 ---
 ### **Context**
-{"\n".join(context)}
+{context_text}
 """
 
     # 4. Call the LLM (placeholder for actual LLM integration)

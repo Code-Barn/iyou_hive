@@ -3,11 +3,11 @@
 # requires-python = ">=3.10"
 # dependencies = [
 #     "pdfplumber",
-#     "google-generativeai",
 #     "python-dotenv",
 #     "PyMuPDF",
 #     "pytesseract",
 #     "Pillow",
+#     "google-genai>=1.74.0",
 # ]
 # ///
 
@@ -32,8 +32,10 @@ import json
 from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
+import pdfplumber
 
-load_dotenv()
+# Load .env from project root (parent of scripts/)
+load_dotenv(Path(__file__).parent.parent / '.env')
 
 import pdfplumber
 
@@ -105,26 +107,26 @@ def is_scanned_pdf(pdf_path):
 
 def clean_legal_artifacts(text):
     """
-    Removes common legal form 'noise' like underscores used for 
+    Removes common legal form 'noise' like underscores used for
     handwriting lines and excessive whitespace.
     """
     # 1. Remove underscores inside words (e.g., _D_e_K_a_l_b_ -> DeKalb)
     text = re.sub(r'_(?=[a-zA-Z0-9])|(?<=[a-zA-Z0-9])_', '', text)
-    
+
     # 2. Remove long runs of underscores used for blank lines
     text = re.sub(r'_{2,}', ' ', text)
-    
+
     # 3. Fix "wide text" from OCR (e.g., "D e K a l b" -> "DeKalb")
     # Match sequences of single letters separated by spaces
     def fix_wide_text(m):
         return ''.join(m.group(0).split())
-    
-    text = re.sub(r'\b([A-Za-z])(\s+[A-Za-z])+\b', 
+
+    text = re.sub(r'\b([A-Za-z])(\s+[A-Za-z])+\b',
                 lambda m: fix_wide_text(m), text)
-    
+
     # 4. Normalize whitespace
     text = re.sub(r'\s+', ' ', text).strip()
-    
+
     return text
 
 def extract_form_fields(pdf_path):
@@ -180,9 +182,13 @@ def ocr_pdf_images(pdf_path):
 # ---------------------------------------------------------------------------
 
 def get_llm_client():
-    import google.genai as genai
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-    return client
+    import os
+    from google import genai
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY environment variable not set")
+    # Use v1 API (stable) not v1beta
+    return genai.Client(api_key=api_key, http_options={'api_version': 'v1'})
 
 
 # ---------------------------------------------------------------------------
@@ -243,12 +249,12 @@ def collect_narrative_text(form_data, state_code="IL"):
 
 def extract_content_smart(pdf_path, state_code="IL"):
     """
-    Tiered extraction: 
+    Tiered extraction:
     1. Form Fields (using state rules)
     2. Digital Text (pdfplumber)
     3. OCR (pytesseract)
-    
-    For fillable forms, strictly extract ONLY from narrative fields (txtMotion, 
+
+    For fillable forms, strictly extract ONLY from narrative fields (txtMotion,
     txtAdditionalExplanation) and ignore all other form fields.
     """
     rules = StateRuleRegistry.get_rules(state_code)
@@ -269,7 +275,7 @@ def extract_content_smart(pdf_path, state_code="IL"):
                             form_data[name] = val
     except Exception:
         pass
-    
+
     # HYBRID EXTRACTION: Priority First, then Adaptive Fallback
     if form_data:
         # 1. Try high-priority narrative fields first
@@ -279,7 +285,7 @@ def extract_content_smart(pdf_path, state_code="IL"):
             re.compile(r'topmostSubform.*txtMotion', re.I),
             re.compile(r'topmostSubform.*txtAdditionalExplanation', re.I),
         ]
-        
+
         found_priority = False
         for name, val in form_data.items():
             for pat in priority_patterns:
@@ -287,14 +293,14 @@ def extract_content_smart(pdf_path, state_code="IL"):
                     narrative_text += f"\n{val}"
                     found_priority = True
                     break
-        
-        # 2. IF PRIORITY FIELDS ARE EMPTY: Grab anything large (>100 chars)
+
+        # 2. IF PRIORITY FIELDS ARE EMPTY: Grab anything substantial (>50 chars)
         # This prevents the "0 claims" error on non-standard forms
         if not found_priority:
             for name, val in form_data.items():
-                if len(str(val)) > 100 and not any(term in name for term in ["Header", "Court", "Name"]):
+                if len(str(val)) > 50 and not any(term in name for term in ["Header", "Court", "Name"]):
                     narrative_text += f"\n{val}"
-    
+
     # FINAL FALLBACK: If still no narrative, grab ALL form fields with content
     if not narrative_text.strip():
         print("  -> No priority fields found, grabbing all form fields...")
@@ -326,167 +332,209 @@ def chunk_claims_smart(narrative_text):
     Smart chunking logic that handles Roman numerals (I, II, III), Capital letters (A, B, C),
     and Numbers (1, 2, 3) as legal markers. Identifies labels and body text for each claim.
     Filters out boilerplate sections common in Illinois forms.
+    Includes section header detection and sentence splitting for robustness.
     """
-    # Pattern matches: I., II., A., B., 1., 1), etc. at the start of a line
-    pattern = r'\n\s*(?=[IXVLC]+[\.\)]|[A-Z][\.\)]|\d+[\.\)])'
-    
-    # Split the text into blocks based on these markers (prepend \n to catch first marker)
-    raw_chunks = re.split(pattern, "\n" + narrative_text)
-    
-    # Items to exclude from the final response sheet
-    BLOCKLIST = [
-        "PROOF OF DELIVERY", "CERTIFICATE OF SERVICE", 
-        "Attorney Number", "Law Firm", "EFSP", 
-        "Street, Apt. #", "City State Zip Code",
-        "Instructions", "icourts.info", "ATJ 801.7"
+    # Section header patterns for plain text detection (Option 2)
+    SECTION_PATTERNS = [
+        re.compile(r'^(BACKGROUND|ALLEGATIONS|FACTS|ARGUMENT|RELIEF)', re.I),
+        re.compile(r'^(COUNT \d+|COUNT I{1,3})', re.I),
+        re.compile(r'^(First|Second|Third|Fourth|Fifth|Sixth)', re.I),
     ]
-    
-    processed_claims = []
-    for chunk in raw_chunks:
-        chunk = chunk.strip()
-        if not chunk or len(chunk) < 10:
-            continue
-            
-        # SKIP chunks that look like contact info or service proofs
-        # Only skip if the chunk STARTS WITH or IS MAINLY boilerplate
-        chunk_upper = chunk.upper()
-        if any(term.upper() in chunk_upper for term in BLOCKLIST):
-            # Only skip small chunks (<200 chars) that are purely boilerplate
-            if len(chunk) < 200:
-                continue
-            # For larger chunks, just remove the boilerplate lines
-            lines = chunk.split('\n')
-            filtered_lines = [line for line in lines if not any(term in line for term in BLOCKLIST)]
-            chunk = '\n'.join(filtered_lines).strip()
-            if len(chunk) < 10:
-                continue
 
-        # Check if the first line is a short "Heading" (e.g., "I. BACKGROUND")
-        lines = chunk.split('\n', 1)
-        if len(lines) > 1 and len(lines[0]) < 50:
-            # Separate the label/heading from the body text
-            processed_claims.append({"label": lines[0].strip(), "body": lines[1].strip()})
-        else:
-            processed_claims.append({"label": "", "body": chunk})
-    
-    # FALLBACK: If all chunks were filtered out, use double-newline splitting
+    # Items to exclude from the final response sheet - use word boundaries for accuracy
+    BLOCKLIST_PATTERNS = [
+        re.compile(r'PROOF\s+OF\s+DELIVERY', re.I),
+        re.compile(r'CERTIFICATE\s+OF\s+SERVICE', re.I),
+        re.compile(r'Attorney\s+Number', re.I),
+        re.compile(r'Law\s+Firm', re.I),
+        re.compile(r'EFSP', re.I),
+        re.compile(r'Street.*Apt\.?\s*#', re.I),
+        re.compile(r'City\s+State\s+Zip\s+Code', re.I),
+        re.compile(r'Instructions', re.I),
+        re.compile(r'icourts\.info', re.I),
+        re.compile(r'ATJ\s+801\.7', re.I),
+    ]
+
+    processed_claims = []
+
+    # Approach 1: Try to split by legal markers (Roman numerals, numbers, etc.)
+    # Pattern matches: I., II., A., B., 1., 1), etc. at the start of a line
+    marker_pattern = r'\n\s*(?=[IXVLC]+[\.\)]|[A-Z][\.\)]|\d+[\.\)])'
+    raw_chunks = re.split(marker_pattern, "\n" + narrative_text)
+
+    if len(raw_chunks) > 1:
+        # Found legal markers, process each chunk
+        for chunk in raw_chunks:
+            chunk = chunk.strip()
+            if not chunk or len(chunk) < 10:
+                continue
+            # Filter boilerplate
+            if any(pat.search(chunk) for pat in BLOCKLIST_PATTERNS):
+                continue
+            # Check if first line is a label
+            lines = chunk.split('\n', 1)
+            if len(lines) > 1 and len(lines[0]) < 50:
+                processed_claims.append({"label": lines[0].strip(), "body": lines[1].strip()})
+            else:
+                processed_claims.append({"label": "", "body": chunk})
+
+    # Approach 2: If no markers found, try section headers
     if not processed_claims:
-        print("  -> All chunks filtered, falling back to double-newline split...")
+        has_section = any(pat.search(narrative_text) for pat in SECTION_PATTERNS)
+        if has_section:
+            section_splits = re.split(r'\n(?=(?:BACKGROUND|ALLEGATIONS|FACTS|ARGUMENT|RELIEF|COUNT|First|Second|Third|Fourth|Fifth|Sixth))', narrative_text, flags=re.I)
+            for sect in section_splits:
+                sect = sect.strip()
+                if len(sect) > 50:
+                    if any(pat.search(sect) for pat in BLOCKLIST_PATTERNS):
+                        continue
+                    sect_lines = sect.split('\n', 1)
+                    if len(sect_lines) > 1 and len(sect_lines[0]) < 50:
+                        processed_claims.append({"label": sect_lines[0].strip(), "body": sect_lines[1].strip()})
+                    else:
+                        processed_claims.append({"label": "", "body": sect})
+
+    # Approach 3: For long text without markers, split by sentences (Option 1)
+    if not processed_claims and len(narrative_text) > 500:
+        # Split by sentence endings (period + space + capital letter)
+        sentences = re.split(r'(?<!\d)\.\s+(?=[A-Z])', narrative_text)
+        for sent in sentences:
+            sent = sent.strip()
+            if len(sent) > 30:
+                if not sent.endswith('.'):
+                    sent += '.'
+                processed_claims.append({"label": "", "body": sent})
+
+    # Approach 4: Double-newline splitting
+    if not processed_claims:
+        print("  -> No markers found, splitting by double newlines...")
         blocks = re.split(r'\n\s*\n', narrative_text)
-        processed_claims = [{"label": "", "body": b.strip()} for b in blocks if len(b.strip()) > 10]
-    
-    # FINAL FALLBACK: If STILL empty, treat entire text as one claim
+        processed_claims = [{"label": "", "body": b.strip()} for b in blocks if len(b.strip()) > 30]
+
+    # FINAL FALLBACK: Use entire text as one claim (Option 3)
     if not processed_claims and narrative_text.strip():
         print("  -> No chunks created, using entire text as single claim...")
         processed_claims = [{"label": "", "body": narrative_text.strip()}]
-    
+
     return processed_claims
 
 
+import requests
+import os
+import re
+
 def chunk_claims_with_llm(client, narrative_text):
     """
-    Refined atomic parser that strips form boilerplates and
-    breaks down dense narratives into single factual points.
-    Uses LLM if client is available, otherwise falls back to smart chunking.
-    Returns a list of dicts with 'label' and 'body' keys.
+    Use Gemini client (from get_llm_client) to chunk claims.
+    Falls back to local chunking if API fails.
     """
-    # No LLM client - use smart chunking with legal markers
-    if client is None:
-        print("  -> No LLM client: Using smart chunking.")
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key or client is None:
+        print("  -> No Gemini client, using local chunker.")
         return chunk_claims_smart(narrative_text)
 
-    # LLM available - attempt semantic chunking
-    system_instruction = (
-        "You are a legal document analyst. Your goal is to extract 'Atomic Factual Allegations'.\n"
-        "1. IGNORE all standard form instructions, page numbers, and court headers.\n"
-        "2. IDENTIFY every distinct factual claim, event, or legal request.\n"
-        "3. PRESERVE all dates, names, and specific statutory citations (e.g., 750 ILCS 5/609.2).\n"
-        "4. ATOMICITY: Each point must be a single fact. If a paragraph contains three reasons for a move, create three separate numbered items.\n"
-        "5. OUTPUT: Return ONLY a numbered list. No intro or outro text."
-    )
-
-    prompt = f"EXTRACT ATOMIC CLAIMS FROM THIS TEXT:\n\n{narrative_text}"
-
     try:
-        # Using the system_instruction parameter ensures the LLM stays on task
-        result = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-            config={'system_instruction': system_instruction}
+        # Use the client passed in (genai.Client)
+        # system_instruction not supported in this SDK version, so include in prompt
+        system_prompt = (
+            "You are a legal document analyst. Your goal is to extract 'Atomic Factual Allegations'.\n"
+            "1. IGNORE all standard form instructions, page numbers, and court headers.\n"
+            "2. IDENTIFY every distinct factual claim, event, or legal request.\n"
+            "3. PRESERVE all dates, names, and specific statutory citations.\n"
+            "4. ATOMICITY: Each point must be a single fact. If a paragraph contains multiple reasons, split them.\n"
+            "5. OUTPUT: Return ONLY a numbered list. No intro or outro text.\n\n"
         )
-
-        raw = result.text if hasattr(result, 'text') else str(result)
-
-        # Parse into dict format with label/body
+        # Available models: gemini-2.0-flash, gemini-2.5-flash, gemini-2.5-pro
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=system_prompt + f"EXTRACT ATOMIC CLAIMS FROM THIS TEXT:\n\n{narrative_text}"
+        )
+        
+        raw = response.text
         claims = []
         for line in raw.splitlines():
             line = line.strip()
-            # Matches "1.", "1)", "I.", "A.", or "- " at the start of a line
             match = re.match(r'^(\d+[\.\)\-]|[IVXLC]+[\.\)]|[A-Z][\.\)]|[\-\*\+])\s*(.*)', line, re.DOTALL)
             if match:
                 label = match.group(1).strip()
                 body = match.group(2).strip()
                 if body:
                     claims.append({"label": label, "body": body})
-                elif label:
-                    claims.append({"label": label, "body": ""})
+            elif line:
+                claims.append({"label": "-", "body": line})
         
-        # If no structured claims found, treat entire text as one claim
-        if not claims:
-            claims.append({"label": "", "body": raw.strip()})
-            
-        return claims
+        return claims if claims else chunk_claims_smart(narrative_text)
+        
     except Exception as e:
-        print(f"  -> LLM parsing failed: {e}")
-        # Fallback to smart chunking
+        print(f"  -> Gemini API failed: {e}, using local chunker.")
         return chunk_claims_smart(narrative_text)
 
 
-def build_response_sheet_markdown(case_number, motion_title, claims, json_metadata):
+def build_response_sheet_html(case_number, motion_title, claims):
     """
-    Generates a high-clearance two-column Markdown table.
-    The right column is prepopulated with space for manual entry.
+    Generates a printable HTML response sheet with proper print CSS.
+    Separates JSON metadata from printable output.
     """
-    lines = []
+    html = f"""
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        @media print {{
+            @page {{ margin: 0.5in; }}
+            body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+        }}
+        body {{ font-family: sans-serif; margin: 40px; }}
+        table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
+        td {{
+            border: 1px solid #000;
+            padding: 12px;
+            vertical-align: top;
+            width: 50%;
+            overflow: hidden;
+        }}
+        .line-column {{
+            background-image: linear-gradient(#ccc 1px, transparent 1px);
+            background-size: 100% 2.5em;
+            line-height: 2.5em;
+        }}
+        .label {{
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 4px;
+        }}
+    </style>
+</head>
+<body>
+    <h1>Response Sheet: {motion_title}</h1>
+    <p><strong>Case Number:</strong> {case_number or 'N/A'}</p>
+    <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    <hr>
+    <table>
+"""
 
-    # Keep JSON metadata for the timeline tool
-    lines.append("```json")
-    lines.append(json.dumps(json_metadata, indent=2, ensure_ascii=False))
-    lines.append("```\n")
-
-    # Header with clear visual separation
-    lines.append(f"# Response Sheet: {motion_title}")
-    lines.append(f"**Case Number:** {case_number or 'N/A'}")
-    lines.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-    lines.append("\n---\n")
-
-    # HTML Table for strict 50/50 split layout with discrete labels
-    lines.append('<table style="width: 100%; table-layout: fixed; border-collapse: collapse;">')
-    
     for claim in claims:
-        # 'claim' is now a dict with 'label' and 'body'
         label = claim.get("label", "")
         body = claim.get("body", "")
+        html += f"""
+        <tr>
+            <td>
+                <div class="label">{label}</div>
+                <div>{body}</div>
+            </td>
+            <td class="line-column">
+                &nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;<br>
+            </td>
+        </tr>
+"""
 
-        lines.append('  <tr style="border-bottom: 2px solid #444;">')
-        
-        # LEFT: Allegation with a discrete label
-        lines.append('    <td style="width: 50%; vertical-align: top; padding: 10px; border-right: 1px solid #000;">')
-        if label:
-            lines.append(f'      <div style="font-size: 0.8em; color: #666; margin-bottom: 5px; font-weight: bold;">{label}</div>')
-        lines.append(f'      <div style="line-height: 1.4;">{body}</div>')
-        lines.append('    </td>')
-        
-        # RIGHT: Blank Writing Lines
-        writing_style = "background-image: linear-gradient(#ccc 1px, transparent 1px); background-size: 100% 2em; line-height: 2em;"
-        lines.append(f'    <td style="width: 50%; vertical-align: top; padding: 10px; {writing_style}">')
-        # Ensure at least 6 lines of writing space regardless of claim length
-        lines.append('&nbsp;<br>' * 6)
-        lines.append('    </td>')
-        lines.append('  </tr>')
-    
-    lines.append('</table>')
-    return "\n".join(lines)
+    html += """
+    </table>
+</body>
+</html>
+"""
+    return html
 
 
 # ---------------------------------------------------------------------------
@@ -544,7 +592,7 @@ def generate_response_sheet(pdf_path, output_path=None, state_code="IL"):
 
     print(f"  -> Extracted {len(claims)} claim(s)")
 
-    # 4. Build JSON metadata for timeline readiness
+    # 4. Build JSON metadata for timeline readiness (machine-readable)
     json_metadata = {
         "source_pdf": str(pdf_path),
         "case_number": case_number,
@@ -559,24 +607,31 @@ def generate_response_sheet(pdf_path, output_path=None, state_code="IL"):
         label = claim_dict.get("label", "")
         text = f"{label} {body_text}".strip() if label else body_text
         dates = extract_dates(body_text)
-        
+
         json_metadata["claims"].append({
             "text": text,
             "dates": dates,
         })
 
-    # 5. Generate Markdown
-    md = build_response_sheet_markdown(case_number, motion_title, claims, json_metadata)
+    # 5. Generate HTML response sheet (printable)
+    html = build_response_sheet_html(case_number, motion_title, claims)
 
-    # 6. Write output
-    if output_path is None:
-        output_path = Path(pdf_path).with_suffix(".response_sheet.md")
-    os.makedirs(Path(output_path).parent or ".", exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(md)
+    # 6. Write SEPARATE outputs (JSON for machine, HTML for human)
+    base_path = Path(output_path).with_suffix("") if output_path else Path(pdf_path).with_suffix("")
 
-    print(f"Response sheet written to: {output_path}")
-    return output_path
+    # JSON file (machine-readable, for timeline tool)
+    json_path = f"{base_path}.response_sheet.json"
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(json_metadata, f, indent=2, ensure_ascii=False)
+    print(f"JSON metadata written to: {json_path}")
+
+    # HTML file (printable)
+    html_path = f"{base_path}.response_sheet.html"
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"HTML response sheet written to: {html_path}")
+
+    return html_path
 
 
 def main():
