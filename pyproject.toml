@@ -8,5 +8,7 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "django>=5.2.13",
     "markdown>=3.10.2",
+    "pdfplumber>=0.11.9",
+    "pytesseract>=0.3.13",
     "python-dotenv>=1.2.2",
 ]
