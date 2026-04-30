@@ -416,7 +416,19 @@ def chunk_claims_smart(narrative_text):
         print("  -> No chunks created, using entire text as single claim...")
         processed_claims = [{"label": "", "body": narrative_text.strip()}]
 
-    return processed_claims
+    # Assign sequential IDs and normalize fields
+    for i, claim in enumerate(processed_claims, 1):
+        if "id" not in claim:
+            claim["id"] = i
+        if "text" not in claim and "body" in claim:
+            claim["text"] = claim["body"]
+
+    # Return in new dict format for consistency
+    return {
+        "metadata": {},
+        "procedural_facts": [],
+        "claims": processed_claims
+    }
 
 
 import requests
@@ -437,12 +449,17 @@ def chunk_claims_with_llm(client, narrative_text):
         # Use the client passed in (genai.Client)
         # system_instruction not supported in this SDK version, so include in prompt
         system_prompt = (
-            "You are a legal document analyst. Your goal is to extract 'Atomic Factual Allegations'.\n"
-            "1. IGNORE all standard form instructions, page numbers, and court headers.\n"
-            "2. IDENTIFY every distinct factual claim, event, or legal request.\n"
-            "3. PRESERVE all dates, names, and specific statutory citations.\n"
-            "4. ATOMICITY: Each point must be a single fact. If a paragraph contains multiple reasons, split them.\n"
-            "5. OUTPUT: Return ONLY a numbered list. No intro or outro text.\n\n"
+            "You are a legal document analyst. Extract and categorize document content.\n"
+            "OUTPUT: Return ONLY a valid JSON object (no markdown fences, no intro/outro) with these keys:\n"
+            "  'metadata': { 'case_header': '...', 'parties': ['...'], 'case_number': '...', 'title': '...' }\n"
+            "  'procedural_facts': [ 'Fact A', 'Fact B' ]  // Non-rebuttable context (dates filed, venues, etc.)\n"
+            "  'actionable_claims': [ { 'id': 1, 'text': 'Claim text', 'type': 'substantive' }, ... ]\n"
+            "RULES:\n"
+            "1. IGNORE form instructions, page numbers, boilerplate headers.\n"
+            "2. procedural_facts: dates filed, court names, case numbers, party roles.\n"
+            "3. actionable_claims: specific allegations requiring a legal response (Admit/Deny).\n"
+            "4. Each actionable_claim must have 'id' (number), 'text' (string), 'type' (substantive/contested/procedural).\n"
+            "5. Split compound paragraphs into multiple atomic claims.\n"
         )
         # Available models: gemini-2.0-flash, gemini-2.5-flash, gemini-2.5-pro
         response = client.models.generate_content(
@@ -451,6 +468,31 @@ def chunk_claims_with_llm(client, narrative_text):
         )
         
         raw = response.text
+        # Try to parse as JSON (new format); fall back to old line-by-line parsing
+        try:
+            data = json.loads(raw)
+            # Validate expected keys
+            if "actionable_claims" in data:
+                metadata = data.get("metadata", {})
+                procedural = data.get("procedural_facts", [])
+                claims = data.get("actionable_claims", [])
+                # Normalize claims to dicts with label/body for downstream compatibility
+                for i, c in enumerate(claims, 1):
+                    if "id" not in c:
+                        c["id"] = i
+                    if "text" in c and "body" not in c:
+                        c["body"] = c["text"]
+                    if "label" not in c:
+                        c["label"] = str(c.get("id", i))
+                return {
+                    "metadata": metadata,
+                    "procedural_facts": procedural,
+                    "claims": claims
+                }
+        except (json.JSONDecodeError, AttributeError):
+            pass
+        
+        # Fallback: old numbered-list parsing
         claims = []
         for line in raw.splitlines():
             line = line.strip()
@@ -459,22 +501,52 @@ def chunk_claims_with_llm(client, narrative_text):
                 label = match.group(1).strip()
                 body = match.group(2).strip()
                 if body:
-                    claims.append({"label": label, "body": body})
+                    claims.append({"id": len(claims)+1, "label": label, "body": body})
             elif line:
-                claims.append({"label": "-", "body": line})
+                claims.append({"id": len(claims)+1, "label": "-", "body": line})
         
-        return claims if claims else chunk_claims_smart(narrative_text)
+        return {
+            "metadata": {},
+            "procedural_facts": [],
+            "claims": claims if claims else chunk_claims_smart(narrative_text)
+        }
         
     except Exception as e:
         print(f"  -> Gemini API failed: {e}, using local chunker.")
         return chunk_claims_smart(narrative_text)
 
 
-def build_response_sheet_html(case_number, motion_title, claims):
+def filter_claims(data, excluded_ids=None):
+    """
+    Filter claims by excluding specific IDs.
+    `data` is the parsed dict with 'metadata', 'procedural_facts', 'claims'.
+    Returns a new dict with filtered claims (and empty procedural_facts for UI).
+    """
+    if excluded_ids is None:
+        excluded_ids = set()
+    else:
+        excluded_ids = set(excluded_ids)
+    filtered = {
+        "metadata": data.get("metadata", {}),
+        "procedural_facts": data.get("procedural_facts", []),
+        "claims": [c for c in data.get("claims", []) if c.get("id") not in excluded_ids]
+    }
+    return filtered
+
+
+def build_response_sheet_html(case_number, motion_title, data):
     """
     Generates a printable HTML response sheet with proper print CSS.
-    Separates JSON metadata from printable output.
+    `data` is a dict with 'metadata', 'procedural_facts', and 'claims'.
+    Adds data-claim-id to each row for front-end filtering.
     """
+    metadata = data.get("metadata", {})
+    procedural = data.get("procedural_facts", [])
+    claims = data.get("claims", [])
+
+    header = metadata.get("case_header", f"Case Number: {case_number or 'N/A'}")
+    parties = metadata.get("parties", [])
+
     html = f"""
 <html>
 <head>
@@ -482,7 +554,7 @@ def build_response_sheet_html(case_number, motion_title, claims):
     <style>
         @media print {{
             @page {{ margin: 0.5in; }}
-            body {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
+            body {{-webkit-print-color-adjust: exact; print-color-adjust: exact; }}
         }}
         body {{ font-family: sans-serif; margin: 40px; }}
         table {{ width: 100%; border-collapse: collapse; table-layout: fixed; }}
@@ -504,24 +576,46 @@ def build_response_sheet_html(case_number, motion_title, claims):
             color: #666;
             margin-bottom: 4px;
         }}
+        .procedural {{ margin-bottom: 12px; }}
     </style>
 </head>
 <body>
     <h1>Response Sheet: {motion_title}</h1>
-    <p><strong>Case Number:</strong> {case_number or 'N/A'}</p>
-    <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
+    <p><strong>{header}</strong></p>
+"""
+    if parties:
+        html += "    <p><strong>Parties:</strong> " + ", ".join(parties) + "</p>\n"
+
+    html += f"""    <p><strong>Generated:</strong> {datetime.now().strftime('%Y-%m-%d %H:%M')}</p>
     <hr>
-    <table>
 """
 
+    # Procedural facts as bullets
+    if procedural:
+        html += """    <h3>Procedural Context</h3>
+    <ul class="procedural">
+"""
+        for fact in procedural:
+            html += f"        <li>{fact}</li>\n"
+        html += "    </ul>\n    <hr>\n"
+
+    # Claims table with data-claim-id for front-end filtering
+    html += "    <table>\n"
     for claim in claims:
-        label = claim.get("label", "")
-        body = claim.get("body", "")
-        html += f"""
-        <tr>
+        cid = claim.get("id", "")
+        text = claim.get("text", claim.get("body", ""))
+        label = claim.get("label", str(cid))
+        # If label is empty but text starts with a number like "1.", extract it as label
+        if not label or label == str(cid):
+            import re as _re
+            _m = _re.match(r'^(\d+[\.\)\-])\s*(.*)', text, _re.DOTALL)
+            if _m:
+                label = _m.group(1).strip()
+                text = _m.group(2).strip()
+        html += f"""        <tr data-claim-id="{cid}">
             <td>
                 <div class="label">{label}</div>
-                <div>{body}</div>
+                <div>{text}</div>
             </td>
             <td class="line-column">
                 &nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;<br>&nbsp;<br>
@@ -529,8 +623,7 @@ def build_response_sheet_html(case_number, motion_title, claims):
         </tr>
 """
 
-    html += """
-    </table>
+    html += """    </table>
 </body>
 </html>
 """
@@ -577,19 +670,20 @@ def generate_response_sheet(pdf_path, output_path=None, state_code="IL"):
             case_number = case_match.group(1)
 
     # 3. Chunk claims with LLM
-    claims = []
+    llm_result = {"metadata": {}, "procedural_facts": [], "claims": []}
     if os.environ.get("GEMINI_API_KEY"):
         try:
             client = get_llm_client()
-            print("  -> Chunking claims with LLM ...")
-            claims = chunk_claims_with_llm(client, narrative_text)
+            print("  -> Chunking claims with LLM...")
+            llm_result = chunk_claims_with_llm(client, narrative_text)
         except Exception as e:
             print(f"  -> LLM unavailable ({e}), using local splitter.")
-            claims = chunk_claims_with_llm(None, narrative_text)
+            llm_result = chunk_claims_with_llm(None, narrative_text)
     else:
         print("  -> No GEMINI_API_KEY, using local sentence-splitter.")
-        claims = chunk_claims_with_llm(None, narrative_text)
+        llm_result = chunk_claims_with_llm(None, narrative_text)
 
+    claims = llm_result.get("claims", [])
     print(f"  -> Extracted {len(claims)} claim(s)")
 
     # 4. Build JSON metadata for timeline readiness (machine-readable)
@@ -598,23 +692,25 @@ def generate_response_sheet(pdf_path, output_path=None, state_code="IL"):
         "case_number": case_number,
         "motion_title": motion_title,
         "state_code": state_code,
+        "metadata": llm_result.get("metadata", {}),
+        "procedural_facts": llm_result.get("procedural_facts", []),
         "claims": []
     }
     for claim_dict in claims:
-        # Pass just the text body to the date extractor, not the whole dict
-        body_text = claim_dict.get("body", "")
-        # Combine label and body for the text field
+        text = claim_dict.get("text", claim_dict.get("body", ""))
         label = claim_dict.get("label", "")
-        text = f"{label} {body_text}".strip() if label else body_text
-        dates = extract_dates(body_text)
-
+        if label and text.startswith(label):
+            text = text[len(label):].strip()
+        dates = extract_dates(text)
         json_metadata["claims"].append({
+            "id": claim_dict.get("id"),
             "text": text,
+            "type": claim_dict.get("type", "substantive"),
             "dates": dates,
         })
 
     # 5. Generate HTML response sheet (printable)
-    html = build_response_sheet_html(case_number, motion_title, claims)
+    html = build_response_sheet_html(case_number, motion_title, llm_result)
 
     # 6. Write SEPARATE outputs (JSON for machine, HTML for human)
     base_path = Path(output_path).with_suffix("") if output_path else Path(pdf_path).with_suffix("")
