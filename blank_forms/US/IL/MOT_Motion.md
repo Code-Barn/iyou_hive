@@ -171,3 +171,16 @@ send your forms to the other people in the case. Find your Circuit Clerk: ilcour
 
 
 ATJ 801.7                                             Page 4 of 4                                              (08/25)
+
+## Checkboxes Checked
+
+- [x] page 1, row 9
+- [x] page 1, row 7
+- [x] page 1, row 5
+- [x] page 1, row 0
+- [X] page 2, row 7
+- [x] page 3, row 13
+- [x] page 3, row 13
+- [X] page 4, row 12
+- [X] page 4, row 8
+- [x] page 4, row 8

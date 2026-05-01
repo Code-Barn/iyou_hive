@@ -18,6 +18,7 @@ apps/archive/admin.py
 apps/archive/apps.py
 apps/archive/forms.py
 apps/archive/models.py
+apps/archive/tasks.py
 apps/archive/tests.py
 apps/archive/urls.py
 apps/archive/views.py
@@ -25,6 +26,7 @@ apps/archive/migrations/0001_initial.py
 apps/archive/migrations/0002_archivedocument_case_archivedocument_user.py
 apps/archive/migrations/0003_alter_archivedocument_file_type.py
 apps/archive/migrations/0004_archivedocument_is_draft_and_more.py
+apps/archive/migrations/0005_archivedocument_conversion_error_and_more.py
 apps/archive/migrations/__init__.py
 apps/conversation_logs/__init__.py
 apps/conversation_logs/admin.py
@@ -39,6 +41,7 @@ apps/core/admin.py
 apps/core/apps.py
 apps/core/context_processors.py
 apps/core/did_rust_wrapper.py
+apps/core/document_processing.py
 apps/core/llm_clients.py
 apps/core/middleware.py
 apps/core/models.py
@@ -70,6 +73,7 @@ apps/timeline/migrations/0004_alter_timelineevent_case_alter_timelineevent_date.
 apps/timeline/migrations/__init__.py
 config/__init__.py
 config/asgi.py
+config/celery.py
 config/settings.py
 config/urls.py
 config/wsgi.py

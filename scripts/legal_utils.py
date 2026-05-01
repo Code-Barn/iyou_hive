@@ -63,8 +63,10 @@ def clean_legal_artifacts(text):
     text = re.sub(r'\b([A-Za-z])(\s+[A-Za-z])+\b',
                 lambda m: fix_wide_text(m), text)
 
-    # 4. Normalize whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
+    # 4. Normalize whitespace on a per-line basis, but preserve newlines
+    lines = text.split('\n')
+    cleaned_lines = [re.sub(r'[ \t]+', ' ', line).strip() for line in lines]
+    text = '\n'.join(cleaned_lines)
 
     return text
 
@@ -89,6 +91,30 @@ def extract_form_fields(pdf_path):
     except Exception:
         pass
     return form_data
+
+
+def extract_checkboxes(pdf_path):
+    """Extract checkbox data from a PDF."""
+    checkboxes = {}
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for page_num, page in enumerate(pdf.pages):
+                for obj in page.chars:
+                    text = obj.get("text", "")
+                    if text.strip().lower() in ["x", "✓"]:
+                        try:
+                            cx = float(obj.get("x0", 0))
+                            cy = float(obj.get("y0", 0))
+                        except:
+                            continue
+                        label_text = f"page {page_num+1}, row {int(cy/50)}"
+                        checkboxes[f"checkbox_{len(checkboxes)}"] = {
+                            "mark": text,
+                            "label": label_text
+                        }
+    except Exception:
+        pass
+    return checkboxes
 
 
 def get_local_ocr():

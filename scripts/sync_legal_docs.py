@@ -5,7 +5,6 @@
 #     "pdfplumber",
 #     "python-dotenv",
 #     "PyMuPDF",
-#     "markitdown",
 #     "google-genai>=1.74.0",
 #     "django",
 # ]
