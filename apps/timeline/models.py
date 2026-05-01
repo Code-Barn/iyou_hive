@@ -65,6 +65,8 @@ class TimelineEvent(models.Model):
         'core.Case',
         on_delete=models.CASCADE,
         related_name='events',
+        null=True,
+        blank=True,
         db_index=True,
         help_text="Case this event belongs to"
     )

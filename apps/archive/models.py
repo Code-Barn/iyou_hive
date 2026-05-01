@@ -53,11 +53,13 @@ class ArchiveDocument(models.Model):
     metadata = models.JSONField(default=dict, blank=True, help_text="Extracted metadata (author, date, etc.)")
     description = models.TextField(blank=True, help_text="Description of document contents")
     
-# Relationships (case required for data isolation)
+    # Relationships (case required for data isolation)
     case = models.ForeignKey(
         'core.Case',
         on_delete=models.CASCADE,
         related_name='documents',
+        null=True,
+        blank=True,
         db_index=True,
         help_text="Case this document belongs to"
     )

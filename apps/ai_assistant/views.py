@@ -7,7 +7,7 @@ from apps.archive.models import ArchiveDocument
 from apps.core.models import Case, WikiPage, RawDocument
 from apps.ai_assistant.models import AIConversation
 from apps.core.prompts import CROSS_EXAMINATION_PROMPT
-from apps.core.utils import validate_adversarial_disclaimers
+# from apps.core.utils import validate_adversarial_disclaimers  # Not implemented yet
 import json
 import urllib.request
 import urllib.parse

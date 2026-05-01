@@ -484,3 +484,81 @@ class SchemaRule(models.Model):
 
     def __str__(self):
         return f"{self.rule_name} - {self.case.name if self.case else 'No Case'}"
+
+
+class ResponseSheet(models.Model):
+    """
+    Stores generated response sheet data for user review and filtering.
+    Uses JSONField to store the full structured output from the script.
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        help_text="UUID primary key"
+    )
+    case = models.ForeignKey(
+        'Case',
+        on_delete=models.CASCADE,
+        related_name='response_sheets',
+        null=True,
+        blank=True,
+        help_text="Optional case association"
+    )
+    title = models.CharField(
+        max_length=255,
+        help_text="Title of the response sheet (e.g., motion title)"
+    )
+    source_pdf = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="Path to source PDF"
+    )
+    case_number = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Case number extracted from PDF"
+    )
+    state_code = models.CharField(
+        max_length=5,
+        default='IL',
+        help_text="State code (IL, CA, etc.)"
+    )
+    data = models.JSONField(
+        help_text="Full structured data: metadata, procedural_facts, claims"
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='response_sheets',
+        help_text="User who generated this sheet"
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="When the sheet was generated"
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Response Sheet'
+        verbose_name_plural = 'Response Sheets'
+
+    def __str__(self):
+        return f"{self.title} ({self.case_number}) - {self.created_by.username}"
+
+    def get_filtered_html(self, excluded_ids=None):
+        """Generate HTML with excluded claim IDs filtered out."""
+        from .utils import filter_claims
+        filtered = filter_claims(self.data, excluded_ids)
+        # Import here to avoid circular imports
+        import sys
+        sys.path.insert(0, '/home/user/CODE_BASE/hiver_django/scripts')
+        try:
+            from generate_response_sheet import build_response_sheet_html
+            return build_response_sheet_html(
+                self.case_number,
+                self.title,
+                filtered
+            )
+        except ImportError:
+            return "<html><body><p>Error: Could not generate HTML</p></body></html>"

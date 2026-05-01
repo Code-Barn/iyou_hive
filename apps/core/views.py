@@ -365,3 +365,197 @@ def get_timeline_data(request, case_id):
         })
 
     return JsonResponse({'timeline': timeline_data})
+
+
+# ============================================================================
+# Response Sheet Review Views
+# ============================================================================
+
+@login_required
+def response_sheet_review(request, sheet_id=None):
+    """
+    Review response sheet claims with checkboxes.
+    Checked = keep, Unchecked = exclude.
+    """
+    from .models import ResponseSheet
+    from .utils import filter_claims
+    import json
+    
+    # If no sheet_id, show list of available sheets
+    if sheet_id is None:
+        sheets = ResponseSheet.objects.filter(
+            created_by=request.user
+        ).order_by('-created_at')[:20]
+        return render(request, 'core/response_sheet_list.html', {
+            'sheets': sheets
+        })
+    
+    sheet = get_object_or_404(ResponseSheet, id=sheet_id, created_by=request.user)
+    data = sheet.data
+    
+    if request.method == 'POST':
+        # Get excluded IDs from checkboxes
+        excluded_ids = request.POST.getlist('exclude_ids', [])
+        excluded_ids = [int(x) for x in excluded_ids if x.isdigit()]
+        
+        # Generate filtered HTML
+        filtered = filter_claims(data, excluded_ids)
+        html = sheet.get_filtered_html(excluded_ids)
+        
+        # Save filtered HTML to file
+        import tempfile
+        output_path = f"temp/{sheet.case_number or 'sheet'}_{sheet.id}_filtered.html"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(html)
+        
+        messages.success(request, f"Filtered response sheet saved to {output_path}")
+        return redirect('core:response_sheet_review', sheet_id=sheet_id)
+    
+    # GET request - show review page
+    metadata = data.get('metadata', {})
+    procedural = data.get('procedural_facts', [])
+    claims = data.get('claims', [])
+    
+    return render(request, 'core/response_sheet_review.html', {
+        'sheet': sheet,
+        'metadata': metadata,
+        'procedural_facts': procedural,
+        'claims': claims,
+    })
+
+
+@login_required
+def response_sheet_generate(request, sheet_id):
+    """
+    POST-only view to generate filtered HTML/PDF from review page.
+    Expects 'excluded_ids' in POST data.
+    """
+    from .models import ResponseSheet
+    from .utils import filter_claims
+    import json
+    
+    if request.method != 'POST':
+        return redirect('core:response_sheet_review', sheet_id=sheet_id)
+    
+    sheet = get_object_or_404(ResponseSheet, id=sheet_id, created_by=request.user)
+    data = sheet.data
+    
+    # Get excluded IDs from hidden input (set by JavaScript)
+    excluded_json = request.POST.get('excluded_ids_json', '[]')
+    try:
+        excluded_ids = json.loads(excluded_json)
+    except json.JSONDecodeError:
+        excluded_ids = []
+    
+    # Generate filtered output
+    filtered = filter_claims(data, excluded_ids)
+    html = sheet.get_filtered_html(excluded_ids)
+    
+    # Save outputs
+    base_name = f"temp/{sheet.case_number or 'sheet'}_{sheet.id}"
+    
+    # JSON
+    with open(f"{base_name}_filtered.json", 'w', encoding='utf-8') as f:
+        json.dump(filtered, f, indent=2, ensure_ascii=False)
+    
+    # HTML
+    with open(f"{base_name}_filtered.html", 'w', encoding='utf-8') as f:
+        f.write(html)
+    
+    messages.success(request, f"Filtered response sheet generated!")
+    return redirect('core:response_sheet_review', sheet_id=sheet_id)
+
+
+@login_required
+def response_sheet_list(request):
+    """List all response sheets for the user."""
+    from .models import ResponseSheet
+    sheets = ResponseSheet.objects.filter(
+        created_by=request.user
+    ).order_by('-created_at')[:50]
+    return render(request, 'core/response_sheet_list.html', {
+        'sheets': sheets
+    })
+
+
+@login_required
+def generate_response_sheet_view(request):
+    """Upload PDF and generate a new response sheet."""
+    from .models import ResponseSheet, Case
+    import json
+    from pathlib import Path
+    
+    if request.method == 'POST':
+        pdf_file = request.FILES.get('pdf_file')
+        state_code = request.POST.get('state_code', 'IL')
+        
+        if not pdf_file:
+            messages.error(request, "Please upload a PDF file.")
+            return redirect('core:generate_sheet')
+        
+        # Save PDF temporarily
+        temp_path = f"temp/{pdf_file.name}"
+        with open(temp_path, 'wb+') as destination:
+            for chunk in pdf_file.chunks():
+                destination.write(chunk)
+        
+        # Run the script
+        import sys
+        sys.path.insert(0, 'scripts')
+        try:
+            from generate_response_sheet import generate_response_sheet as gen_sheet
+            output_path = gen_sheet(temp_path, state_code=state_code)
+            
+            # Load the generated JSON
+            json_path = str(Path(output_path).with_suffix('.response_sheet.json'))
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Create ResponseSheet record
+            case_id = request.POST.get('case_id')
+            case = None
+            if case_id:
+                try:
+                    case = Case.objects.get(id=case_id, user=request.user)
+                except Case.DoesNotExist:
+                    pass
+            
+            sheet = ResponseSheet.objects.create(
+                case=case,
+                title=data.get('motion_title', 'Untitled'),
+                source_pdf=temp_path,
+                case_number=data.get('case_number', ''),
+                state_code=state_code,
+                data=data,
+                created_by=request.user,
+            )
+            
+            messages.success(request, f"Response sheet generated! Review claims below.")
+            return redirect('core:response_sheet_review', sheet_id=sheet.id)
+            
+        except Exception as e:
+            messages.error(request, f"Error generating sheet: {e}")
+            return redirect('core:generate_sheet')
+    
+    # GET: show upload form
+    from .models import Case
+    cases = Case.objects.filter(user=request.user).order_by('-updated_at')
+    return render(request, 'core/generate_sheet.html', {
+        'cases': cases
+    })
+
+
+@login_required
+def delete_response_sheet(request, sheet_id):
+    """Delete a response sheet."""
+    from .models import ResponseSheet
+    sheet = get_object_or_404(ResponseSheet, id=sheet_id, created_by=request.user)
+    
+    if request.method == 'POST':
+        sheet.delete()
+        messages.success(request, "Response sheet deleted.")
+        return redirect('core:response_sheet_list')
+    
+    return render(request, 'core/delete_sheet_confirm.html', {
+        'sheet': sheet
+    })

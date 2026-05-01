@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block title %}Review Response Sheet - {{ sheet.title }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1200px; margin: 40px auto; font-family: sans-serif;">
+    <h1>Review Response Sheet: {{ sheet.title }}</h1>
+    <p><strong>Case Number:</strong> {{ sheet.case_number }}</p>
+    <p><strong>Generated:</strong> {{ sheet.created_at|date:"Y-m-d H:i" }}</p>
+    
+    <hr>
+    
+    <!-- Metadata Section -->
+    {% if metadata %}
+    <div class="metadata" style="background: #f5f5f5; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+        <h3>Document Metadata</h3>
+        {% if metadata.case_header %}
+            <p><strong>Header:</strong> {{ metadata.case_header }}</p>
+        {% endif %}
+        {% if metadata.parties %}
+            <p><strong>Parties:</strong> {{ metadata.parties|join:", " }}</p>
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    <!-- Procedural Facts -->
+    {% if procedural_facts %}
+    <div class="procedural" style="margin-bottom: 20px;">
+        <h3>Procedural Context</h3>
+        <ul>
+            {% for fact in procedural_facts %}
+            <li>{{ fact }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <hr>
+    
+    <!-- Claims Review Form -->
+    <form method="POST" action="{% url 'core:response_sheet_generate' sheet.id %}" id="review-form">
+        {% csrf_token %}
+        <h3>Review Claims (Uncheck to Exclude)</h3>
+        <p style="color: #666; margin-bottom: 15px;">
+            Checked = Keep in final response sheet. Unchecked = Exclude.
+        </p>
+        
+        <div class="claims-list" style="margin-bottom: 20px;">
+            {% for claim in claims %}
+            <div class="claim-item" style="border: 1px solid #ddd; padding: 10px; margin-bottom: 8px; border-radius: 4px;">
+                <label style="display: flex; align-items: flex-start; cursor: pointer;">
+                    <input type="checkbox" name="exclude_ids" value="{{ claim.id }}" checked 
+                           style="margin-right: 10px; margin-top: 3px;"
+                           onchange="updateExcludedIds()">
+                    <div>
+                        <strong style="color: #666; font-size: 0.9em;">{{ claim.label|default:claim.id }}</strong>
+                        <div style="margin-top: 4px;">{{ claim.text }}</div>
+                        {% if claim.type %}
+                        <span style="font-size: 0.8em; color: #888;">Type: {{ claim.type }}</span>
+                        {% endif %}
+                    </div>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Hidden input for JavaScript-updated excluded IDs -->
+        <input type="hidden" name="excluded_ids_json" id="excluded-ids-json" value="[]">
+        
+        <div class="actions" style="margin-top: 20px;">
+            <button type="submit" class="btn btn-primary" style="padding: 10px 20px; background: #0064AA; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                Generate Filtered Response Sheet
+            </button>
+            <a href="{% url 'core:response_sheet_list' %}" style="margin-left: 10px; color: #666;">Back to List</a>
+        </div>
+    </form>
+</div>
+
+<script>
+// Collect unchecked claim IDs and put them in hidden input
+function updateExcludedIds() {
+    const checkboxes = document.querySelectorAll('input[name="exclude_ids"]');
+    const excludedIds = [];
+    
+    checkboxes.forEach(cb => {
+        if (!cb.checked) {
+            excludedIds.push(parseInt(cb.value));
+        }
+    });
+    
+    document.getElementById('excluded-ids-json').value = JSON.stringify(excludedIds);
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateExcludedIds();
+});
+</script>
+{% endblock %}

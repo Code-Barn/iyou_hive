@@ -67,7 +67,7 @@ OLLAMA_ENDPOINT = 'http://localhost:11434'
 OLLAMA_MODEL = 'llama2'
 # OR
 GEMINI_API_KEY = 'your-api-key'
-GEMINI_MODEL = 'gemini-3.1-flash-lite-preview'
+GEMINI_MODEL = 'gemini-2.5-flash'
 ```
 
 ## File Structure

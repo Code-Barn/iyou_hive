@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+
+{% block title %}Response Sheets - Hiver{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 40px auto; font-family: sans-serif;">
+    <h1>Your Response Sheets</h1>
+    <p><a href="{% url 'core:generate_sheet' %}" style="color: #0064AA;">+ Generate New Response Sheet</a></p>
+    
+    <hr>
+    
+    {% if not sheets %}
+        <p style="color: #666;">No response sheets yet. Generate one from a PDF to get started.</p>
+    {% else %}
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: #f5f5f5;">
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Title</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Case Number</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Created</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 2px solid #ddd;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sheet in sheets %}
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ sheet.title }}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ sheet.case_number|default:"N/A" }}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">{{ sheet.created_at|date:"Y-m-d H:i" }}</td>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                        <a href="{% url 'core:response_sheet_review' sheet.id %}" style="color: #0064AA;">Review</a>
+                        |
+                        <a href="{% url 'core:delete_response_sheet' sheet.id %}" style="color: #d32f2f;"
+                           onclick="return confirm('Delete this response sheet?');">Delete</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</div>
+{% endblock %}

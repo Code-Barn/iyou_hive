@@ -27,7 +27,7 @@ def initialize_llm_client():
         from .llm_clients import GeminiClient
         return GeminiClient(
             api_key=getattr(settings, 'GEMINI_API_KEY', ''),
-            model=getattr(settings, 'GEMINI_MODEL', 'gemini-1.5-flash')
+            model=getattr(settings, 'GEMINI_MODEL', 'gemini-2.5-flash')
         )
     else:
         from .llm_clients import MockLLMClient
