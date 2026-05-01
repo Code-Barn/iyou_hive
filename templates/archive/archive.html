@@ -50,6 +50,19 @@
                             {% endif %}
                         </span>
                         <span class="file-name">{{ doc.title }}</span>
+                        <span class="file-status">
+                            {% if doc.file_type == 'pdf' %}
+                                {% if doc.conversion_status == 'PENDING' %}
+                                    <span title="Pending Conversion">...</span>
+                                {% elif doc.conversion_status == 'PROCESSING' %}
+                                    <span title="Processing...">⏳</span>
+                                {% elif doc.conversion_status == 'SUCCESS' %}
+                                    <span title="Conversion Successful">✅</span>
+                                {% elif doc.conversion_status == 'FAILED' %}
+                                    <span title="Conversion Failed: {{ doc.conversion_error }}">❌</span>
+                                {% endif %}
+                            {% endif %}
+                        </span>
                         <span class="file-date">{{ doc.upload_date|date:"M j" }}</span>
                     </div>
                     {% endfor %}

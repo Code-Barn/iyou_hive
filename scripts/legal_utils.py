@@ -443,6 +443,41 @@ def clean_claim_text(text, blank_lines=None):
     return text
 
 
+def split_text_into_sentences(text):
+    """
+    Split text into atomic sentences using a more robust regex.
+    Handles various sentence boundaries and abbreviations.
+    """
+    if not text or len(text.strip()) < 15:
+        return []
+
+    # 1. Normalize whitespace and clean up some common OCR errors
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'([a-z])\s+([A-Z])', r'\1. \2', text) # Fix run-ons like "sentenceA new sentence"
+
+    # 2. Split into sentences using a regex that handles abbreviations
+    # This regex splits on '.', '!', '?' followed by a space,
+    # but not if the period is preceded by a known abbreviation or a single capital letter.
+    # It also splits on newlines and semicolons.
+    abbreviations = r'(?<!\b(?:[A-Z][a-z]?\. |(?:Mr|Mrs|Ms|Dr|Sr|Jr|vs|e\.g|i\.e)\.))'
+    sentence_enders = r'(?<=[.!?])\s+|\n+|;'
+    
+    # We combine them. We look for a sentence end, but the negative lookbehind
+    # ensures we don't split on an abbreviation.
+    sentences = re.split(f'{abbreviations}{sentence_enders}', text)
+
+    # 3. Clean up the results
+    final_sentences = []
+    for sent in sentences:
+        if not sent:
+            continue
+        sent = sent.strip()
+        if len(sent) >= 15:
+            final_sentences.append(sent)
+
+    return final_sentences
+
+
 def is_form_instruction(text, blank_lines=None, threshold=0.6):
     """
     Check if text is likely a form instruction.

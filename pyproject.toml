@@ -16,4 +16,11 @@ dependencies = [
     "pytesseract>=0.3.13",
     "python-dotenv>=1.2.2",
     "requests>=2.33.1",
+    "celery",
+    "redis",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "config*"]
+exclude = ["tests*"]

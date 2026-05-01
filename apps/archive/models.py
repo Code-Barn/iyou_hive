@@ -52,6 +52,28 @@ class ArchiveDocument(models.Model):
     tags = models.JSONField(default=list, blank=True, help_text="List of tags for filtering")
     metadata = models.JSONField(default=dict, blank=True, help_text="Extracted metadata (author, date, etc.)")
     description = models.TextField(blank=True, help_text="Description of document contents")
+
+    # Conversion fields
+    conversion_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('PENDING', 'Pending'),
+            ('PROCESSING', 'Processing'),
+            ('SUCCESS', 'Success'),
+            ('FAILED', 'Failed'),
+        ],
+        default='PENDING',
+        help_text="Status of PDF to Markdown conversion"
+    )
+    markdown_path = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="Path to the converted Markdown file"
+    )
+    conversion_error = models.TextField(
+        blank=True,
+        help_text="Error message if conversion failed"
+    )
     
     # Relationships (case required for data isolation)
     case = models.ForeignKey(

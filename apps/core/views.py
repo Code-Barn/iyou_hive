@@ -132,7 +132,7 @@ def create_case(request):
                     is_active=True
                 )
                 
-                request.session['selected_case_id'] = case.id
+                request.session['selected_case_id'] = str(case.id)
                 
                 messages.success(request, f'Case "{name}" created and selected!')
                 return redirect('timeline:timeline')
@@ -187,7 +187,7 @@ def switch_case(request, case_id):
     case = get_object_or_404(Case, id=case_id, user=request.user)
     
     # Update session
-    request.session['selected_case_id'] = case.id
+    request.session['selected_case_id'] = str(case.id)
     
     # Deactivate other cases, activate this one
     Case.objects.filter(user=request.user).update(is_active=False)

@@ -4,6 +4,8 @@ Core app URLs for case management and API endpoints.
 from django.urls import path
 from . import views
 
+app_name = 'core'
+
 urlpatterns = [
     # Case management
     path('', views.case_list, name='case_list'),

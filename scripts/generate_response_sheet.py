@@ -32,7 +32,7 @@ from legal_utils import (
     is_readable, clean_legal_artifacts, extract_form_fields,
     scrub_boilerplate, extract_metadata, extract_dates,
     load_blank_form_text, is_form_instruction, clean_claim_text,
-    extract_text_from_pdf
+    extract_text_from_pdf, split_text_into_sentences
 )
 
 # Import specialized form handling
@@ -105,12 +105,12 @@ def extract_content_smart(file_path, state_code="IL"):
                 user_text = extract_user_input_from_section(section['text'], section['form_type'], state_code)
                 if user_text:
                     user_texts.append(user_text)
-            
+
             if user_texts:
                 text = '\n\n'.join(user_texts)
         except Exception as e:
             print(f"  -> Form tools failed: {e}")
-    
+
     # Fallback to raw text if form tools didn't extract anything
     if not text.strip():
         text = raw_text
@@ -131,19 +131,19 @@ def chunk_claims_smart(narrative_text, state_code="IL"):
     Fully atomizes text into individual sentences (one fact per claim).
     """
     blank_lines = load_blank_form_text(state_code)
-    
+
     # Pre-clean the narrative
     narrative_text = clean_claim_text(narrative_text, blank_lines)
-    
+
     # Split entire narrative into atomic sentences
     sentences = split_text_into_sentences(narrative_text)
-    
+
     # Convert sentences to claims
     processed_claims = []
     for i, sent in enumerate(sentences):
         if len(sent) < 15 or is_form_instruction(sent, blank_lines):
             continue
-        
+
         # Categorize
         claim_type = "substantive"
         procedural_keywords = [
@@ -157,7 +157,7 @@ def chunk_claims_smart(narrative_text, state_code="IL"):
         ]
         if any(kw in sent.lower() for kw in procedural_keywords):
             claim_type = "procedural"
-        
+
         processed_claims.append({
             "id": i + 1,
             "label": f"{i+1}.",
@@ -165,60 +165,15 @@ def chunk_claims_smart(narrative_text, state_code="IL"):
             "type": claim_type,
             "body": sent
         })
-    
+
     # Build result
     procedural_facts = [c["text"] for c in processed_claims if c["type"] == "procedural"]
-    
+
     return {
         "metadata": extract_metadata(narrative_text, state_code),
         "procedural_facts": list(dict.fromkeys(procedural_facts)),
         "claims": processed_claims
     }
-
-
-def split_text_into_sentences(text):
-    """
-    Split text into atomic sentences.
-    Handles: sentence boundaries, run-on sentences (e.g., "interest I allowed").
-    """
-    if not text or len(text.strip()) < 15:
-        return []
-    
-    # Step 1: Protect middle initials like "M. Donatello"
-    # Replace "M. Donatello" with "M@@@Donatello"
-    text = re.sub(r'([A-Z])\.\s+([A-Z][a-z])', r'\1@@@\2', text)
-    
-    # Step 2: Fix run-on sentences
-    # Pattern 1: lowercase word + space + "I" (single letter)
-    text = re.sub(r'([a-z]+)(\s+)(I\s+)', r'\1. \3', text)
-    # Pattern 2: lowercase word + space + "We"/"When"/etc.
-    text = re.sub(r'([a-z]+)(\s+)(We\s+|When\s+|While\s+|Because\s+|The\s+)', r'\1. \3', text)
-    # Pattern 3: comma + space + "I" (e.g., "interest, I allowed")
-    text = re.sub(r'([a-z]+),(\s+)(I\s+)', r'\1.\2\3', text)
-    
-    # Step 3: Split on sentence boundaries
-    # Periods, exclamation, question marks followed by space and uppercase
-    # Also split on semicolons and newlines
-    sentences = re.split(r'(?<=[.!?])\s+|(?<=[;])\s+|\n+', text)
-    
-    # Step 4: Further split on conjunctions that start new thoughts
-    # Split on ", and I...", ", and When...", etc.
-    result = []
-    for sent in sentences:
-        # Split on conjunctions followed by uppercase or "I"/"We"
-        parts = re.split(r',\s+(?:and|but|so|because)\s+(?=[A-Z]|I\s+|We\s+)', sent)
-        result.extend(parts)
-    
-    # Step 5: Restore middle initials and clean up
-    final = []
-    for sent in result:
-        sent = sent.strip()
-        # Restore "M@@@Donatello" to "M. Donatello"
-        sent = re.sub(r'([A-Z])@@@([A-Z][a-z]+)', r'\1. \2', sent)
-        if len(sent) >= 15:
-            final.append(sent)
-    
-    return final
 
 
 def chunk_claims_with_llm(client, narrative_text, state_code="IL"):
@@ -245,20 +200,20 @@ def chunk_claims_with_llm(client, narrative_text, state_code="IL"):
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.0-flash", # Use fast model for extraction
+            model="gemini-2.5-flash", # Use fast model for extraction
             contents=system_prompt + f"\nEXTRACT FROM:\n{narrative_text}"
         )
-        
+
         raw = response.text
         # Clean markdown fences
         raw = re.sub(r'```json\s*|\s*```', '', raw).strip()
         data = json.loads(raw)
-        
+
         # Ensure 'text' and 'body' consistency
         for c in data.get("claims", []):
             if "text" in c: c["body"] = c["text"]
             elif "body" in c: c["text"] = c["body"]
-            
+
         return data
     except Exception as e:
         print(f"  -> LLM failed: {e}. Falling back to local chunker.")
@@ -276,7 +231,7 @@ def build_response_sheet_html(data, used_local=False):
     metadata = data.get("metadata", {})
     claims = data.get("claims", [])
     procedural = data.get("procedural_facts", [])
-    
+
     title = metadata.get("title", "Legal Document")
     header = metadata.get("case_header", metadata.get("case_number", "Unknown Case"))
     parties = metadata.get("parties", [])
@@ -352,7 +307,7 @@ def build_response_sheet_html(data, used_local=False):
 
 def generate_response_sheet(file_path, output_path=None, state_code="IL", force_local=False):
     print(f"--- Generating Response Sheet for: {Path(file_path).name} ---")
-    
+
     # 1. Extract content
     narrative_text, raw_text, form_data = extract_content_smart(file_path, state_code)
     if not narrative_text.strip():
@@ -366,7 +321,7 @@ def generate_response_sheet(file_path, output_path=None, state_code="IL", force_
             import google.genai as genai
             client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         except Exception: pass
-    
+
     if client:
         print("  -> Using Gemini for chunking...")
         data = chunk_claims_with_llm(client, narrative_text, state_code)
@@ -379,10 +334,10 @@ def generate_response_sheet(file_path, output_path=None, state_code="IL", force_
     if not data.get("metadata") or not data["metadata"].get("title"):
         # Use raw text for metadata extraction (has form headers with title, parties, case #)
         data["metadata"] = extract_metadata(raw_text or narrative_text, state_code)
-    
+
     # 4. Save outputs
     base_path = Path(output_path).with_suffix("") if output_path else Path(file_path).with_suffix("")
-    
+
     # JSON output
     json_path = f"{base_path}.response_sheet.json"
     with open(json_path, "w", encoding="utf-8") as f:
@@ -395,7 +350,7 @@ def generate_response_sheet(file_path, output_path=None, state_code="IL", force_
     with open(html_path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"  -> HTML saved: {html_path}")
-    
+
     return html_path
 
 
@@ -403,12 +358,12 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: generate_response_sheet.py <input_file> [output_path] [state_code] [--local]")
         sys.exit(1)
-    
+
     file_path = sys.argv[1]
     output_path = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("--") else None
     state_code = sys.argv[3] if len(sys.argv) > 3 and not sys.argv[3].startswith("--") else "IL"
     force_local = "--local" in sys.argv
-    
+
     try:
         generate_response_sheet(file_path, output_path, state_code, force_local)
     except Exception as e:

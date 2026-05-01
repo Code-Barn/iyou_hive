@@ -14,6 +14,8 @@ from django.conf import settings
 from pathlib import Path
 
 
+from .tasks import convert_pdf_to_markdown
+
 def get_user_archive_dir(user):
     """Get the archive directory path for a user."""
     if user and user.is_authenticated:
@@ -29,41 +31,6 @@ def get_archive_base_dir():
     archive_base = Path(settings.MEDIA_ROOT) / 'archive'
     archive_base.mkdir(parents=True, exist_ok=True)
     return str(archive_base)
-
-
-def run_pdf_conversion(pdf_path):
-    """
-    Run the PDF to Markdown conversion script.
-    
-    Args:
-        pdf_path: Path to the PDF file
-        
-    Returns:
-        str: Path to the converted Markdown file, or None if failed
-    """
-    try:
-        scripts_dir = Path(settings.BASE_DIR) / 'scripts'
-        script_path = str(scripts_dir / 'pdf_to_md_conversion.py')
-        
-        # Run the conversion script
-        result = subprocess.run(
-            [sys.executable, script_path, pdf_path],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-        
-        if result.returncode == 0:
-            # Get the output file path (script replaces .pdf with .md)
-            md_path = pdf_path.replace('.pdf', '.md')
-            if os.path.exists(md_path):
-                return md_path
-        else:
-            print(f"PDF conversion error: {result.stderr}", file=sys.stderr)
-    except Exception as e:
-        print(f"PDF conversion failed: {e}", file=sys.stderr)
-    
-    return None
 
 
 def run_filemapper(directory):
@@ -161,68 +128,14 @@ def upload_document(request):
             document.user = request.user
             document.case = case
             
-            # Get user's archive directory
-            user_archive_dir = get_user_archive_dir(request.user)
-            
             # Save the document
             document.save()
             
-            # Get the saved file path
-            file_path = document.file.path
-            
-            # For PDFs, auto-convert to Markdown
-            if file_path.lower().endswith('.pdf'):
-                md_path = run_pdf_conversion(file_path)
-                if md_path:
-                    # Create a linked Markdown document in the archive
-                    from apps.timeline.models import TimelineEvent
-                    from .models import ArchiveDocument as ArchiveDoc
-                    import re
-                    
-                    # Parse the markdown to extract event data
-                    with open(md_path, 'r', encoding='utf-8') as f:
-                        md_content = f.read()
-                    
-                    # Extract metadata from markdown frontmatter
-                    date_match = re.search(r'date:\s*(\S+)', md_content)
-                    title_match = re.search(r'title:\s*(.+)', md_content)
-                    category_match = re.search(r'category:\s*(\S+)', md_content)
-                    
-                    if date_match or title_match:
-                        # Create a timeline event from the markdown
-                        try:
-                            # Parse date if found, otherwise use upload date
-                            event_date = None
-                            if date_match:
-                                try:
-                                    from datetime import datetime
-                                    event_date = datetime.strptime(date_match.group(1), '%Y-%m-%d').date()
-                                except (ValueError, TypeError):
-                                    event_date = document.upload_date
-                            if event_date is None:
-                                event_date = document.upload_date
-                            
-                            event = TimelineEvent.objects.create(
-                                date=event_date,
-                                event=title_match.group(1) if title_match else 'Imported Document',
-                                category=category_match.group(1).lower() if category_match else 'other',
-                                notes=f"Converted from PDF: {document.title}",
-                                supporting_docs=str(document.id),
-                                created_by=request.user,
-                                case=case
-                            )
-                            
-                            # Link the document to the event
-                            document.timeline_event = event
-                            document.save()
-                        except Exception as e:
-                            print(f"Failed to create timeline event: {e}", file=sys.stderr)
-            
-            # Update the archive map after any file changes
-            if user_archive_dir:
-                run_filemapper(user_archive_dir)
-            
-            messages.success(request, 'Document uploaded successfully!')
+            # If the file is a PDF, trigger the conversion task
+            if document.file and document.file.name.lower().endswith('.pdf'):
+                convert_pdf_to_markdown.delay(document.id)
+
+            messages.success(request, 'Document uploaded successfully! It will be processed shortly.')
             return redirect('archive:archive')
         else:
             messages.error(request, 'Error uploading document. Please check the form.')

@@ -156,7 +156,7 @@ def convert_single_pdf(pdf_path, llm_client):
                     print(f"  -> Using Vision API...")
                     uploaded = llm_client.files.upload(file=str(pdf_path))
                     result = llm_client.models.generate_content(
-                        model="gemini-2.0-flash",
+                        model="gemini-2.5-flash",
                         contents=[uploaded, "Extract all text from this document."]
                     )
                     text = result.text if hasattr(result, 'text') else str(result)
