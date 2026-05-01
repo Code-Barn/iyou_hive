@@ -20,10 +20,12 @@ load_dotenv(Path(__file__).parent.parent / '.env')
 
 def is_readable(text):
     """Check if text contains enough readable content."""
+    # Remove common OCR artifacts and form lines
     cleaned = re.sub(r'[\u25c8\u25c6\u2610\u2611\u2612\u2713\u2717\u2714Xx_\n\r\t]+', '', text)
     cleaned = re.sub(r'\s+', ' ', cleaned)
     if len(cleaned.strip()) < 50:
         return False
+    # Look for actual words
     words = re.findall(r'\b[a-zA-Z]{3,}\b', cleaned.lower())
     if len(words) < 25:
         return False
@@ -35,6 +37,7 @@ def is_scanned_pdf(pdf_path):
     try:
         with pdfplumber.open(pdf_path) as pdf:
             sample_text = ""
+            # Check first few pages
             for page in pdf.pages[:3]:
                 sample_text += page.extract_text() or ""
             return len(sample_text.strip()) < 50
@@ -76,41 +79,16 @@ def extract_form_fields(pdf_path):
                     fields = page.get_form_fields()
                     if fields:
                         for field in fields:
-                            key = field.get("name", f"field_{page_num}")
-                            value = field.get("export_value", "")
+                            name = field.get("name", f"field_{page_num}")
+                            # Get value - handle both 'value' and 'export_value'
+                            value = field.get("value") or field.get("export_value", "")
                             if value:
-                                form_data[key] = value
+                                form_data[name] = value
                 except Exception:
                     pass
     except Exception:
         pass
     return form_data
-
-
-def ocr_pdf_images(pdf_path):
-    """OCR fallback using pytesseract. Requires 'sudo apt install tesseract-ocr'."""
-    text_parts = []
-    try:
-        import fitz
-        import pytesseract
-        from PIL import Image
-        from io import BytesIO
-    except ImportError:
-        print("  -> pytesseract or Pillow not installed.")
-        return "\n".join(text_parts)
-
-    try:
-        doc = fitz.open(pdf_path)
-        for page in doc:
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            img = Image.open(BytesIO(pix.tobytes("png")))
-            text = pytesseract.image_to_string(img)
-            if text.strip():
-                text_parts.append(text.strip())
-        doc.close()
-    except Exception as e:
-        print(f"  -> OCR Failed: {e}")
-    return "\n".join(text_parts)
 
 
 def get_local_ocr():
@@ -119,7 +97,10 @@ def get_local_ocr():
     if _local_ocr is None:
         try:
             from paddleocr import PaddleOCR
-            _local_ocr = PaddleOCR(lang='en')
+            # Suppress paddleocr logging
+            import logging
+            logging.getLogger("ppocr").setLevel(logging.ERROR)
+            _local_ocr = PaddleOCR(lang='en', use_angle_cls=True, show_log=False)
         except ImportError:
             print("  -> PaddleOCR not installed, falling back to pytesseract")
             _local_ocr = "pytesseract"
@@ -129,14 +110,12 @@ def get_local_ocr():
 _local_ocr = None
 
 
-def ocr_pdf_with_paddle(pdf_path):
-    """OCR using PaddleOCR."""
+def ocr_pdf_images(pdf_path):
+    """OCR fallback using PaddleOCR or pytesseract."""
     text_parts = []
     try:
         import fitz
         ocr = get_local_ocr()
-        if ocr == "pytesseract":
-            return ocr_pdf_images(pdf_path)
         
         doc = fitz.open(pdf_path)
         for page_num, page in enumerate(doc):
@@ -144,23 +123,33 @@ def ocr_pdf_with_paddle(pdf_path):
             img_path = f"/tmp/ocr_page_{page_num}.png"
             pix.save(img_path)
             
-            result = ocr.ocr(img_path)
-            if result and result[0]:
-                r = result[0]
-                texts = r.get('rec_texts', [])
-                text_parts.extend(texts)
+            if ocr == "pytesseract":
+                from PIL import Image
+                text = pytesseract.image_to_string(Image.open(img_path))
+                if text.strip():
+                    text_parts.append(text.strip())
+            else:
+                result = ocr.ocr(img_path)
+                if result and result[0]:
+                    # Extract text from boxes
+                    texts = [line[1][0] for line in result[0]]
+                    text_parts.extend(texts)
+            
+            # Clean up temp file
+            if os.path.exists(img_path):
+                os.remove(img_path)
         doc.close()
     except Exception as e:
-        print(f"  -> Local OCR error: {e}")
+        print(f"  -> OCR error: {e}")
     return "\n".join(text_parts)
 
 
 def extract_text_from_pdf(pdf_path):
     """
     Tiered PDF text extraction:
-    1. Try pdftotext (best for born-digital)
+    1. Try pdftotext (best for layout preservation)
     2. Fallback to pdfplumber
-    3. Fallback to OCR if scanned
+    3. Fallback to OCR if scanned or poor results
     """
     text = ""
     pdf_path = Path(pdf_path)
@@ -177,19 +166,18 @@ def extract_text_from_pdf(pdf_path):
         pass
     
     # Fallback to pdfplumber
-    if not text:
+    if not text.strip():
         try:
             with pdfplumber.open(str(pdf_path)) as pdf:
-                text_parts = [p.extract_text_simple() for p in pdf.pages]
-                text = "\n\n--- Page Break ---\n\n".join(text_parts)
+                text_parts = [p.extract_text() for p in pdf.pages]
+                text = "\n\n--- Page Break ---\n\n".join(filter(None, text_parts))
         except Exception:
             pass
     
-    # If still no text and it's scanned, try OCR
-    if not text.strip() and is_scanned_pdf(pdf_path):
-        text = ocr_pdf_with_paddle(pdf_path)
-        if not text.strip():
-            text = ocr_pdf_images(pdf_path)
+    # If still poor quality or empty, try OCR
+    if not is_readable(text) or not text.strip():
+        print(f"  -> Low quality text extraction, trying OCR for {pdf_path.name}...")
+        text = ocr_pdf_images(pdf_path)
     
     return text
 
@@ -229,6 +217,10 @@ BOILERPLATE_PATTERNS = [
     re.compile(r'If there are any words or terms that you do not understand', re.I),
     re.compile(r'ilcourthelp\.gov', re.I),
     re.compile(r'ilao\.info', re.I),
+    re.compile(r'under illinois supreme court rule', re.I),
+    re.compile(r'my signature means that', re.I),
+    re.compile(r'i read the document', re.I),
+    re.compile(r'i have been informed and believe it is true', re.I),
 ]
 
 BLOCKLIST_PATTERNS = [
@@ -241,17 +233,19 @@ BLOCKLIST_PATTERNS = [
     re.compile(r'City\s+State\s+Zip\s+Code', re.I),
     re.compile(r'Instructions', re.I),
     re.compile(r'icourts\.info', re.I),
-    re.compile(r'ATJ\s+\d+\.\d+', re.I),
 ]
 
 
 def scrub_boilerplate(text):
     """Remove known form instructions and boilerplate text."""
+    if not text:
+        return ""
     lines = text.split('\n')
     cleaned = []
     for line in lines:
         if any(pat.search(line) for pat in BOILERPLATE_PATTERNS):
             continue
+        # Skip lines that are just form field underscores/boxes
         if re.match(r'^\s*[._\u25fb\u25a1\u2610]{3,}\s*$', line):
             continue
         cleaned.append(line)
@@ -259,53 +253,35 @@ def scrub_boilerplate(text):
 
 
 # ---------------------------------------------------------------------------
-# Date extraction
-# ---------------------------------------------------------------------------
-
-DATE_PATTERNS = [
-    r'\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b',
-    r'\b\d{1,2}/\d{1,2}/\d{2,4}\b',
-    r'\b\d{4}-\d{2}-\d{2}\b',
-    r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b',
-]
-
-
-def extract_dates(text):
-    """Extract all date patterns from text."""
-    dates = []
-    for pattern in DATE_PATTERNS:
-        dates.extend(re.findall(pattern, text, re.IGNORECASE))
-    return dates
-
-
-# ---------------------------------------------------------------------------
 # Metadata extraction patterns
 # ---------------------------------------------------------------------------
 
-# Illinois case number pattern: 2-4 digits + 2 letters + 5-12 digits
 IL_CASE_PATTERN = re.compile(r'\b(\d{2,4}[A-Z]{2}\d{5,12})\b')
 
-# Party name patterns
 PARTY_PATTERNS = [
-    re.compile(r'(?:PLAINTIFF|PETITIONER|DEFENDANT|RESPONDENT)[S]*(?:/\w+)*\s*:?\s*(.+?)(?:\n|\r|$)', re.I),
-    re.compile(r'(?:IN RE):\s*(.+?)(?:\n|\r|$)', re.I),
-    re.compile(r'Who started the case\.\s*(.+?)(?:\n|\r|$)', re.I),
-    re.compile(r'Who the case was filed against\.\s*(.+?)(?:\n|\r|$)', re.I),
+    # Match "PLAINTIFF/PETITIONER OR IN RE: Name"
+    re.compile(r'(?:PLAINTIFF|PETITIONER|IN RE)\s*[:\s]+([A-Z][A-Za-z\s,\.]{2,50})(?:\s+Who|First,|$)', re.I),
+    # Match "Who started the case. Name"
+    re.compile(r'Who started the case\.\s*([A-Z][A-Za-z\s,\.]{2,50})(?:\s+Who|First,|$)', re.I),
+    # Match "Who the case was filed against. Name"
+    re.compile(r'Who the case was filed against\.\s*([A-Z][A-Za-z\s,\.]{2,50})(?:\s+First,|$)', re.I),
 ]
 
-# Title patterns
 TITLE_PATTERNS = [
-    re.compile(r'MOTION\s+TO\s+(.+?)(?:\n|\r|$)', re.I),
-    re.compile(r'NOTICE\s+OF\s+(.+?)(?:\n|\r|$)', re.I),
-    re.compile(r'PETITION\s+FOR\s+(.+?)(?:\n|\r|$)', re.I),
-    re.compile(r'Motion to:\s*(.+?)(?:\n|\r|$)', re.I),
+    # Match "Motion to: _TEXT_" (user input)
+    re.compile(r'Motion to:\s*(_[A-Z_\s]+_)(?:\s+2\.|Check|$)', re.I),
+    # Match "MOTION TO RELOCATE..." in form header
+    re.compile(r'MOTION\s+TO\s+([A-Z][A-Za-z\s]{5,100})(?:\s+2\.|Check|$)', re.I),
+    # Match "NOTICE OF..."
+    re.compile(r'NOTICE\s+OF\s+([A-Z][A-Za-z\s]{5,100})(?:\s+|$)', re.I),
+    # Match "PETITION FOR..."
+    re.compile(r'PETITION\s+FOR\s+([A-Z][A-Za-z\s]{5,100})(?:\s+|$)', re.I),
 ]
-
 
 def extract_metadata(text, state_code="IL"):
     """
     Extract metadata (case number, parties, title) from legal text.
-    Returns dict with keys: case_number, parties, title
+    Returns dict with keys: case_number, parties, title, case_header
     """
     metadata = {
         'case_number': '',
@@ -314,6 +290,9 @@ def extract_metadata(text, state_code="IL"):
         'case_header': ''
     }
     
+    if not text:
+        return metadata
+
     # Extract case number
     case_match = IL_CASE_PATTERN.search(text)
     if case_match:
@@ -328,7 +307,7 @@ def extract_metadata(text, state_code="IL"):
                 # Clean up names
                 name = re.sub(r'[,_;]', '', name)
                 name = re.sub(r'\s+', ' ', name).strip()
-                if name:
+                if name and len(name) < 100:  # Avoid capturing whole paragraphs
                     metadata['parties'].append(name)
     
     # Extract title
@@ -336,64 +315,150 @@ def extract_metadata(text, state_code="IL"):
         match = pattern.search(text)
         if match:
             title = match.group(1).strip()
-            if title and len(title) > 5:
+            if title and 5 < len(title) < 200:
                 metadata['title'] = title.upper()
                 break
     
     # Build case header
-    if metadata['case_number'] and metadata['title']:
-        metadata['case_header'] = f"{metadata['case_number']} - {metadata['title']}"
-    elif metadata['case_number']:
-        metadata['case_header'] = metadata['case_number']
-    elif metadata['title']:
-        metadata['case_header'] = metadata['title']
+    parts = []
+    if metadata['case_number']: parts.append(metadata['case_number'])
+    if metadata['title']: parts.append(metadata['title'])
+    metadata['case_header'] = " - ".join(parts)
     
     return metadata
 
 
+def extract_dates(text):
+    """Extract all unique dates from legal text."""
+    if not text:
+        return []
+    
+    date_patterns = [
+        re.compile(r'\b\d{1,2}/\d{1,2}/\d{2,4}\b'),
+        re.compile(r'\b\d{4}-\d{1,2}-\d{1,2}\b'),
+        re.compile(r'\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b', re.I),
+    ]
+    
+    dates = []
+    for pattern in date_patterns:
+        dates.extend(pattern.findall(text))
+    return list(set(dates))
+
+
 # ---------------------------------------------------------------------------
-# Form label detection
+# Blank form comparison
 # ---------------------------------------------------------------------------
 
-FORM_LABEL_PATTERNS = [
-    re.compile(r'^\s*COUNTY:\s*_{2,}', re.I),
-    re.compile(r'^\s*CASE\s+NUMBER:\s*_{2,}', re.I),
-    re.compile(r'^\s*PLAINTIFF.*:\s*_{2,}', re.I),
-    re.compile(r'^\s*DEFENDANT.*:\s*_{2,}', re.I),
-    re.compile(r'^\s*NAME:\s*_{2,}', re.I),
-    re.compile(r'^\s*ADDRESS:\s*_{2,}', re.I),
-    re.compile(r'^\s*PHONE.*:\s*_{2,}', re.I),
-    re.compile(r'^\s*EMAIL.*:\s*_{2,}', re.I),
-    re.compile(r'^\s*SIGNATURE:\s*_{2,}', re.I),
-    re.compile(r'^\s*MOTION\s+TO:\s*_{2,}', re.I),
-    re.compile(r'^\s*EXPLAIN.*:\s*_{2,}', re.I),
-    re.compile(r'^\s*I\s+AM.*:\s*_{2,}', re.I),
-    re.compile(r'^\s*ENTER\s+THE\s+CASE', re.I),
-    re.compile(r'^\s*WHO\s+STARTED\s+THE\s+CASE', re.I),
-    re.compile(r'^\s*WHO\s+THE\s+CASE\s+WAS\s+FILED\s+AGAINST', re.I),
-]
+def load_blank_form_text(state_code="IL"):
+    """
+    Load blank form text for comparison.
+    Returns set of normalized lines from the blank form.
+    """
+    from state_form_config import get_state_config, get_blank_form_path
+    
+    blank_lines = set()
+    config = get_state_config(state_code)
+    
+    paths_to_try = []
+    if config:
+        if config.get("form_path"): paths_to_try.append(Path(config["form_path"]))
+        if config.get("additional_form_path"): paths_to_try.append(Path(config["additional_form_path"]))
+
+    for path in paths_to_try:
+        # Try MD version first
+        md_path = path.with_suffix(".md")
+        if md_path.exists():
+            try:
+                with open(md_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        norm = re.sub(r'\s+', ' ', line.strip().lower())
+                        if len(norm) > 3:
+                            blank_lines.add(norm)
+            except Exception:
+                pass
+        
+        # Then try PDF
+        if path.exists():
+            try:
+                with pdfplumber.open(path) as pdf:
+                    for page in pdf.pages:
+                        text = page.extract_text()
+                        if text:
+                            for line in text.split('\n'):
+                                norm = re.sub(r'\s+', ' ', line.strip().lower())
+                                if len(norm) > 3:
+                                    blank_lines.add(norm)
+            except Exception:
+                pass
+                
+    return blank_lines
 
 
-def is_form_label(text):
-    """Check if text is a form label (not user content)."""
-    for pattern in FORM_LABEL_PATTERNS:
-        if pattern.search(text):
-            return True
-    return False
+def clean_claim_text(text, blank_lines=None):
+    """
+    Clean individual claim text by removing boilerplate embedded within.
+    Removes: checkbox text, clerk footers, form instructions, URLs.
+    If blank_lines provided, also removes form labels.
+    """
+    if not text:
+        return ""
+        
+    import unicodedata
+    # Normalize unicode characters
+    text = unicodedata.normalize('NFKC', text)
+    
+    # Remove checkbox attachments (✔ I need more room... or ✓ I have filled out...)
+    text = re.sub(r'[✓✔❌☑☒]\s*(I need more room|I have filled out|Additional Page).*?(?=\.|$)', '', text, flags=re.IGNORECASE)
+    
+    # Remove clerk footers - pattern: "Accepted: 4/29/2026 8:27 AM Reviewed By: EH Env#37816100"
+    text = re.sub(r'Accepted:\s*[\d/]+\s*[\d:]+\s*[AP]M\s*Reviewed By:\s*\w+\s*Env#\d+', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'Reviewed By:\s*\w+\s*Env#\d+', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'Env#\d+', '', text)
+    
+    # Remove case numbers like "25FA152" that appear after clerk footers
+    text = re.sub(r'\d+[A-Z]{2}\d+\s*', '', text)
+    
+    # Remove common form footers
+    text = re.sub(r'Under Illinois Supreme Court Rule.*?(?=\.|$)', '', text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r'In some counties, you may get the court date.*?(?=\.|$)', '', text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r'After you fill out your forms.*?(?=\.|$)', '', text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r'Find your Circuit Clerk.*?(?=\.|$)', '', text, flags=re.IGNORECASE | re.DOTALL)
+    
+    # Remove URLs
+    text = re.sub(r'https?://\S+', '', text)
+    text = re.sub(r'\S+\.info/\S+', '', text)
+    
+    # Remove form labels if blank lines provided
+    if blank_lines:
+        text_lower = text.lower()
+        for blank_line in blank_lines:
+            if len(blank_line) > 15:
+                if blank_line in text_lower:
+                    idx = text_lower.find(blank_line)
+                    text = text[:idx] + text[idx + len(blank_line):]
+                    text_lower = text.lower()
+    
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
 
 
 def is_form_instruction(text, blank_lines=None, threshold=0.6):
     """
     Check if text is likely a form instruction.
-    Uses multiple strategies for detection.
     """
     if not text:
         return False
     
     normalized = re.sub(r'\s+', ' ', text.strip().lower())
     
-    # Strategy 1: Word overlap with blank form
+    # Substring check against blank form lines
     if blank_lines:
+        for blank_line in blank_lines:
+            if normalized in blank_line or blank_line in normalized:
+                return True
+        
+        # Word-level overlap with blank form
         words_text = set(normalized.split())
         if words_text:
             for blank_line in blank_lines:
@@ -404,44 +469,31 @@ def is_form_instruction(text, blank_lines=None, threshold=0.6):
                     if similarity > threshold:
                         return True
     
-    # Strategy 2: Key form phrases
-    form_phrases = [
-        'under illinois supreme court rule',
-        'my signature means that',
-        'i read the document',
-        'i have been informed and believe it is true',
-        'i am not filing it to cause delay',
-        'accepted:',
-        'reviewed by:',
-        'env#',
-        'case number',
-        'in some counties, you may get the court date',
-        'after you fill out your forms',
-        'file them with the circuit clerk',
-        'send your forms to the other people',
-        'find your circuit clerk',
-        'this form is approved by the illinois supreme court',
-        'forms are free at',
-        'page',
-        'of',
-        'next step for person',
-        'learn more about each step',
-        'illinois court help',
-        'illinois legal aid online',
-        'you may also find more information',
-        'location of your local legal self-help center',
+    # Known form label patterns
+    form_labels = [
+        r'^\s*county:?\s*_{2,}',
+        r'^\s*case number:?\s*_{2,}',
+        r'^\s*plaintiff.*:?\s*_{2,}',
+        r'^\s*defendant.*:?\s*_{2,}',
+        r'^\s*name:?\s*_{2,}',
+        r'^\s*address:?\s*_{2,}',
+        r'^\s*phone.*:?\s*_{2,}',
+        r'^\s*email.*:?\s*_{2,}',
+        r'^\s*signature.*:?\s*_{2,}',
+        r'^\s*motion to:?\s*_{2,}',
+        r'^\s*explain.*:?\s*_{2,}',
+        r'^\s*i am.*:?\s*_{2,}',
+        r'^\s*enter the case',
+        r'^\s*who started the case',
+        r'^\s*who the case was filed against',
+        r'^\s*date:?\s*_{2,}',
+        r'^\s*time:?\s*_{2,}',
+        r'^\s*print name:?\s*_{2,}',
+        r'^\s*for court use only',
+        r'^\s*clerk\'s certification',
     ]
-    for phrase in form_phrases:
-        if phrase in normalized:
+    for pattern in form_labels:
+        if re.search(pattern, normalized, re.IGNORECASE):
             return True
-    
-    # Strategy 3: Detect form labels (text with underscores)
-    if '__' in text or '___' in text:
-        return True
-    
-    # Strategy 4: Check against blocklist patterns
-    for pattern in BLOCKLIST_PATTERNS:
-        if pattern.search(text):
-            return True
-    
+            
     return False
