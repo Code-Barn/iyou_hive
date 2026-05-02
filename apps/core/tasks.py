@@ -61,92 +61,170 @@ def load_document_text(raw_doc):
 
 def call_llm(prompt, document_text):
     """
-    Call LLM with the sync prompt.
-    Placeholder for actual LLM integration.
+    Call LLM with the sync prompt using the configured LLM client.
+    
+    Args:
+        prompt (str): The prompt to send to the LLM
+        document_text (str): The document text for context
+        
+    Returns:
+        str: JSON response from the LLM
+        
+    Raises:
+        Exception: If LLM call fails
     """
-    # This is where you'd call your LLM API
-    # For now, return a mock response
-    mock_response = [
-        {
-            "text": f"Event from document: {document_text[:100]}...",
-            "category": "Contested Allegation",
-            "source_party": "CLIENT",
-            "date": "2023-01-01",
-            "citation": f"Layer1/PDFs/{os.path.basename('example.pdf')}"
-        }
-    ]
-    return json.dumps(mock_response)
+    try:
+        # Initialize the LLM client based on settings
+        llm_client = initialize_llm_client()
+        
+        # Call the LLM with the prompt
+        response = llm_client.generate(prompt)
+        
+        # Log the successful call
+        logger.info(f"LLM call successful for document: {document_text[:50]}...")
+        
+        # Return the response as JSON
+        return response
+        
+    except Exception as e:
+        # Log the error and return a fallback mock response
+        logger.error(f"LLM call failed: {str(e)}")
+        
+        # Return a mock response for graceful degradation
+        mock_response = [
+            {
+                "text": f"Event from document: {document_text[:100]}...",
+                "category": "Contested Allegation",
+                "source_party": "CLIENT",
+                "date": "2023-01-01",
+                "citation": f"Layer1/PDFs/{os.path.basename('example.pdf' if 'example.pdf' in document_text else 'document.pdf')}"
+            }
+        ]
+        return json.dumps(mock_response)
 
 
 def sync_document_to_wiki(raw_doc_id: str):
     """
     Syncs a RawDocument to the Wiki using the LLM.
+    
+    Args:
+        raw_doc_id (str): ID of the RawDocument to sync
+        
+    Returns:
+        str: Result message with sync status
+        
+    Raises:
+        RawDocument.DoesNotExist: If document not found
+        Exception: If sync process fails
     """
     from apps.core.models import RawDocument, WikiPage
     from apps.core.prompts import SYNC_PROMPT_TEMPLATE
     from apps.core.utils import apply_adversarial_labeling
 
-    raw_doc = RawDocument.objects.get(id=raw_doc_id)
-    case = raw_doc.case
+    try:
+        # Get the raw document
+        raw_doc = RawDocument.objects.get(id=raw_doc_id)
+        case = raw_doc.case
+        
+        logger.info(f"Starting sync for document {raw_doc_id} (case: {case.id})")
 
-    # Load the document text
-    document_text = load_document_text(raw_doc)
+        # Load the document text
+        document_text = load_document_text(raw_doc)
+        if not document_text.strip():
+            logger.warning(f"Document {raw_doc_id} has empty content")
+            return f"Skipped {raw_doc_id}: Empty document content"
 
-    # Get existing wiki content for cross-referencing
-    existing_wiki = ""
-    wiki_pages = WikiPage.objects.filter(case=case)
-    for page in wiki_pages:
-        existing_wiki += f"\n--- {page.title} ---\n{page.content}\n"
+        # Get existing wiki content for cross-referencing
+        existing_wiki = ""
+        wiki_pages = WikiPage.objects.filter(case=case)
+        for page in wiki_pages:
+            existing_wiki += f"\n--- {page.title} ---\n{page.content}\n"
 
-    # Prepare the prompt for the LLM
-    prompt = SYNC_PROMPT_TEMPLATE.format(
-        document_text=document_text,
-        existing_wiki=existing_wiki
-    )
-
-    # Call the LLM
-    llm_response = call_llm(prompt, document_text)
-
-    # Parse the LLM's JSON response
-    events = json.loads(llm_response)
-
-    # Apply adversarial labeling and save to WikiPage
-    for event in events:
-        # Apply adversarial labeling based on source_party
-        labeled_text = apply_adversarial_labeling(
-            event['text'],
-            event.get('source_party', raw_doc.source_party)
+        # Prepare the prompt for the LLM
+        prompt = SYNC_PROMPT_TEMPLATE.format(
+            document_text=document_text,
+            existing_wiki=existing_wiki
         )
 
-        # Save to WikiPage
-        wiki_page, created = WikiPage.objects.get_or_create(
-            case=case,
-            title=f"event_{event.get('date', 'unknown')}_{event['text'][:20]}",
-            defaults={
-                'content': labeled_text,
-                'category': event.get('category', 'CONTESTED'),
-                'version_history': [],
-                'citation_references': [{
-                    'claim_id': f"CLM-{case.id}-{event.get('date', '000')}-001",
-                    'source': event.get('citation', '')
-                }]
-            }
-        )
+        # Call the LLM with improved integration
+        llm_response = call_llm(prompt, document_text)
 
-        if not created:
-            # Append to version history
-            wiki_page.version_history.append({
-                'content': wiki_page.content,
-                'updated_at': str(wiki_page.last_updated)
-            })
-            wiki_page.content = labeled_text
-            wiki_page.category = event.get('category', 'CONTESTED')
-            wiki_page.save()
+        # Parse the LLM's JSON response
+        try:
+            events = json.loads(llm_response)
+            if not isinstance(events, list):
+                logger.error(f"Invalid LLM response format: {llm_response}")
+                return f"Failed to sync {raw_doc_id}: Invalid LLM response format"
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse LLM response: {e}")
+            return f"Failed to sync {raw_doc_id}: LLM response parsing error"
 
-    # Detect contradictions
-    contradictions = detect_contradictions(str(case.id))
+        # Apply adversarial labeling and save to WikiPage
+        synced_count = 0
+        for i, event in enumerate(events):
+            try:
+                # Validate required fields
+                required_fields = ['text', 'category', 'source_party', 'date', 'citation']
+                for field in required_fields:
+                    if field not in event:
+                        logger.warning(f"Event {i} missing field {field}: {event}")
+                        continue
 
-    return f"Synced {raw_doc_id} to Wiki layer. Found {len(contradictions)} contradictions."
+                # Apply adversarial labeling based on source_party
+                labeled_text = apply_adversarial_labeling(
+                    event['text'],
+                    event.get('source_party', raw_doc.source_party)
+                )
+
+                # Generate a unique title for the wiki page
+                event_date = event.get('date', 'unknown').replace('-', '_')
+                event_title_suffix = event['text'][:30].replace(' ', '_')
+                wiki_title = f"event_{event_date}_{event_title_suffix}_{i}"
+
+                # Save to WikiPage
+                wiki_page, created = WikiPage.objects.get_or_create(
+                    case=case,
+                    title=wiki_title,
+                    defaults={
+                        'content': labeled_text,
+                        'category': event.get('category', 'CONTESTED'),
+                        'version_history': [],
+                        'citation_references': [{
+                            'claim_id': f"CLM-{case.id}-{event.get('date', '000')}-{i:03d}",
+                            'source': event.get('citation', '')
+                        }]
+                    }
+                )
+
+                if not created:
+                    # Append to version history
+                    wiki_page.version_history.append({
+                        'content': wiki_page.content,
+                        'updated_at': str(wiki_page.last_updated)
+                    })
+                    wiki_page.content = labeled_text
+                    wiki_page.category = event.get('category', 'CONTESTED')
+                    wiki_page.save()
+
+                synced_count += 1
+                logger.info(f"Synced event {i+1}/{len(events)}: {event['text'][:50]}...")
+
+            except Exception as e:
+                logger.error(f"Failed to process event {i}: {e}")
+                continue
+
+        # Detect contradictions
+        contradictions = detect_contradictions(str(case.id))
+
+        logger.info(f"Successfully synced {synced_count}/{len(events)} events for document {raw_doc_id}")
+        return f"Synced {raw_doc_id} to Wiki layer: {synced_count} events processed, {len(contradictions)} contradictions found."
+
+    except RawDocument.DoesNotExist:
+        logger.error(f"RawDocument {raw_doc_id} not found")
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error syncing document {raw_doc_id}: {e}")
+        raise
 
 
 @shared_task

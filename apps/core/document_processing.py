@@ -28,8 +28,7 @@ except ImportError:
         return None
 
 from legal_utils import (
-    is_readable, extract_form_fields, extract_text_from_pdf,
-    extract_checkboxes
+    is_readable, extract_form_fields, extract_text_from_pdf
 )
 
 def ocr_pdf_images(pdf_path):
@@ -56,7 +55,7 @@ def ocr_pdf_images(pdf_path):
         print(f"  -> Local OCR error: {e}")
     return "\n".join(text_parts)
 
-def build_markdown_with_form(text, form_data, checkboxes):
+def build_markdown_with_form(text, form_data):
     lines = []
     if text:
         lines.append(text.strip())
@@ -64,10 +63,6 @@ def build_markdown_with_form(text, form_data, checkboxes):
         lines.append("\n## Form Fields\n")
         for key, value in form_data.items():
             lines.append(f"- **{key}**: {value}")
-    if checkboxes:
-        lines.append("\n## Checkboxes Checked\n")
-        for key, info in checkboxes.items():
-            lines.append(f"- [{info['mark']}] {info.get('label', '')}")
     return "\n".join(lines)
 
 def get_llm_converter():
@@ -87,7 +82,6 @@ def convert_pdf_to_markdown(pdf_path):
     md_path = pdf_path.with_suffix(".md")
     
     form_data = {}
-    checkboxes = {}
     text = ""
     llm_client = get_llm_converter()
 
@@ -118,12 +112,6 @@ def convert_pdf_to_markdown(pdf_path):
         except Exception:
             pass
         
-        # Try checkboxes
-        try:
-            checkboxes = extract_checkboxes(str(pdf_path))
-        except Exception:
-            pass
-
         # Try OCR for empty or short text
         if len(text.strip()) < 300:
             if llm_client:
@@ -145,7 +133,7 @@ def convert_pdf_to_markdown(pdf_path):
         if len(text.strip()) < 300:
             text = text + "\n\n[Note: This PDF may contain images. OCR processing may be incomplete.]"
 
-        combined = build_markdown_with_form(text, form_data, checkboxes)
+        combined = build_markdown_with_form(text, form_data)
 
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(combined)

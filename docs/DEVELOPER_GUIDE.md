@@ -1281,6 +1281,317 @@ def api_document_search(request):
 
 ---
 
+## 🚧 Unfinished Features & Roadmap
+
+### Current State
+
+The project is approximately 85% complete with core functionality implemented but several key features requiring completion:
+
+### 🚧 Unfinished Features
+
+#### 1. LLM Integration (High Priority)
+**Status**: Partially implemented with mock responses
+
+**Files Affected:**
+- `apps/core/tasks.py` - `call_llm()` function returns mock responses
+- `apps/core/tasks.py` - `initialize_llm_client()` needs integration with actual sync pipeline
+- `apps/core/tasks.py` - `sync_document_to_wiki()` uses placeholder LLM calls
+
+**What's Missing:**
+- Actual LLM API integration in the sync pipeline
+- Real implementation of `call_llm()` function
+- Integration with Ollama/Gemini clients in document processing
+
+**Implementation Plan:**
+```python
+# Replace mock call_llm() with actual LLM integration
+def call_llm(prompt, document_text):
+    """Call LLM with the sync prompt."""
+    llm_client = initialize_llm_client()
+    return llm_client.generate(prompt)
+```
+
+#### 2. Sync Pipeline Tracking (High Priority)
+**Status**: Basic implementation without status tracking
+
+**Files Affected:**
+- `apps/core/models.py` - RawDocument model missing `synced_at` field
+- `apps/core/tasks.py` - `task_sync_all_pending()` can't filter unsynced docs
+
+**What's Missing:**
+- `synced_at` field on RawDocument model
+- Query filtering for unsynced documents
+- Progress tracking for sync operations
+
+**Implementation Plan:**
+```python
+# Add to RawDocument model
+synced_at = models.DateTimeField(
+    null=True,
+    blank=True,
+    help_text="When the document was synced to Wiki layer"
+)
+
+# Update sync task
+pending_docs = RawDocument.objects.filter(synced_at__isnull=True)
+```
+
+#### 3. Conversation Logs (Medium Priority)
+**Status**: Placeholder app with no functionality
+
+**Files Affected:**
+- `apps/conversation_logs/` - Entire app is placeholder
+- `apps/conversation_logs/models.py` - Empty model
+- `apps/conversation_logs/views.py` - Basic views without logic
+
+**What's Missing:**
+- Actual conversation logging model
+- Integration with AI assistant
+- Message storage and retrieval
+
+**Implementation Plan:**
+```python
+# Implement proper conversation logging model
+class ConversationLog(models.Model):
+    conversation = models.ForeignKey(AIConversation, on_delete=models.CASCADE)
+    message = models.TextField()
+    sender = models.CharField(max_length=20)  # 'user' or 'ai'
+    timestamp = models.DateTimeField(auto_now_add=True)
+    metadata = models.JSONField(default=dict)
+```
+
+#### 4. Document Processing (Medium Priority)
+**Status**: Placeholder PDF extraction
+
+**Files Affected:**
+- `apps/core/tasks.py` - `load_document_text()` has placeholder PDF handling
+- `scripts/pdf_to_md_conversion.py` - Needs integration
+
+**What's Missing:**
+- Actual PDF text extraction
+- Integration with existing PDF processing scripts
+- Support for different document types
+
+**Implementation Plan:**
+```python
+# Integrate actual PDF extraction
+def load_document_text(raw_doc):
+    if raw_doc.file_type == 'pdf':
+        from scripts.pdf_to_md_conversion import extract_pdf_text
+        return extract_pdf_text(raw_doc.file.path)
+```
+
+#### 5. Adversarial Labeling (Medium Priority)
+**Status**: Function referenced but not implemented
+
+**Files Affected:**
+- `apps/core/utils.py` - Missing `apply_adversarial_labeling()` function
+- `apps/ai_assistant/views.py` - Missing `validate_adversarial_disclaimers()`
+
+**What's Missing:**
+- Implementation of adversarial labeling logic
+- Validation for AI response disclaimers
+- Integration with CROSS_EXAMINATION_PROMPT
+
+**Implementation Plan:**
+```python
+# Implement adversarial labeling
+def apply_adversarial_labeling(text, source_party):
+    if source_party == 'OPPOSING':
+        return f"The opposing party alleges: {text}"
+    elif source_party == 'CLIENT':
+        return text
+    else:
+        return f"According to the document: {text}"
+```
+
+### 🗑️ Redundant Code
+
+#### 1. Duplicate Markdown Parsing
+**Issue**: Multiple functions with overlapping functionality
+
+**Files Affected:**
+- `apps/timeline/utils.py` - `parse_timeline_events_from_markdown()` vs `parse_section_events()`
+- `apps/timeline/utils.py` - Multiple event extraction methods
+
+**Recommendation:**
+```python
+# Consolidate into single unified parsing function
+def parse_timeline_events_unified(content, format='auto'):
+    # Auto-detect table vs section format
+    # Return standardized event format
+```
+
+#### 2. Unused Imports
+**Issue**: Various imports that aren't used
+
+**Files Affected:**
+- Multiple files throughout the codebase
+
+**Recommendation:**
+- Run `uv run python -m py_compile` to identify unused imports
+- Remove unused imports to clean up code
+
+#### 3. Placeholder Functions
+**Issue**: Functions that just return mock data
+
+**Files Affected:**
+- `apps/core/tasks.py` - Mock LLM functions
+- `apps/conversation_logs/` - Entire placeholder app
+
+**Recommendation:**
+- Either implement fully or remove placeholder code
+- Add TODO comments for incomplete features
+
+### 📈 Areas for Improvement
+
+#### 1. Error Handling
+**Current State**: Basic error handling in most places
+
+**Improvements Needed:**
+- More robust error handling in LLM integration
+- Better validation for document processing
+- Comprehensive error logging
+
+**Example:**
+```python
+# Add comprehensive error handling for LLM calls
+try:
+    response = llm_client.generate(prompt)
+    return json.loads(response)
+except json.JSONDecodeError as e:
+    logger.error(f"LLM JSON parse error: {e}")
+    return {"error": "Invalid LLM response format"}
+except Exception as e:
+    logger.error(f"LLM call failed: {e}")
+    return {"error": "LLM processing failed"}
+```
+
+#### 2. Performance Optimization
+**Current State**: Basic queries without optimization
+
+**Improvements Needed:**
+- Add caching for parsed markdown files
+- Implement query optimization
+- Add database indexing
+
+**Example:**
+```python
+# Add caching for markdown parsing
+from django.core.cache import cache
+
+def parse_markdown_file(file_path):
+    cache_key = f"parsed_markdown_{file_path}"
+    cached = cache.get(cache_key)
+    if cached:
+        return cached
+    
+    result = do_expensive_parsing(file_path)
+    cache.set(cache_key, result, 3600)  # Cache for 1 hour
+    return result
+```
+
+#### 3. Documentation Updates
+**Current State**: DEVELOPER_GUIDE.md needs updates
+
+**Improvements Needed:**
+- Add section for unfinished features
+- Update with current implementation status
+- Add roadmap for completion
+
+**Example:**
+```markdown
+## 🚧 Unfinished Features & Roadmap
+
+### Current State
+The project is approximately 85% complete with these features remaining:
+
+1. **LLM Integration** (High Priority)
+   - Status: Mock implementation
+   - Files: `apps/core/tasks.py`
+   - Next Steps: Integrate actual LLM API calls
+
+2. **Sync Pipeline Tracking** (High Priority)
+   - Status: Basic implementation
+   - Files: `apps/core/models.py`, `apps/core/tasks.py`
+   - Next Steps: Add `synced_at` field and tracking
+```
+
+#### 4. Testing Coverage
+**Current State**: Basic test coverage
+
+**Improvements Needed:**
+- More comprehensive test cases
+- Edge case testing
+- Integration testing
+
+**Example:**
+```python
+# Add edge case tests
+class TestMarkdownParsing(TestCase):
+    def test_empty_file(self):
+        with self.assertRaises(MarkdownValidationError):
+            parse_markdown_file('empty.md')
+    
+    def test_invalid_format(self):
+        result = parse_markdown_file('invalid.md')
+        self.assertIn('warnings', result)
+```
+
+#### 5. Code Organization
+**Current State**: Some duplicate logic
+
+**Improvements Needed:**
+- Consolidate duplicate parsing functions
+- Better separation of concerns
+- More modular design
+
+**Example:**
+```python
+# Create unified parsing module
+# apps/timeline/parsing/
+#   ├── __init__.py
+#   ├── table_parser.py
+#   ├── section_parser.py
+#   └── unified_parser.py
+```
+
+---
+
+## 🚀 Completion Roadmap
+
+### Phase 1: Core Completion (2-3 weeks)
+1. ✅ Complete LLM integration in sync pipeline
+2. ✅ Add sync status tracking to RawDocument model
+3. ✅ Implement basic conversation logging
+4. ✅ Integrate PDF extraction from scripts
+
+### Phase 2: Quality Improvement (1-2 weeks)
+1. ✅ Consolidate duplicate parsing code
+2. ✅ Add comprehensive error handling
+3. ✅ Implement caching for performance
+4. ✅ Update documentation
+
+### Phase 3: Testing & Polish (1 week)
+1. ✅ Add comprehensive test coverage
+2. ✅ Performance optimization
+3. ✅ Code cleanup and organization
+4. ✅ Final documentation review
+
+---
+
+## 📞 Support
+
+- **Documentation**: This guide, USER_GUIDE.md, TESTING_CHECKLIST.md
+- **Django Documentation**: https://docs.djangoproject.com/
+- **Python Markdown**: https://python-markdown.github.io/
+- **BeautifulSoup**: https://www.crummy.com/software/BeautifulSoup/
+- **uv Package Manager**: https://docs.astral.sh/uv/
+- **LLM Integration**: See `apps/core/llm_clients.py`, `apps/core/prompts.py`
+- **3-Layer Wiki**: See `ADVERSARIAL_HANDLING.md`, `SYNC_PIPELINE_README.md`
+
+---
+
 **Last Updated**: 2026-04-30
 **Version**: 1.1
 
@@ -1295,3 +1606,6 @@ def api_document_search(request):
 - Added conversation_logs app (placeholder)
 - Fixed Case.get_default_case() → Case.get_user_case()
 - Documented sync pipeline for document processing
+- **Added Unfinished Features & Roadmap section**
+- **Added Redundant Code identification**
+- **Added Areas for Improvement section**
