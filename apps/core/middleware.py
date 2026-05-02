@@ -250,7 +250,7 @@ class CaseSelectionMiddleware(MiddlewareMixin):
             # Auto-select the first case
             first_case = user_cases.order_by('-updated_at').first()
             if first_case:
-                request.session['selected_case_id'] = first_case.id
+                request.session['selected_case_id'] = str(first_case.id)
             return None
         
         # Verify the selected case belongs to this user
@@ -260,7 +260,7 @@ class CaseSelectionMiddleware(MiddlewareMixin):
             # Auto-select the first case
             first_case = user_cases.order_by('-updated_at').first()
             if first_case:
-                request.session['selected_case_id'] = first_case.id
+                request.session['selected_case_id'] = str(first_case.id)
             else:
                 request.session.pop('selected_case_id', None)
         

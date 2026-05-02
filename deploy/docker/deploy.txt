@@ -1,0 +1,11 @@
+# Build and start containers
+docker-compose up --build
+
+# Apply migrations
+docker-compose exec web python manage.py migrate
+
+# Create superuser
+docker-compose exec web python manage.py createsuperuser
+
+# Access the application
+open http://localhost:8000

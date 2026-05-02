@@ -32,6 +32,7 @@ INSTALLED_APPS = [
     'apps.timeline',
     'apps.archive',
     'apps.ai_assistant',
+    'apps.conversation_logs',
 ]
 
 MIDDLEWARE = [

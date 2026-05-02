@@ -65,24 +65,27 @@
     </div>
 
     <!-- Add Event Popup -->
-    <div class="event-popup-overlay" id="addEventPopup" style="display:none;">
+    <div class="event-popup-overlay" id="addEventPopup">
         <div class="event-popup">
             <div class="popup-header">
                 <h2>Add Event</h2>
                 <button class="close-btn" onclick="closeAddEventPopup()">✕</button>
             </div>
             <form id="addEventForm" class="event-form">
+                {% csrf_token %}
                 <div class="form-group">
                     <label>Date *</label>
                     <input type="date" name="date" required>
                 </div>
                 <div class="form-group">
-                    <label>Event *</label>
-                    <input type="text" name="event" placeholder="Event title" required>
+                    <label>Event/Incident *</label>
+                    <input type="text" name="event" placeholder="Event or incident title" required>
                 </div>
                 <div class="form-group">
                     <label>Category</label>
                     <select name="category">
+                        <option value="verified">Verified</option>
+                        <option value="contested">Contested</option>
                         <option value="personal">Personal</option>
                         <option value="legal">Legal</option>
                         <option value="medical">Medical</option>
@@ -92,12 +95,18 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Description</label>
-                    <textarea name="description" rows="3" placeholder="Event description"></textarea>
+                    <label>Supporting Document(s)</label>
+                    <select name="supporting_docs" id="supportingDocsSelect">
+                        <option value="">None</option>
+                        <!-- Documents will be loaded dynamically -->
+                    </select>
+                    <div class="doc-link-info">
+                        <small>Link to documents from your archive</small>
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label>Section</label>
-                    <input type="text" name="section" placeholder="e.g., 2012-2015">
+                    <label>Notes</label>
+                    <textarea name="description" rows="4" placeholder="Detailed notes about this event"></textarea>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="closeAddEventPopup()">Cancel</button>
@@ -363,7 +372,7 @@ const timelineEvents = {
 };
 
 // Global variable to store current event being viewed
-let currentEventId = null;
+var currentEventId = null;
 
 // Track AI analysis state
 let isAnalyzingWithAI = false;
@@ -428,7 +437,7 @@ document.addEventListener('DOMContentLoaded', function() {
     background: rgba(0,0,0,0.8); z-index: 2000;
     display: none; align-items: center; justify-content: center;
 }
-.event-popup-overlay.active { display: flex; }
+.event-popup-overlay.active { display: flex !important; }
 
 .event-popup {
     background: var(--bg-card); border: 2px solid var(--primary);
@@ -449,6 +458,22 @@ document.addEventListener('DOMContentLoaded', function() {
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
     outline: none; border-color: var(--primary);
 }
+.form-group select {
+    min-height: 2.5rem;
+    cursor: pointer;
+}
+.form-group textarea {
+    min-height: 4rem;
+    resize: vertical;
+}
+.doc-link-info {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+}
+.doc-link-info small {
+    font-style: italic;
+}
 .form-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
 .btn-secondary { padding: 0.5rem 1rem; background: transparent; border: 1px solid var(--border); color: var(--text); border-radius: 6px; cursor: pointer; }
 .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
@@ -459,30 +484,15 @@ document.addEventListener('DOMContentLoaded', function() {
 function showAddEventPopup() {
     document.getElementById('addEventPopup').classList.add('active');
 }
+
 function closeAddEventPopup() {
     document.getElementById('addEventPopup').classList.remove('active');
 }
+
 function printTimeline() {
     alert('Print to PDF - will be implemented with script');
 }
-document.getElementById('addEventForm')?.addEventListener('submit', function(e) {
-    e.preventDefault();
-    var formData = new FormData(this);
-    fetch('{% url "timeline:create_event" %}', {
-        method: 'POST',
-        body: formData,
-        headers: { 'X-CSRFToken': getCSRFToken() }
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.status === 'success') {
-            location.reload();
-        } else {
-            alert(data.error || 'Failed to add event');
-        }
-    })
-    .catch(err => { alert('Error: ' + err); });
-});
+
 function getCSRFToken() {
     var cs = document.cookie.split(';');
     for (var i = 0; i < cs.length; i++) {
@@ -491,5 +501,93 @@ function getCSRFToken() {
     }
     return '';
 }
+
+// Load archive documents for supporting docs dropdown
+function loadArchiveDocuments() {
+    var select = document.getElementById('supportingDocsSelect');
+    if (!select) return;
+    
+    // Check if we already loaded documents
+    if (select.options.length > 1) return;
+    
+    fetch('/archive/api/documents/')
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data && data.documents && data.documents.length > 0) {
+                data.documents.forEach(doc => {
+                    var option = document.createElement('option');
+                    option.value = doc.id;
+                    option.textContent = doc.title + ' (' + doc.file_type + ') ' + new Date(doc.upload_date).toLocaleDateString();
+                    select.appendChild(option);
+                });
+            }
+        })
+        .catch(error => {
+            console.error('Error loading documents:', error);
+        });
+}
+
+// Form submission handler
+document.addEventListener('DOMContentLoaded', function() {
+    var form = document.getElementById('addEventForm');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            var formData = new FormData(this);
+            
+            // Get CSRF token from the form's hidden input field
+            var csrfToken = form.querySelector('[name=csrfmiddlewaretoken]').value;
+            
+            fetch('{% url "timeline:create_event" %}', {
+                method: 'POST',
+                body: formData,
+                headers: { 
+                    'X-CSRFToken': csrfToken,
+                    'Accept': 'application/json'
+                }
+            })
+            .then(r => {
+                if (!r.ok) {
+                    throw new Error('Server error: ' + r.status);
+                }
+                return r.json();
+            })
+            .then(data => {
+                if (data.status === 'success') {
+                    location.reload();
+                } else {
+                    alert(data.error || 'Failed to add event');
+                }
+            })
+            .catch(err => { 
+                console.error('Error:', err);
+                alert('Error: ' + (err.message || String(err))); 
+            });
+        });
+    }
+    
+    // Load documents when modal opens
+    var modal = document.getElementById('addEventPopup');
+    if (modal) {
+        // Use a mutation observer to detect when modal becomes active
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.attributeName === 'class') {
+                    var attributeValue = mutation.target.getAttribute(mutation.attributeName);
+                    if (attributeValue && attributeValue.includes('active')) {
+                        loadArchiveDocuments();
+                    }
+                }
+            });
+        });
+        
+        observer.observe(modal, { attributes: true });
+    }
+});
 </script>
 {% endblock %}

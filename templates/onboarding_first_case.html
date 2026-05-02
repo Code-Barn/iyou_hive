@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Your First Case{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="card">
+        <div class="card-header">
+            <h2>Welcome to Hiver!</h2>
+        </div>
+        <div class="card-body">
+            <p class="lead">
+                To get started, please create your first case. Cases help you organize your legal work into separate containers for better isolation and focus.
+            </p>
+            
+            <form method="get" action="{% url 'core:case_list' %}">
+                <div class="mb-3">
+                    <label for="caseName" class="form-label">Case Name</label>
+                    <input type="text" class="form-control" id="caseName" name="create_case" placeholder="e.g., Smith v. Jones" required>
+                </div>
+                <div class="mb-3">
+                    <label for="caseDescription" class="form-label">Description (optional)</label>
+                    <textarea class="form-control" id="caseDescription" name="description" rows="3" placeholder="Brief description of this case"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">Create Case and Continue</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

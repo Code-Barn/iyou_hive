@@ -232,3 +232,23 @@ def auth_status(request):
             'challenge_url': '/accounts/challenge/',
             'login_url': '/accounts/login/',
         })
+
+
+@login_required
+def dashboard(request):
+    """
+    User dashboard - redirect to timeline if case is selected, otherwise show case list.
+    For first-time users, suggest creating a case.
+    """
+    case_id = request.session.get("selected_case_id")
+    if case_id:
+        return redirect("core:timeline")
+    
+    # Check if this is a first-time user (no cases created)
+    from apps.core.models import Case
+    has_cases = Case.objects.filter(user=request.user).exists()
+    if not has_cases:
+        # First-time user - suggest creating a case
+        messages.info(request, "Welcome! Please create your first case to get started.")
+    
+    return redirect("core:case_list")

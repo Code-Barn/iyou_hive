@@ -231,12 +231,19 @@ class TimelineEvent(models.Model):
  
     # Category Choices
     CATEGORY_CHOICES = [
+        ('verified', 'Verified'),      # NEW: Added for manual event creation
+        ('contested', 'Contested'),    # NEW: Added for manual event creation
         ('contract', 'Contract'),
         ('email', 'Email'),
         ('court_filing', 'Court Filing'),
         ('communication', 'Communication'),
         ('meeting', 'Meeting'),
         ('deadline', 'Deadline'),
+        ('personal', 'Personal'),      # NEW: Added for manual event creation
+        ('legal', 'Legal'),            # NEW: Added for manual event creation
+        ('medical', 'Medical'),        # NEW: Added for manual event creation
+        ('financial', 'Financial'),    # NEW: Added for manual event creation
+        ('education', 'Education'),    # NEW: Added for manual event creation
         ('other', 'Other'),
     ]
  
@@ -246,6 +253,11 @@ class TimelineEvent(models.Model):
     get_archive_documents(): Get linked ArchiveDocument objects
     get_document_urls(): Extract all document URLs from supporting_docs
 ```
+
+**NEW: Manual Event Creation**
+- Added `create_event` view for AJAX event creation
+- Supports dynamic document linking from archive
+- Uses standard 5-column format: Date, Event/Incident, Category, Supporting Documents, Notes
 
 ### Archive Models (apps/archive/models.py)
 
@@ -775,6 +787,28 @@ case = Case.get_default_case(request.user)
 if case:
     request.session['selected_case_id'] = case.id
 ```
+
+### Standard Folder Structure
+
+**NEW: Each case automatically gets a standardized folder structure**
+
+```python
+# Called automatically when creating a new case
+ArchiveDocument.create_standard_folder_structure(case, user)
+```
+
+Creates these folders:
+- `01_Raw/` - Original uploaded documents and source materials
+- `02_Wiki/` - Processed and cleaned documents for reference
+- `03_Drafts/` - Working drafts and editable documents
+- `04_Strategy/` - Strategy documents and case planning materials
+- `05_Exports/` - Export outputs, reports, and final deliverables
+
+**Implementation Details:**
+- Uses `.folder` files as folder markers
+- Stores folder metadata in JSON format
+- Folders appear with 📁 icon and special styling
+- Supports future nested folder expansion
 
 ---
 

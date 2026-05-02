@@ -29,9 +29,10 @@
                 {% if archive_documents %}
                 <div class="file-tree">
                     {% for doc in archive_documents %}
-                    <div class="file-item" data-id="{{ doc.pk }}" onclick="selectFile({{ doc.pk }})">
+                    <div class="file-item" data-id="{{ doc.pk }}" data-file-type="{{ doc.file_type }}" onclick="selectFile({{ doc.pk }})">
                         <span class="file-icon">
-                            {% if doc.file_type == 'pdf' %}📄
+                            {% if doc.file_type == 'folder' %}📁
+                            {% elif doc.file_type == 'pdf' %}📄
                             {% elif doc.file_type == 'image' %}🖼️
                             {% elif doc.file_type == 'word' %}📝
                             {% else %}📋
@@ -44,8 +45,18 @@
                 </div>
                 {% else %}
                 <div class="empty-files">
-                    <p>No files yet</p>
-                    <a href="{% url 'archive:upload' %}" class="btn btn-primary">Upload First Document</a>
+                    <p>Archive is ready!</p>
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0.5rem 0;">
+                        Standard folders have been created:
+                    </p>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary); line-height: 1.4;">
+                        <div>📁 01_Raw - Original documents</div>
+                        <div>📁 02_Wiki - Processed documents</div>
+                        <div>📁 03_Drafts - Working drafts</div>
+                        <div>📁 04_Strategy - Case strategy</div>
+                        <div>📁 05_Exports - Final outputs</div>
+                    </div>
+                    <a href="{% url 'archive:upload' %}" class="btn btn-primary" style="margin-top: 0.75rem;">Upload Document</a>
                 </div>
                 {% endif %}
             </div>
@@ -234,6 +245,20 @@
     border-left: 2px solid var(--primary);
 }
 
+/* Special styling for folder items */
+.file-item[data-file-type="folder"] {
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.file-item[data-file-type="folder"] .file-icon {
+    font-size: 1.2em;
+}
+
+.file-item[data-file-type="folder"]:hover {
+    background-color: rgba(255, 140, 0, 0.15);
+}
+
 .file-preview {
     flex: 1;
     background-color: var(--bg-card);
@@ -377,7 +402,12 @@ function loadFilePreview(fileId) {
     previewContent.innerHTML = '<p class="preview-placeholder">Loading preview...</p>';
     
     fetch('/archive/api/preview/' + fileId + '/')
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Server error: ' + response.status);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.type === 'markdown') {
                 // Store full content for expansion
@@ -407,7 +437,8 @@ function loadFilePreview(fileId) {
             }
         })
         .catch(error => {
-            previewContent.innerHTML = '<p class="preview-placeholder">Unable to load preview</p>';
+            console.error('Preview error:', error);
+            previewContent.innerHTML = '<p class="preview-placeholder">Unable to load preview: ' + (error.message || String(error)) + '</p>';
         });
 }
 
@@ -491,7 +522,12 @@ function uploadFiles(files) {
             'X-CSRFToken': getCSRFToken()
         }
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Server error: ' + response.status);
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.status === 'success') {
             alert('Uploaded ' + data.uploaded + ' files!');
@@ -501,7 +537,8 @@ function uploadFiles(files) {
         }
     })
     .catch(error => {
-        alert('Upload failed: ' + error);
+        console.error('Upload error:', error);
+        alert('Upload failed: ' + (error.message || String(error)));
     });
 }
 

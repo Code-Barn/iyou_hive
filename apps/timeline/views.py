@@ -296,17 +296,32 @@ def create_event(request):
     event = request.POST.get('event', '').strip()
     category = request.POST.get('category', 'other')
     description = request.POST.get('description', '').strip()
-    section = request.POST.get('section', '').strip()
+    supporting_docs = request.POST.get('supporting_docs', '')
     
     if not date or not event:
         return JsonResponse({'error': 'Date and event are required'}, status=400)
+    
+    # Prepare supporting documents list
+    docs_list = []
+    if supporting_docs and supporting_docs != '':
+        try:
+            from apps.archive.models import ArchiveDocument
+            doc = ArchiveDocument.objects.get(id=supporting_docs, user=request.user)
+            docs_list = [{
+                'id': str(doc.id),
+                'title': doc.title,
+                'file_type': doc.file_type,
+                'upload_date': doc.upload_date.isoformat() if doc.upload_date else None
+            }]
+        except (ArchiveDocument.DoesNotExist, ValueError):
+            pass  # Document doesn't exist or invalid ID, ignore it
     
     TimelineEvent.objects.create(
         date=date,
         event=event,
         category=category,
         notes=description,
-        supporting_docs=[],
+        supporting_docs=docs_list,
         case=case,
         created_by=request.user,
     )

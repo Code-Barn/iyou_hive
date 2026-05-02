@@ -37,26 +37,41 @@ def initialize_llm_client():
 def load_document_text(raw_doc):
     """
     Load the text content from a RawDocument.
-    Handles PDF, Markdown, and JSON files.
+    Handles PDF, Markdown, and JSON files using the integrated scripts.
     """
     if not raw_doc.file:
         return ""
 
     file_path = raw_doc.file.path
 
-    if raw_doc.file_type == 'pdf':
-        # Placeholder: use pdf-extract or similar
-        return f"[PDF content from {file_path}]"
-    elif raw_doc.file_type == 'md':
-        with open(file_path, 'r', encoding='utf-8') as f:
-            return f.read()
-    elif raw_doc.file_type == 'json':
-        with open(file_path, 'r', encoding='utf-8') as f:
-            import json
-            data = json.load(f)
-            return json.dumps(data, indent=2)
-    else:
-        return ""
+    try:
+        if raw_doc.file_type == 'pdf':
+            # Use the PDF extraction script
+            import sys
+            import os
+            
+            # Add scripts directory to path
+            scripts_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')
+            if scripts_dir not in sys.path:
+                sys.path.insert(0, scripts_dir)
+            
+            # Import and use the PDF extraction function
+            from pdf_to_md_conversion import extract_text_from_pdf
+            return extract_text_from_pdf(file_path)
+            
+        elif raw_doc.file_type == 'md':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        elif raw_doc.file_type == 'json':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                import json
+                data = json.load(f)
+                return json.dumps(data, indent=2)
+        else:
+            return ""
+    except Exception as e:
+        logger.error(f"Failed to load document text from {file_path}: {e}")
+        return f"[Error loading document: {str(e)}]"
 
 
 def call_llm(prompt, document_text):

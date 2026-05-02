@@ -11,7 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from .models import Case, TimelineFile
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument
@@ -44,7 +44,12 @@ def case_list(request):
                         description=request.GET.get('description', '')[:500]
                     )
                     messages.success(request, f'Case "{name}" created successfully!')
-                    return redirect('core:case_detail', case_id=case.id)
+                    
+                    # Automatically select this case for the user
+                    request.session['selected_case_id'] = str(case.id)
+                    
+                    # Redirect to home view instead of case detail
+                    return redirect('core:timeline')
             except Exception as e:
                 messages.error(request, f'Failed to create case: {e}')
     
@@ -132,10 +137,19 @@ def create_case(request):
                     is_active=True
                 )
                 
+                # Create standard folder structure for the new case
+                from apps.archive.models import ArchiveDocument
+                ArchiveDocument.create_standard_folder_structure(case, request.user)
+                
                 request.session['selected_case_id'] = str(case.id)
                 
                 messages.success(request, f'Case "{name}" created and selected!')
                 return redirect('timeline:timeline')
+        except IntegrityError as e:
+            if 'unique constraint' in str(e).lower() or 'duplicate key' in str(e).lower():
+                messages.error(request, f'A case with the name "{name}" already exists. Please choose a different name.')
+            else:
+                messages.error(request, f'Database error: {e}')
         except Exception as e:
             messages.error(request, f'Failed to create case: {e}')
             # Re-render form with pre-filled values

@@ -134,8 +134,9 @@ def upload_document(request):
             # If the file is a PDF, trigger the conversion task
             if document.file and document.file.name.lower().endswith('.pdf'):
                 convert_pdf_to_markdown.delay(document.id)
-
-            messages.success(request, 'Document uploaded successfully! It will be processed shortly.')
+                messages.success(request, 'PDF uploaded successfully! Text extraction and Markdown conversion started in background.')
+            else:
+                messages.success(request, f'Document "{document.title}" uploaded successfully!')
             return redirect('archive:archive')
         else:
             messages.error(request, 'Error uploading document. Please check the form.')
@@ -161,7 +162,7 @@ def bulk_upload(request):
     else:
         case = Case.get_default_case(request.user)
         if case:
-            request.session['selected_case_id'] = case.id
+            request.session['selected_case_id'] = str(case.id)
     
     if request.method == 'POST':
         files = request.FILES.getlist('files')
@@ -207,7 +208,7 @@ def bulk_upload(request):
 
 @login_required
 def document_detail(request, pk):
-    """Display a single document with metadata."""
+    """Display a single document with metadata and PDF/Markdown preview."""
     document = get_object_or_404(ArchiveDocument, pk=pk)
     
     # Get related timeline events
@@ -215,18 +216,54 @@ def document_detail(request, pk):
     if document.timeline_event:
         related_events = [document.timeline_event]
     
-    # Get converted markdown file if it exists
-    markdown_content = None
-    if document.file and document.file.name.lower().endswith('.pdf'):
-        md_path = document.file.path.replace('.pdf', '.md')
-        if os.path.exists(md_path):
-            with open(md_path, 'r', encoding='utf-8') as f:
-                markdown_content = f.read()
+    # Determine preview mode (default to PDF if available, otherwise text)
+    preview_mode = request.GET.get('preview', 'pdf' if document.file and document.file.name.lower().endswith('.pdf') else 'text')
+    
+    # Get preview content based on mode
+    preview_content = ""
+    show_pdf_preview = False
+    show_text_preview = False
+    show_md_preview = False
+    
+    if preview_mode == 'text' and document.extracted_text:
+        preview_content = document.extracted_text
+        show_text_preview = True
+    elif preview_mode == 'md' and document.markdown_path:
+        try:
+            with open(document.markdown_path, 'r', encoding='utf-8') as f:
+                preview_content = f.read()
+            show_md_preview = True
+        except Exception:
+            preview_content = "Markdown file not available or could not be read."
+    elif document.file:
+        if document.file.name.lower().endswith('.pdf'):
+            preview_content = f"PDF document: {document.file.name}"
+            show_pdf_preview = True
+        else:
+            preview_content = f"Document: {document.file.name}"
+    else:
+        preview_content = "No content available."
+    
+    # Check if auto-conversion is needed
+    auto_convert_needed = (
+        document.file and 
+        document.file.name.lower().endswith('.pdf') and
+        document.conversion_status == 'PENDING'
+    )
     
     return render(request, 'archive/document_detail.html', {
         'document': document,
         'related_events': related_events,
-        'markdown_content': markdown_content
+        'markdown_content': markdown_content if 'markdown_content' in locals() else None,
+        'preview_mode': preview_mode,
+        'preview_content': preview_content,
+        'show_pdf_preview': show_pdf_preview,
+        'show_text_preview': show_text_preview,
+        'show_md_preview': show_md_preview,
+        'auto_convert_needed': auto_convert_needed,
+        'has_pdf': document.file and document.file.name.lower().endswith('.pdf'),
+        'has_text': bool(document.extracted_text),
+        'has_markdown': bool(document.markdown_path),
     })
 
 

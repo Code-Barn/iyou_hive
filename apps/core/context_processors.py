@@ -36,7 +36,7 @@ def cases_processor(request):
         
         if not current_case and case_list:
             current_case = Case.objects.get(id=case_list[0]['id'], user=request.user)
-            request.session['selected_case_id'] = current_case.id
+            request.session['selected_case_id'] = str(current_case.id)
         
         # Get documents for this case (for archive pane)
         if current_case:

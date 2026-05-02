@@ -14,17 +14,26 @@
 
 ### Timeline Features
 - Create events from markdown files
-- Link supporting documents to events
+- **Add Event modal** with standard 5-column format (Date, Event/Incident, Category, Supporting Documents, Notes)
+- Link supporting documents to events with dynamic dropdown
 - Clickable event cards with popup modals
 - Sticky year headers for easy navigation
 - Category filtering and sorting
+- Manual event creation with document linking
 
 ### Document Archive Features
 - Upload PDFs, images, and other file types
+- **Auto-populated folder structure** for each case:
+  - `01_Raw/` - Original uploaded documents
+  - `02_Wiki/` - Processed/cleaned documents  
+  - `03_Drafts/` - Working drafts and edits
+  - `04_Strategy/` - Case strategy documents
+  - `05_Exports/` - Final outputs and reports
 - Auto-detect file types and metadata
 - Tag and categorize documents
 - Link documents to timeline events
 - Search and filter documents
+- Visual folder icons and styling
 
 ### AI Assistant Features
 - Query timeline events in natural language
@@ -125,12 +134,18 @@ Hiver now supports multiple Markdown-based timelines with dynamic heading parsin
    - Select your Markdown file
    - The system will automatically parse and create timeline events
 
-3. **Select Timelines**:
+3. **Add Events Manually**:
+   - Click the "Add Event" button in the timeline header
+   - Fill out the 5-column form: Date, Event/Incident, Category, Supporting Documents, Notes
+   - Select supporting documents from the dropdown (loaded from your archive)
+   - Events are created instantly and appear in the timeline
+
+4. **Select Timelines**:
    - Use the timeline selector dropdown to switch between different timelines
    - Each timeline maintains its own set of events and headings
    - Selections are persisted in localStorage
 
-4. **Dynamic Headings**:
+5. **Dynamic Headings**:
    - The first H1 heading from your Markdown file becomes the main timeline title
    - All headings (H1-H6) are displayed as a navigation bar
    - Click on headings to scroll to sections
@@ -140,8 +155,14 @@ Hiver now supports multiple Markdown-based timelines with dynamic heading parsin
 Organize your work into separate cases for better isolation:
 
 1. **Create Cases**: Cases are automatically created per user
-2. **Switch Cases**: Use the case selector dropdown in the header
-3. **Case-Specific Data**: Timeline events, documents, and AI context are filtered by case
+2. **Automatic Folder Structure**: Each new case gets a standardized folder structure:
+   - `01_Raw/` - Original source materials
+   - `02_Wiki/` - Processed knowledge base
+   - `03_Drafts/` - Working documents
+   - `04_Strategy/` - Case planning materials
+   - `05_Exports/` - Final outputs and reports
+3. **Switch Cases**: Use the case selector dropdown in the header
+4. **Case-Specific Data**: Timeline events, documents, and AI context are filtered by case
 
 ### Workspace Layout
 
