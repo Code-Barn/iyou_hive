@@ -25,20 +25,20 @@ Status: Unresolved
 Format the output as a JSON array of events/claims:
 ```json
 [
-  {
+  {{
     "text": "The contract was signed on 2023-10-15.",
     "category": "Stipulated/Verified",
     "source_party": "CLIENT",
     "date": "2023-10-15",
     "citation": "Layer1/PDFs/contract_123.pdf"
-  },
-  {
+  }},
+  {{
     "text": "The Defendant claims the Plaintiff was late.",
     "category": "Contested Allegation",
     "source_party": "OPPOSING",
     "date": "2023-11-20",
     "citation": "Layer1/PDFs/motion_456.pdf"
-  }
+  }}
 ]
 ```
 

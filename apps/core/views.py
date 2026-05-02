@@ -273,7 +273,7 @@ def api_case_list(request):
     case_list = []
     for case in cases:
         case_list.append({
-            'id': case.id,
+            'id': str(case.id),  # Convert UUID to string for JSON serialization
             'name': case.name,
             'description': case.description,
             'color': case.color,
@@ -303,7 +303,7 @@ def api_case_detail(request, case_id):
     timeline_files = TimelineFile.objects.filter(case=case)
     
     return JsonResponse({
-        'id': case.id,
+        'id': str(case.id),  # Convert UUID to string for JSON serialization
         'name': case.name,
         'description': case.description,
         'color': case.color,

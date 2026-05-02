@@ -18,8 +18,20 @@ class BaseLLMClient:
 class MockLLMClient(BaseLLMClient):
     """Mock LLM client for testing."""
 
-    def __init__(self, response: str = "Mock response"):
-        self.response = response
+    def __init__(self, response: str = None):
+        if response is None:
+            # Default to valid JSON response for testing
+            self.response = json.dumps([
+                {
+                    "text": "The contract was signed on 2023-10-15.",
+                    "category": "Stipulated/Verified",
+                    "source_party": "CLIENT",
+                    "date": "2023-10-15",
+                    "citation": "Layer1/PDFs/contract_123.pdf"
+                }
+            ])
+        else:
+            self.response = response
 
     def generate(self, prompt: str) -> str:
         return self.response

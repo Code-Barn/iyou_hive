@@ -491,7 +491,7 @@ def api_timeline_headings(request):
         if os.path.exists(tf.file_path):
             parsed = parse_markdown_file(tf.file_path)
             timelines.append({
-                'id': tf.id,
+                'id': str(tf.id),  # Convert UUID to string for JSON serialization
                 'name': tf.name,
                 'file_path': tf.file_path,
                 'main_heading': parsed['first_heading'],

@@ -31,7 +31,7 @@ def initialize_llm_client():
         )
     else:
         from .llm_clients import MockLLMClient
-        return MockLLMClient(response="Mock response")
+        return MockLLMClient()  # Uses default valid JSON response
 
 
 def load_document_text(raw_doc):
@@ -140,11 +140,19 @@ def sync_document_to_wiki(raw_doc_id: str):
         for page in wiki_pages:
             existing_wiki += f"\n--- {page.title} ---\n{page.content}\n"
 
+        # Ensure we have some existing wiki content for the prompt
+        if not existing_wiki.strip():
+            existing_wiki = "No existing wiki content available."
+
         # Prepare the prompt for the LLM
-        prompt = SYNC_PROMPT_TEMPLATE.format(
-            document_text=document_text,
-            existing_wiki=existing_wiki
-        )
+        try:
+            prompt = SYNC_PROMPT_TEMPLATE.format(
+                document_text=document_text,
+                existing_wiki=existing_wiki
+            )
+        except KeyError as e:
+            logger.error(f"Prompt template error: missing placeholder {e}")
+            raise ValueError(f"Prompt template missing required placeholder: {e}")
 
         # Call the LLM with improved integration
         llm_response = call_llm(prompt, document_text)
@@ -216,6 +224,11 @@ def sync_document_to_wiki(raw_doc_id: str):
         # Detect contradictions
         contradictions = detect_contradictions(str(case.id))
 
+        # Mark the document as synced
+        from django.utils import timezone
+        raw_doc.synced_at = timezone.now()
+        raw_doc.save()
+        
         logger.info(f"Successfully synced {synced_count}/{len(events)} events for document {raw_doc_id}")
         return f"Synced {raw_doc_id} to Wiki layer: {synced_count} events processed, {len(contradictions)} contradictions found."
 
@@ -251,17 +264,15 @@ def task_sync_all_pending():
     """
     from apps.core.models import RawDocument
 
-    # Find documents that haven't been synced
-    # This requires tracking sync status - add a `synced_at` field to RawDocument
-    pending_docs = RawDocument.objects.filter(
-        # synced_at__isnull=True  # Uncomment when field is added
-    )
+    # Find documents that haven't been synced (synced_at is null)
+    pending_docs = RawDocument.objects.filter(synced_at__isnull=True)
 
     synced = 0
     for doc in pending_docs:
         try:
             task_sync_raw_document.delay(str(doc.id))
             synced += 1
+            logger.info(f"Queued document {doc.id} for sync")
         except Exception as e:
             logger.error(f"Failed to queue sync for {doc.id}: {e}")
 

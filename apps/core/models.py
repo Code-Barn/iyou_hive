@@ -324,6 +324,12 @@ class RawDocument(models.Model):
         help_text="Whether the document can be modified after creation"
     )
 
+    synced_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the document was synced to Wiki layer"
+    )
+
     class Meta:
         ordering = ['-uploaded_at']
         verbose_name = 'Raw Document'

@@ -13,6 +13,13 @@ load_dotenv()
 from markitdown import MarkItDown
 import fitz
 
+# Add scripts directory to Python path for imports
+import sys
+import os
+scripts_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')
+if scripts_dir not in sys.path:
+    sys.path.insert(0, scripts_dir)
+
 # It's better to handle the absence of paddleocr gracefully
 try:
     from paddleocr import PaddleOCR
