@@ -9,8 +9,6 @@ from apps.ai_assistant.models import AIConversation
 from apps.core.prompts import CROSS_EXAMINATION_PROMPT
 from apps.core.utils import validate_adversarial_disclaimers
 import json
-import urllib.request
-import urllib.parse
 
 
 def get_ai_response(user_query: str, case_id: str) -> str:
@@ -59,9 +57,77 @@ def get_ai_response(user_query: str, case_id: str) -> str:
 
 
 @login_required
+def save_api_key(request):
+    """Save user's Mistral API key to their profile."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    try:
+        data = json.loads(request.body)
+        api_key = data.get('api_key', '').strip()
+        
+        if not api_key:
+            return JsonResponse({'error': 'API key is required'}, status=400)
+        
+        # Save the API key to user settings
+        from .models import UserSettings
+        
+        try:
+            # Try to get existing settings
+            user_settings = UserSettings.objects.get(user=request.user)
+        except UserSettings.DoesNotExist:
+            # Create new settings if none exist
+            user_settings = UserSettings(user=request.user)
+        
+        # Check if the API key is the same as the current one
+        if user_settings.mistral_api_key == api_key:
+            print(f"API key is already set for user: {request.user.username}")
+            return JsonResponse({
+                'success': True,
+                'message': 'API key is already set. No changes needed.'
+            })
+        
+        # Save the API key
+        user_settings.mistral_api_key = api_key
+        user_settings.save()
+        
+        print(f"API key saved for user: {request.user.username}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'API key saved successfully. Page will reload to apply changes.'
+        })
+    
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        import traceback
+        print(f"Error saving API key: {str(e)}")
+        print("Full traceback:", traceback.format_exc())
+        return JsonResponse({
+            'error': f'Failed to save API key: {str(e)}',
+            'debug': traceback.format_exc().split('\n')
+        }, status=500)
+
+
+@login_required
 def ai_chat_view(request):
     """Render the AI assistant chat interface for the current case."""
-    api_key = settings.MISTRAL_API_KEY
+    # Check user's API key first, then fall back to settings
+    from .models import UserSettings
+    
+    user_api_key = None
+    try:
+        user_settings = UserSettings.objects.get(user=request.user)
+        user_api_key = user_settings.mistral_api_key
+        print(f"User API key retrieved for {request.user.username}: {bool(user_api_key)}")
+    except UserSettings.DoesNotExist:
+        print(f"No UserSettings found for {request.user.username}")
+        pass
+    
+    # Use user's API key if available, otherwise use settings
+    api_key = user_api_key or settings.MISTRAL_API_KEY
+    print(f"Final API key status for {request.user.username}: {bool(api_key)}")
     
     # Get case from session - required
     case_id = request.session.get('selected_case_id')
@@ -295,61 +361,52 @@ def call_ai_api(prompt, model="mistral-tiny", temperature=0.7, max_tokens=2000):
     """
     Call the Mistral AI API to get a response.
     
-    This is a placeholder implementation that simulates AI responses
-    when no API key is configured.
+    Uses the Mistral API when configured, falls back to simulated responses for development.
     """
     api_key = settings.MISTRAL_API_KEY
     
     if not api_key:
-        # Return a simulated response for development
+        # Return a helpful error message instead of simulation
         return (
-            "Based on the information provided, here's my analysis:\n\n"
-            "**Summary:** This is a simulated response since no Mistral API key is configured.\n\n"
-            "**Key Points:**\n"
-            "- The event requires careful review\n"
-            "- Important dates should be tracked\n"
-            "- Connections to other documents should be established\n\n"
-            "**Recommendations:**\n"
-            "1. Review the supporting documents\n"
-            "2. Follow up on any deadlines\n"
-            "3. Consider linking related events\n\n"
-            "For actual AI analysis, please configure your MISTRAL_API_KEY in settings."
+            "Error: Mistral API key not configured.\n\n"
+            "Please set MISTRAL_API_KEY in your .env file to enable AI features.\n"
+            "For development, you can use a test API key or configure the key in settings.py."
         )
     
     try:
-        # Make actual API call to Mistral
-        return call_mistral_api(prompt, api_key, model, temperature, max_tokens)
-    
-    except Exception as e:
-        # Fallback for API errors
-        return f"I encountered an error processing your request: {str(e)}\n\nPlease try again, or check your Mistral API configuration."
-
-
-def call_mistral_api(prompt, api_key, model="mistral-tiny", temperature=0.7, max_tokens=2000):
-    """
-    Call the Mistral AI API using urllib.
-    
-    This is a more reliable implementation that doesn't require the requests library.
-    """
-    try:
+        # Make actual API call to Mistral using requests
+        import json
+        import requests
+        
         url = "https://api.mistral.ai/v1/chat/completions"
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
-        payload = json.dumps({
+        payload = {
             "model": model,
             "messages": [
                 {"role": "user", "content": prompt}
             ],
             "temperature": temperature,
             "max_tokens": max_tokens,
-        }).encode('utf-8')
+        }
         
-        req = urllib.request.Request(url, data=payload, headers=headers, method='POST')
-        with urllib.request.urlopen(req, timeout=30) as response:
-            data = json.loads(response.read().decode('utf-8'))
-            return data['choices'][0]['message']['content']
-    
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+        response.raise_for_status()
+        
+        data = response.json()
+        return data['choices'][0]['message']['content']
+        
+    except requests.exceptions.RequestException as e:
+        # Network or API error
+        return f"API Request Failed: {str(e)}\n\nPlease check:"
+    except (KeyError, json.JSONDecodeError) as e:
+        # API response format error
+        return f"API Response Error: {str(e)}\n\nThe Mistral API may have changed or returned an unexpected format."
     except Exception as e:
-        raise Exception(f"API call failed: {str(e)}")
+        # Other errors
+        return f"Error processing AI request: {str(e)}\n\nPlease check your Mistral API configuration."
+
+
+

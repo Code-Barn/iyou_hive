@@ -26,10 +26,26 @@ class CaseModelTest(TestCase):
     
     def test_get_default_case(self):
         """Test getting default case for a user."""
+        # Test that get_default_case returns None when no cases exist
         case = Case.get_default_case(self.user)
-        self.assertIsNotNone(case)
-        self.assertEqual(case.name, 'Default Case')
-        self.assertTrue(case.is_active)
+        self.assertIsNone(case)
+        
+        # Test that it returns the most recent case when cases exist
+        case1 = Case.objects.create(
+            name='First Case',
+            user=self.user,
+            description='First case'
+        )
+        case2 = Case.objects.create(
+            name='Second Case',
+            user=self.user,
+            description='Second case'
+        )
+        
+        # get_default_case should return the most recently updated case
+        returned_case = Case.get_default_case(self.user)
+        self.assertIsNotNone(returned_case)
+        self.assertEqual(returned_case.name, 'Second Case')
     
     def test_case_unique_together(self):
         """Test that case name must be unique per user."""

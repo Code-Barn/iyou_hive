@@ -146,12 +146,12 @@ class PDFConversionTest(TestCase):
     
     def test_pdf_conversion_creates_markdown(self):
         """Test that PDF conversion creates a markdown file."""
-        from apps.archive.views import run_pdf_conversion
+        from apps.core.document_processing import convert_pdf_to_markdown
         
         # This test will only work if pdfplumber is installed
         # For now, we just test that the function exists and doesn't crash
         try:
-            result = run_pdf_conversion(self.pdf_path)
+            result = convert_pdf_to_markdown(self.pdf_path)
             # Result will be None if pdfplumber is not installed
             # or the path to the markdown file if conversion succeeded
         except Exception as e:
@@ -165,6 +165,16 @@ class PDFConversionTest(TestCase):
         
         client = Client()
         client.login(username='testuser', password='testpass123')
+        
+        # Create a case and set it in session
+        case = Case.objects.create(
+            name='Test Case',
+            user=self.user,
+            description='Test case for PDF upload'
+        )
+        session = client.session
+        session['selected_case_id'] = str(case.id)
+        session.save()
         
         # Upload a PDF
         with open(self.pdf_path, 'rb') as f:

@@ -35,6 +35,16 @@ class AIAssistantViewTest(TestCase):
             password='testpass123'
         )
         self.client.login(username='testuser', password='testpass123')
+        
+        # Create a case for the user and set it in session
+        self.case = Case.objects.create(
+            name='Test Case',
+            user=self.user,
+            description='Test case for AI assistant'
+        )
+        session = self.client.session
+        session['selected_case_id'] = str(self.case.id)
+        session.save()
     
     def test_ai_chat_view(self):
         """Test AI chat view."""
@@ -48,7 +58,9 @@ class AIAssistantViewTest(TestCase):
             date=date(2023, 1, 15),
             event='Recent Event',
             category='other',
-            notes='Test notes'
+            notes='Test notes',
+            created_by=self.user,
+            case=self.case
         )
         
         response = self.client.get(reverse('ai_assistant:chat'))
@@ -62,7 +74,7 @@ class AIAPIFunctionTest(TestCase):
     """Test AI API functions."""
     
     def test_call_ai_api_without_key(self):
-        """Test AI API returns simulated response without API key."""
+        """Test AI API returns error message without API key."""
         # Temporarily remove API key
         original_key = settings.MISTRAL_API_KEY
         settings.MISTRAL_API_KEY = ''
@@ -71,9 +83,10 @@ class AIAPIFunctionTest(TestCase):
             prompt = "What is 2+2?"
             response = call_ai_api(prompt)
             
-            # Should return simulated response
-            self.assertIn('simulated response', response.lower())
-            self.assertIn('mistral', response.lower())
+            # Should return error message about missing API key
+            self.assertIn('error', response.lower())
+            self.assertIn('mistral api key not configured', response.lower())
+            self.assertIn('.env file', response.lower())
         finally:
             settings.MISTRAL_API_KEY = original_key
     
@@ -163,7 +176,7 @@ class TimelineIntegrationTest(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data['status'], 'success')
-        self.assertEqual(data['event_id'], self.event1.pk)
+        self.assertEqual(data['event_id'], str(self.event1.pk))
         self.assertIn('analysis', data)
 
 
@@ -242,3 +255,93 @@ class AIConversationModelTest(TestCase):
         case_convs = AIConversation.objects.filter(case=self.case)
         self.assertEqual(case_convs.count(), 1)
         self.assertEqual(case_convs.first(), conv1)
+
+
+class APIKeyTest(TestCase):
+    """Test API key saving functionality."""
+    
+    def setUp(self):
+        """Set up test data."""
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='testuser',
+            email='test@example.com',
+            password='testpass123'
+        )
+        self.client.login(username='testuser', password='testpass123')
+        
+        # Create a case for the user and set it in session
+        self.case = Case.objects.create(
+            name='Test Case',
+            user=self.user,
+            description='Test case for API key saving'
+        )
+        session = self.client.session
+        session['selected_case_id'] = str(self.case.id)
+        session.save()
+
+    def test_save_api_key_success(self):
+        """Test saving API key successfully."""
+        response = self.client.post(
+            reverse('ai_assistant:save_api_key'),
+            data=json.dumps({'api_key': 'test-api-key-123'}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data['success'])
+        self.assertIn('API key saved successfully', data['message'])
+        
+        # Verify the API key was saved
+        from .models import UserSettings
+        user_settings = UserSettings.objects.get(user=self.user)
+        self.assertEqual(user_settings.mistral_api_key, 'test-api-key-123')
+
+    def test_save_api_key_duplicate(self):
+        """Test saving the same API key twice returns success without error."""
+        # First save
+        response1 = self.client.post(
+            reverse('ai_assistant:save_api_key'),
+            data=json.dumps({'api_key': 'test-api-key-123'}),
+            content_type='application/json'
+        )
+        self.assertEqual(response1.status_code, 200)
+        
+        # Second save with same key
+        response2 = self.client.post(
+            reverse('ai_assistant:save_api_key'),
+            data=json.dumps({'api_key': 'test-api-key-123'}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response2.status_code, 200)
+        data = response2.json()
+        self.assertTrue(data['success'])
+        self.assertIn('already set', data['message'])
+
+    def test_save_api_key_empty(self):
+        """Test saving empty API key returns error."""
+        response = self.client.post(
+            reverse('ai_assistant:save_api_key'),
+            data=json.dumps({'api_key': ''}),
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn('error', data)
+        self.assertIn('API key is required', data['error'])
+
+    def test_save_api_key_invalid_json(self):
+        """Test saving API key with invalid JSON returns error."""
+        response = self.client.post(
+            reverse('ai_assistant:save_api_key'),
+            data='invalid json',
+            content_type='application/json'
+        )
+        
+        self.assertEqual(response.status_code, 400)
+        data = response.json()
+        self.assertIn('error', data)
+        self.assertIn('Invalid JSON data', data['error'])

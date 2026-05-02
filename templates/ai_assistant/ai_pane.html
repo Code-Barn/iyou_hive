@@ -1,4 +1,5 @@
 <div class="ai-pane">
+    {% load static %}
     <div class="ai-header">
         <h1>AI Research Assistant</h1>
     </div>
@@ -25,6 +26,9 @@
         </form>
     </div>
 </div>
+
+<!-- Load AI Assistant JavaScript -->
+<script src="{% static 'js/ai_assistant.js' %}"></script>
 
 <style>
 .ai-pane {

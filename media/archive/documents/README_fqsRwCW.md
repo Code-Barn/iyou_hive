@@ -1,0 +1,530 @@
+# Hiver
+
+**Hiver** is a self-hosted, federated Django application for interactive legal timelines, document archiving, and AI-assisted research. Built for the Byers Brands ecosystem.
+
+## Features
+
+### Core Capabilities
+- ✅ **Interactive Timeline**: Vertical scrolling timeline with sticky date headers
+- ✅ **Document Archive**: Store and manage legal documents (PDFs, images, etc.)
+- ✅ **AI Research Assistant**: Query timeline events and documents using Mistral AI
+- ✅ **Dark/Light Mode**: Toggle between themes with CSS variables
+- ✅ **Authentication**: Secure access with Rust-DID integration (Epiphany separation pattern)
+- ✅ **Responsive Design**: Mobile-friendly interface
+
+### Timeline Features
+- Create events from markdown files
+- **Add Event modal** with standard 5-column format (Date, Event/Incident, Category, Supporting Documents, Notes)
+- Link supporting documents to events with dynamic dropdown
+- Clickable event cards with popup modals
+- Sticky year headers for easy navigation
+- Category filtering and sorting
+- Manual event creation with document linking
+
+### Document Archive Features
+- Upload PDFs, images, and other file types
+- **Auto-populated folder structure** for each case:
+  - `01_Raw/` - Original uploaded documents
+  - `02_Wiki/` - Processed/cleaned documents  
+  - `03_Drafts/` - Working drafts and edits
+  - `04_Strategy/` - Case strategy documents
+  - `05_Exports/` - Final outputs and reports
+- Auto-detect file types and metadata
+- Tag and categorize documents
+- Link documents to timeline events
+- Search and filter documents
+- Visual folder icons and styling
+
+### AI Assistant Features
+- Query timeline events in natural language
+- Analyze specific events for insights
+- Generate suggestions for new events
+- Analyze uploaded documents
+- Context-aware responses based on timeline data
+
+## Quick Start
+
+### Prerequisites
+- Python 3.10+
+- Django 4.0+
+- PostgreSQL (recommended) or SQLite
+- Rust (for DID authentication)
+- Node.js (optional, for asset minification)
+
+### Installation
+
+```bash
+# Clone the repository
+git clone <repository-url>
+cd hiver_django
+
+# Initialize submodules (includes rust_did)
+git submodule update --init
+
+# Build Rust-DID library (optional, for authentication)
+cd rust_did && cargo build --release && cd ..
+
+# Install Python dependencies
+uv sync
+
+# Apply migrations
+python manage.py migrate
+
+# Create a superuser (for admin access)
+python manage.py createsuperuser
+
+# Start the development server
+python manage.py runserver
+```
+
+### Environment Variables
+
+Create a `.env` file in the project root:
+
+```bash
+# Required
+SECRET_KEY=your-secure-secret-key-here
+DEBUG=True  # Set to False in production
+
+# Database (default is SQLite)
+DATABASE_ENGINE=django.db.backends.sqlite3
+DATABASE_NAME=db.sqlite3
+
+# Mistral AI API Key (for AI assistant)
+MISTRAL_API_KEY=your-mistral-api-key
+
+# Rust-DID Backend (optional)
+# Set to "rust" to use Rust-DID, or "python" for Python-only
+DID_BACKEND=python
+
+# Allowed hosts (for production)
+ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com
+```
+
+## Usage
+
+### Access the Application
+After starting the server, open your browser to `http://localhost:8000`
+
+You'll need to:
+
+### Timeline Management
+
+Hiver now supports multiple Markdown-based timelines with dynamic heading parsing:
+
+#### Working with Markdown Timelines
+
+1. **Create a Timeline Markdown File**:
+   ```markdown
+   # My Case Timeline
+   
+   ## Contract Signed
+   **Date:** 2024-01-15
+   **Category:** contract
+   **Notes:** Initial agreement executed
+   
+   ## First Amendment
+   **Date:** 2024-03-20
+   **Category:** contract
+   **Notes:** Modified payment terms
+   ```
+
+2. **Upload and Parse**:
+   - Use the "Upload Timeline" button in the timeline view
+   - Select your Markdown file
+   - The system will automatically parse and create timeline events
+
+3. **Add Events Manually**:
+   - Click the "Add Event" button in the timeline header
+   - Fill out the 5-column form: Date, Event/Incident, Category, Supporting Documents, Notes
+   - Select supporting documents from the dropdown (loaded from your archive)
+   - Events are created instantly and appear in the timeline
+
+4. **Select Timelines**:
+   - Use the timeline selector dropdown to switch between different timelines
+   - Each timeline maintains its own set of events and headings
+   - Selections are persisted in localStorage
+
+5. **Dynamic Headings**:
+   - The first H1 heading from your Markdown file becomes the main timeline title
+   - All headings (H1-H6) are displayed as a navigation bar
+   - Click on headings to scroll to sections
+
+### Case Compartmentalization
+
+Organize your work into separate cases for better isolation:
+
+1. **Create Cases**: Cases are automatically created per user
+2. **Automatic Folder Structure**: Each new case gets a standardized folder structure:
+   - `01_Raw/` - Original source materials
+   - `02_Wiki/` - Processed knowledge base
+   - `03_Drafts/` - Working documents
+   - `04_Strategy/` - Case planning materials
+   - `05_Exports/` - Final outputs and reports
+3. **Switch Cases**: Use the case selector dropdown in the header
+4. **Case-Specific Data**: Timeline events, documents, and AI context are filtered by case
+
+### Workspace Layout
+
+The three-pane workspace provides:
+
+- **Timeline Pane** (Primary): Main timeline view with events
+- **Archive Pane** (Right, collapsible): Document list and management
+- **AI Assistant Pane** (Right, collapsible): AI chat and analysis
+
+#### Collapsible Panes
+
+- Click the ▼/▶ buttons to expand/collapse side panes
+- State is persisted across sessions using localStorage
+- Provides more screen space when focused on one task
+
+### Dark/Light Mode
+
+- Toggle between dark and light themes using the ☀️/🌙 button in the header
+- Preference is saved automatically
+- Default is dark mode (black #000000 background)
+
+You'll need to:
+1. **Admin Login**: Go to `/admin/` and log in with your superuser credentials
+2. **Upload Timeline**: Navigate to `/timeline/upload/` to upload markdown timeline files
+3. **Upload Documents**: Go to `/archive/upload/` to upload supporting documents
+4. **Use AI Assistant**: Visit `/ai/` to query your timeline and documents
+
+### Dark/Light Mode Toggle
+
+The application features a theme toggle button in the navigation bar that allows users to switch between dark and light modes. The preference is automatically saved to the browser's localStorage and persists across page reloads.
+
+- **Dark Mode**: Default theme with black background (#000000), honey-orange (#FF8C00) and Byers blue (#0064AA) accents
+- **Light Mode**: Light theme with off-white background (#F5F5F5)
+- **Toggle Button**: Located in the navigation bar with sun (☀️) icon for dark mode and moon (🌙) icon for light mode
+
+### Dynamic Logo
+
+The site logo automatically switches based on the current theme:
+- **Dark Mode**: Displays the dark mode logo (DARK_mode_LOGO.png)
+- **Light Mode**: Displays the light mode logo (light_mode_LOGO.png)
+- The logo is 3x larger than the original and links to the home page (`/`)
+
+### Timeline Markdown Format
+
+Create timeline files using the following markdown format:
+
+```markdown
+---
+title: "Legal Case Timeline"
+---
+
+# 2023-01-15
+**Event:** Contract Signed
+**Category:** Contract
+**Supporting Docs:** [Contract PDF](link/to/contract.pdf) [Email](link/to/email.eml)
+**Notes:** Signed with X Corp. Review by 2023-02-01.
+
+# 2023-03-20
+**Event:** Email from Lawyer
+**Category:** Communication
+**Supporting Docs:** [email_20230320.pdf](link/to/document)
+**Notes:** "Urgent: Review attached draft."
+```
+
+**Supported Category Values:**
+- `contract` - Contracts and agreements
+- `email` - Email communications
+- `court_filing` - Court documents and filings
+- `communication` - General communications
+- `meeting` - Meeting notes and records
+- `deadline` - Important deadlines
+- `other` - Other types of events
+
+### Document Upload
+
+Supported file types:
+- **PDF** (`.pdf`) - Contracts, court filings, etc.
+- **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`) - Scans, diagrams
+- **Word** (`.doc`, `.docx`) - Documents
+- **Text** (`.txt`, `.md`) - Notes, markdown
+- **Email** (`.eml`) - Email files
+
+### AI Assistant Queries
+
+Examples of what you can ask the AI:
+- "What contracts were signed in January 2023?"
+- "Summarize the events from March 2023"
+- "What are the important deadlines in this case?"
+- "Analyze the Contract Signed event"
+- "What documents support the Email from Lawyer event?"
+- "Suggest events that might be missing from the timeline"
+
+The AI uses your timeline data and documents as context for responses.
+
+## Project Structure
+
+```
+hiver_django/
+├── apps/                      # Django applications
+│   ├── core/                # Shared templates, static files, middleware
+│   │   ├── middleware.py    # Authentication and security middleware
+│   │   └── static/          # Global static files
+│   │
+│   ├── timeline/            # Timeline functionality
+│   │   ├── models.py        # TimelineEvent model
+│   │   ├── views.py         # Timeline views and markdown parsing
+│   │   ├── tests.py         # Timeline tests
+│   │   └── templates/       # Timeline templates
+│   │
+│   ├── archive/             # Document archive
+│   │   ├── models.py        # ArchiveDocument model
+│   │   ├── views.py         # Archive views and file handling
+│   │   ├── forms.py         # Document upload forms
+│   │   ├── urls.py          # Archive URL routing
+│   │   ├── tests.py         # Archive tests
+│   │   └── templates/       # Archive templates
+│   │
+│   ├── ai_assistant/        # AI research assistant
+│   │   ├── models.py        # AI models (future)
+│   │   ├── views.py         # AI views and API endpoints
+│   │   ├── urls.py          # AI URL routing
+│   │   ├── tests.py         # AI tests
+│   │   └── templates/       # AI templates
+│   │
+│   └── conversation_logs/   # Conversation logging
+│
+├── config/                   # Django project settings
+│   └── settings.py          # Main settings file
+│
+├── rust_did/                 # Rust-DID library (git submodule)
+│   ├── Cargo.toml            # Rust project manifest
+│   ├── src/                 # Rust source code
+│   │   └── lib.rs           # FFI implementations
+│   └── target/              # Built library (after build)
+│
+├── scripts/                  # Utility scripts
+│   └── minify_assets.py     # CSS/JS minification script
+│
+├── static/                   # Global static files
+│   ├── css/                 # Stylesheets
+│   │   ├── style.css       # Main stylesheet (honey-orange theme)
+│   │   └── style.min.css   # Minified stylesheet
+│   │
+│   └── js/                  # JavaScript
+│       ├── theme.js        # Theme toggle and interactivity
+│       └── theme.min.js     # Minified JavaScript
+│
+├── templates/                # Global templates
+│   ├── base.html           # Base template with theme support
+│   ├── ai_assistant/        # AI templates
+│   │   └── chat.html       # AI chat interface
+│   │
+│   └── timeline/            # Timeline templates
+│       ├── timeline.html   # Main timeline view
+│       └── upload.html      # Timeline upload form
+│
+├── .env.example             # Example environment file
+├── manage.py                 # Django management script
+├── README.md                 # This file
+├── TIMELINE_SCHEMA.md        # Timeline markdown schema
+└── STYLE_GUIDE.md            # Design and styling guidelines
+```
+
+## Authentication
+
+Hiver uses a flexible authentication system with multiple backends:
+
+### Rust-DID (Recommended for Production)
+
+The Rust-DID library provides decentralized identity verification using Verifiable Credentials (VCs).
+
+```bash
+# Enable Rust-DID backend
+DID_BACKEND=rust python manage.py runserver
+```
+
+The middleware will:
+1. Check for VC tokens in request headers (`X-VC-Token`)
+2. Verify the token using Rust-DID FFI
+3. Set `request.user` based on the VC
+4. Fall back to session authentication if VC is invalid
+
+### Django Session Authentication (Development)
+
+For development and simpler deployments, use Django's built-in authentication:
+
+```bash
+# Use Python-only backend
+DID_BACKEND=python python manage.py runserver
+```
+
+This uses standard Django session authentication via the admin interface.
+
+## Performance Optimization
+
+### Asset Minification
+
+For production, use minified CSS and JavaScript files:
+
+```bash
+# Minify assets (creates .min.css and .min.js files)
+python scripts/minify_assets.py
+```
+
+The base template automatically uses minified files when `DEBUG=False`.
+
+### Lazy Loading
+
+Images in document popups use lazy loading for improved performance:
+```html
+<img src="..." alt="..." loading="lazy">
+```
+
+### Database Optimization
+
+Recommended for production:
+- Use PostgreSQL instead of SQLite
+- Enable database connection pooling
+- Configure proper indexes for frequently queried fields
+
+## API Endpoints
+
+### Archive API
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/archive/api/documents/` | GET | List all documents |
+| `/archive/api/search/` | GET | Search documents |
+| `/archive/api/link/<doc_id>/to-event/<event_id>/` | POST | Link document to event |
+| `/archive/document/<id>/file/` | GET | Download document file |
+| `/archive/document/<id>/thumbnail/` | GET | Get document thumbnail |
+
+### AI Assistant API
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/ai/analyze/` | POST | Analyze a document |
+| `/ai/query-timeline/` | POST | Query timeline with AI |
+| `/ai/suggest-events/` | POST | Get AI suggestions for new events |
+| `/ai/analyze-event/<event_id>/` | GET | Analyze a specific timeline event |
+
+## Customization
+
+### Theming
+
+Hiver uses CSS variables for easy theming. Edit `static/css/style.css`:
+
+```css
+:root {
+    --primary: #FF8C00;      /* Honey-Orange */
+    --accent: #0064AA;       /* Byers Blue */
+    --bg: #F5F5F5;          /* Light background */
+    --text: #333333;        /* Dark text */
+}
+
+[data-theme="dark"] {
+    --bg: #1A1A1A;          /* Dark background */
+    --text: #FFFFFF;        /* Light text */
+}
+```
+
+### Extending Timeline Schema
+
+To add custom fields to timeline events:
+1. Add the field to `apps/timeline/models.py`
+2. Update the markdown parser in `apps/timeline/views.py`
+3. Update the template to display the new field
+4. Create and run migrations
+
+## Testing
+
+Run the test suite:
+
+```bash
+# Run all tests
+python manage.py test
+
+# Run specific app tests
+python manage.py test apps.timeline
+python manage.py test apps.archive
+python manage.py test apps.ai_assistant
+```
+
+Test coverage includes:
+- ✅ Timeline model functionality
+- ✅ Document linking
+- ✅ Markdown parsing
+- ✅ AI API integration
+- ✅ View rendering
+- ✅ Authentication middleware
+
+## Deployment
+
+### Production Checklist
+
+1. [ ] Set `DEBUG=False`
+2. [ ] Set `SECRET_KEY` to a secure value
+3. [ ] Configure proper database
+4. [ ] Set up static and media file serving
+5. [ ] Configure `ALLOWED_HOSTS`
+6. [ ] Set `SESSION_COOKIE_SECURE=True`
+7. [ ] Set up HTTPS
+8. [ ] Run `python scripts/minify_assets.py`
+9. [ ] Collect static files: `python manage.py collectstatic`
+10. [ ] Build Rust-DID library (if using DID auth)
+
+### Using Gunicorn
+
+```bash
+# Install Gunicorn
+pip install gunicorn
+
+# Run with Gunicorn
+gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4
+```
+
+### Using Docker (Recommended)
+
+Create a `Dockerfile`:
+
+```dockerfile
+FROM python:3.10-slim
+
+WORKDIR /app
+COPY . .
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build Rust-DID
+WORKDIR /app/rust_did
+RUN cargo build --release
+WORKDIR /app
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Run migrations
+RUN python manage.py migrate
+
+# Collect static files
+RUN python manage.py collectstatic --noinput
+
+EXPOSE 8000
+CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+```
+
+## Color Palette
+
+| Name | Hex | Usage |
+|------|-----|-------|
+| **Primary (Honey-Orange)** | `#FF8C00` | Buttons, highlights, accents |
+| **Accent (Byers Blue)** | `#0064AA` | Event titles, links, important text |
+| **Light Background** | `#F5F5F5` | Page background (light mode) |
+| **Light Text** | `#333333` | Primary text (light mode) |
+| **Dark Background** | `#1A1A1A` | Page background (dark mode) |
+| **Dark Text** | `#FFFFFF` | Primary text (dark mode) |
+
+## License
+
+This project is part of the **Byers Brands ecosystem** and follows the same licensing terms.
+
+---
+
+**Built with Django, Rust, and Mistral AI**

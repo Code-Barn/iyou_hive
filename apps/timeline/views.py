@@ -6,14 +6,15 @@ from django.db.models import Q
 from .models import TimelineEvent
 from apps.core.models import Case, TimelineFile
 from .utils import (
-    parse_markdown_file,
     get_main_heading,
-    parse_timeline_events_from_markdown,
     extract_headings,
     find_markdown_files,
-    get_timeline_file_info,
+    get_timeline_file_info
+)
+from apps.core.parsers import (
+    parse_markdown_content,
     validate_timeline_events,
-    parse_timeline_events_from_table
+    parse_timeline_file
 )
 from .services import (
     sync_timeline_file,
@@ -104,7 +105,7 @@ def timeline_view(request):
     
     if all_timeline_files and all_timeline_files[0].get('file_path'):
         try:
-            parsed = parse_markdown_file(all_timeline_files[0]['file_path'])
+            parsed = parse_timeline_file(all_timeline_files[0]['file_path'])
             markdown_headings = parsed.get('headings', [])
             markdown_events = parsed.get('events', [])
             markdown_timelines = parsed.get('timelines', {})
@@ -595,13 +596,13 @@ def load_timeline_file(request):
     if not os.path.exists(file_path):
         return JsonResponse({'error': 'File not found'}, status=404)
     
-    parsed = parse_markdown_file(file_path)
+    parsed = parse_timeline_file(file_path)
     
     return JsonResponse({
         'status': 'success',
-        'main_heading': parsed['first_heading'],
-        'headings': parsed['headings'],
-        'sections': parsed['sections']
+        'main_heading': parsed.get('headings', [{}])[0].get('text', 'Legal Timeline') if parsed.get('headings') else 'Legal Timeline',
+        'headings': parsed.get('headings', []),
+        'sections': []  # TODO: Add section parsing to new parser
     })
 
 
@@ -623,13 +624,13 @@ def api_timeline_headings(request):
     timelines = []
     for tf in timeline_files:
         if os.path.exists(tf.file_path):
-            parsed = parse_markdown_file(tf.file_path)
+            parsed = parse_timeline_file(tf.file_path)
             timelines.append({
                 'id': str(tf.id),  # Convert UUID to string for JSON serialization
                 'name': tf.name,
                 'file_path': tf.file_path,
-                'main_heading': parsed['first_heading'],
-                'headings': parsed['headings']
+                'main_heading': parsed.get('headings', [{}])[0].get('text', 'Legal Timeline') if parsed.get('headings') else 'Legal Timeline',
+                'headings': parsed.get('headings', [])
             })
     
     return JsonResponse({'timelines': timelines})

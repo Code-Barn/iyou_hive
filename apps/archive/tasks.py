@@ -1,7 +1,7 @@
 from celery import shared_task
 from .models import ArchiveDocument
 from pathlib import Path
-from apps.core.document_processing import convert_pdf_to_markdown as process_pdf_to_markdown
+from .utils import convert_pdf_to_markdown as process_pdf_to_markdown
 from apps.core.tasks import load_document_text
 
 @shared_task

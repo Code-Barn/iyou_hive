@@ -5,6 +5,8 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from .models import ArchiveDocument
 from .forms import ArchiveDocumentForm
+from .utils import convert_pdf_to_markdown as pdf_to_markdown_util, pdf_to_markdown_string
+from .tasks import convert_pdf_to_markdown as convert_pdf_to_markdown_task
 from apps.core.models import Case
 import os
 import sys
@@ -12,9 +14,6 @@ import subprocess
 from django.db import models
 from django.conf import settings
 from pathlib import Path
-
-
-from .tasks import convert_pdf_to_markdown
 
 def get_user_archive_dir(user):
     """Get the archive directory path for a user."""
@@ -133,7 +132,7 @@ def upload_document(request):
             
             # If the file is a PDF, trigger the conversion task
             if document.file and document.file.name.lower().endswith('.pdf'):
-                convert_pdf_to_markdown.delay(document.id)
+                convert_pdf_to_markdown_task.delay(document.id)
                 messages.success(request, 'PDF uploaded successfully! Text extraction and Markdown conversion started in background.')
             else:
                 messages.success(request, f'Document "{document.title}" uploaded successfully!')
