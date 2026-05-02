@@ -228,6 +228,32 @@ function initSubTimelineSelector() {
 }
 
 /**
+ * Format month from date string (YYYY-MM-DD) to abbreviated month (e.g., "Oct")
+ * @param {string} dateStr - Date string in YYYY-MM-DD format
+ * @returns {string} Abbreviated month name
+ */
+function formatDateMonth(dateStr) {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleDateString('en-US', { month: 'short' });
+}
+
+/**
+ * Format day from date string (YYYY-MM-DD) to day number
+ * @param {string} dateStr - Date string in YYYY-MM-DD format
+ * @returns {string} Day of month
+ */
+function formatDateDay(dateStr) {
+  if (!dateStr) return "";
+  const parts = dateStr.split('-');
+  if (parts.length >= 3) return parseInt(parts[2], 10).toString();
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return "";
+  return date.getDate().toString();
+}
+
+/**
  * Switch to a different sub-timeline within the current timeline file
  * @param {string} timelineName - Name of the timeline to switch to
  */
@@ -284,10 +310,10 @@ function switchSubTimeline(timelineName) {
 
     // Build event card
     html += `
-      <div class="timeline-event" data-date="${event.date || ""}" data-year="${year}" data-section="${event.section || ""}">
+      <div class="timeline-event" data-date="${event.date || ""}" data-year="${year}" data-section="${event.section || ""}" onclick="openMarkdownEventPopup(this)">
         <div class="event-date-badge">
-          <span class="date-month">${month}</span>
-          <span class="date-day">${day}</span>
+          <span class="date-month">${formatDateMonth(event.date)}</span>
+          <span class="date-day">${formatDateDay(event.date)}</span>
           <span class="date-year">${year}</span>
         </div>
         <div class="event-content">
@@ -356,14 +382,15 @@ function initPopup() {
 }
 
 /**
- * Open event popup with specified event ID
- * @param {number} eventId - The ID of the timeline event to display
+ * Open event popup with specified event ID (UUID string)
+ * Fetches event data from API for shareable URLs
+ * @param {string} eventId - The UUID of the timeline event to display
  */
 function openEventPopup(eventId) {
   eventPopup = document.getElementById("eventPopup");
 
-  if (!eventPopup || !timelineEvents || !timelineEvents[eventId]) {
-    console.error("Popup element or event data not found");
+  if (!eventPopup) {
+    console.error("Popup element not found");
     return;
   }
 
@@ -373,10 +400,108 @@ function openEventPopup(eventId) {
   }
 
   currentEventId = eventId;
-  const event = timelineEvents[eventId];
 
-  // Populate popup content
-  setPopupContent(eventId, event);
+  // Show loading state
+  const titleEl = document.getElementById("popupTitle");
+  const descEl = document.getElementById("popupDescription");
+  if (titleEl) titleEl.textContent = "Loading...";
+  if (descEl) descEl.textContent = "";
+
+  // Fetch event data from API
+  fetch(`/timeline/api/event/${eventId}/`)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Event not found');
+      }
+      return response.json();
+    })
+    .then(event => {
+      // Populate popup content from API data
+      setPopupContentFromAPI(event);
+      
+      // Reset AI section
+      resetAISection();
+
+      // Update URL with shareable link
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('event', eventId);
+      window.history.pushState({}, "", newUrl);
+    })
+    .catch(error => {
+      console.error("Failed to load event:", error);
+      if (titleEl) titleEl.textContent = "Error loading event";
+      if (descEl) descEl.textContent = "Please try again.";
+    });
+
+  // Show popup with animation
+  eventPopup.classList.add("active");
+  document.body.style.overflow = "hidden";
+
+  // Focus on close button for accessibility
+  const closeBtn = eventPopup.querySelector(".popup-close");
+  if (closeBtn) {
+    closeBtn.focus();
+  }
+
+  console.log(`Opened popup for event ${eventId}`);
+}
+
+/**
+ * Open popup for markdown events (events without a database ID)
+ * @param {HTMLElement} element - The timeline event DOM element
+ */
+function openMarkdownEventPopup(element) {
+  eventPopup = document.getElementById("eventPopup");
+
+  if (!eventPopup) {
+    console.error("Popup element not found");
+    return;
+  }
+
+  // Initialize popup if not already done
+  if (!eventPopup.onclick) {
+    initPopup();
+  }
+
+  // Extract event data from DOM element
+  const titleEl = element.querySelector(".event-title");
+  const categoryEl = element.querySelector(".event-category");
+  const descEl = element.querySelector(".event-description");
+
+  const title = titleEl ? titleEl.textContent : "Untitled Event";
+  const category = categoryEl ? categoryEl.textContent : "Other";
+  // Use full notes from data attribute if available, otherwise use truncated description
+  const description = element.dataset.notes || (descEl ? descEl.textContent : "");
+  const date = element.dataset.date || "";
+
+  // Format date for display
+  let dateDisplay = date;
+  if (date && date.length >= 10) {
+    const dateObj = new Date(date);
+    if (!isNaN(dateObj.getTime())) {
+      dateDisplay = dateObj.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+  }
+
+  // Populate popup fields
+  if (document.getElementById("popupTitle")) {
+    document.getElementById("popupTitle").textContent = title;
+  }
+  if (document.getElementById("popupDate")) {
+    document.getElementById("popupDate").textContent = dateDisplay;
+  }
+  if (document.getElementById("popupCategory")) {
+    document.getElementById("popupCategory").textContent = category;
+  }
+  if (document.getElementById("popupDescription")) {
+    document.getElementById("popupDescription").textContent = description;
+  }
+
+  // Clear documents section for markdown events (no docs support yet)
+  const docsContainer = document.getElementById("popupDocs");
+  const mediaSection = document.getElementById("popupMedia");
+  if (docsContainer) docsContainer.innerHTML = "";
+  if (mediaSection) mediaSection.style.display = "none";
 
   // Reset AI section
   resetAISection();
@@ -392,11 +517,11 @@ function openEventPopup(eventId) {
   }
 
   // Track popup open for analytics/debugging
-  console.log(`Opened popup for event ${eventId}: ${event.title}`);
+  console.log(`Opened popup for markdown event: ${title}`);
 }
 
 /**
- * Set popup content based on event data
+ * Set popup content based on event data (legacy - from JS object)
  * @param {number} eventId - The event ID
  * @param {Object} event - The event data object
  */
@@ -423,6 +548,32 @@ function setPopupContent(eventId, event) {
 }
 
 /**
+ * Set popup content from API response
+ * @param {Object} event - The event data from API
+ */
+function setPopupContentFromAPI(event) {
+  if (!event) return;
+
+  // Set basic fields
+  if (document.getElementById("popupTitle")) {
+    document.getElementById("popupTitle").textContent = event.event || "Untitled";
+  }
+  if (document.getElementById("popupDate")) {
+    document.getElementById("popupDate").textContent = event.date_display || event.date;
+  }
+  if (document.getElementById("popupCategory")) {
+    document.getElementById("popupCategory").textContent =
+      event.category || "Uncategorized";
+  }
+  if (document.getElementById("popupDescription")) {
+    document.getElementById("popupDescription").textContent = event.notes || "No notes available.";
+  }
+
+  // Set documents from API data
+  renderDocumentsFromAPI(event);
+}
+
+/**
  * Render documents in the popup
  * @param {Object} event - The event data
  */
@@ -443,6 +594,116 @@ function renderDocuments(event) {
     if (mediaSection) {
       mediaSection.style.display = "none";
     }
+    return;
+  }
+
+  if (mediaSection) {
+    mediaSection.style.display = "block";
+  }
+
+  // Render each document
+  docUrls.forEach((doc, index) => {
+    const docElement = document.createElement("div");
+    docElement.className = "document-item";
+
+    // Add loading attribute for lazy loading
+    const docLink = document.createElement("a");
+    docLink.href = doc.url || "#";
+    docLink.target = "_blank";
+    docLink.rel = "noopener noreferrer";
+
+    // Determine icon based on file type
+    let icon = "📄";
+    if (doc.url) {
+      const ext = doc.url.split(".").pop().toLowerCase();
+      if (ext === "pdf") icon = "📕";
+      else if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext))
+        icon = "🖼️";
+      else if (["doc", "docx"].includes(ext)) icon = "📝";
+      else if (["xls", "xlsx"].includes(ext)) icon = "📊";
+      else if (["txt", "md", "markdown"].includes(ext)) icon = "📄";
+      else if (["email", "eml"].includes(ext)) icon = "✉️";
+    }
+
+    docLink.innerHTML = `<span class="doc-icon">${icon}</span> <span class="doc-title">${doc.title || "Document " + (index + 1)}</span>`;
+
+    // Add file size or type if available
+    if (doc.size || doc.type) {
+      const metaElement = document.createElement("span");
+      metaElement.className = "doc-meta";
+      metaElement.textContent = `[${doc.type || "File"}${doc.size ? " - " + doc.size : ""}]`;
+      docLink.appendChild(metaElement);
+    }
+
+    docElement.appendChild(docLink);
+
+    // Add preview for images
+    if (doc.url && isImageUrl(doc.url)) {
+      const previewElement = document.createElement("div");
+      previewElement.className = "doc-preview";
+      previewElement.innerHTML = `<img src="${doc.url}" alt="${doc.title || "Preview"}" loading="lazy">`;
+      docElement.appendChild(previewElement);
+    }
+
+    docsContainer.appendChild(docElement);
+  });
+}
+
+/**
+ * Render documents from API response
+ * @param {Object} event - The event data from API
+ */
+function renderDocumentsFromAPI(event) {
+  const docsContainer = document.getElementById("popupDocs");
+  const mediaSection = document.getElementById("popupMedia");
+
+  if (!docsContainer) return;
+
+  // Clear previous content
+  docsContainer.innerHTML = "";
+
+  // Check if there are documents
+  const docUrls = event.document_urls || [];
+  const supportingDocs = event.supporting_docs;
+
+  if (!docUrls || docUrls.length === 0) {
+    if (mediaSection) {
+      mediaSection.style.display = "none";
+    }
+    return;
+  }
+
+  if (mediaSection) {
+    mediaSection.style.display = "block";
+  }
+
+  // Render each document
+  docUrls.forEach((doc, index) => {
+    const docElement = document.createElement("div");
+    docElement.className = "document-item";
+
+    const docLink = document.createElement("a");
+    docLink.href = doc.url || "#";
+    docLink.target = "_blank";
+    docLink.rel = "noopener noreferrer";
+
+    let icon = "📄";
+    if (doc.url) {
+      const ext = doc.url.split(".").pop().toLowerCase();
+      if (ext === "pdf") icon = "📕";
+      else if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext))
+        icon = "🖼️";
+      else if (["doc", "docx"].includes(ext)) icon = "📝";
+      else if (["xls", "xlsx"].includes(ext)) icon = "📊";
+      else if (["txt", "md", "markdown"].includes(ext)) icon = "📄";
+      else if (["email", "eml"].includes(ext)) icon = "✉️";
+    }
+
+    docLink.innerHTML = `<span class="doc-icon">${icon}</span> <span class="doc-title">${doc.title || "Document " + (index + 1)}</span>`;
+    docElement.appendChild(docLink);
+    docsContainer.appendChild(docElement);
+  });
+}
     return;
   }
 
@@ -655,6 +916,11 @@ function closeEventPopup() {
     resetAISection();
     currentEventId = null;
 
+    // Remove event param from URL
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('event');
+    window.history.pushState({}, "", newUrl);
+
     // Return focus to the event that was clicked
     const activeEvent = document.querySelector(".timeline-event:focus");
     if (activeEvent) {
@@ -662,6 +928,31 @@ function closeEventPopup() {
     }
   }
 }
+
+/**
+ * Check URL for event parameter and auto-open popup
+ * Supports shareable URLs like /timeline/?event=<uuid>
+ */
+function checkUrlForEvent() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const eventId = urlParams.get('event');
+  
+  if (eventId) {
+    // Validate UUID format (basic check)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidRegex.test(eventId)) {
+      openEventPopup(eventId);
+    }
+  }
+}
+
+// Check URL on page load
+document.addEventListener("DOMContentLoaded", function() {
+  // ... existing initialization code ...
+  
+  // Check if we should auto-open an event popup from URL
+  setTimeout(checkUrlForEvent, 100);
+});
 
 /**
  * Close popup by event ID (legacy function for backwards compatibility)

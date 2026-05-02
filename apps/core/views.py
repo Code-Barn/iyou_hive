@@ -101,7 +101,7 @@ def create_case(request):
     Create a new case.
     
     GET: Show creation form
-    POST: Create the case
+    POST: Create the case (AJAX support for welcome modal)
     """
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
@@ -109,6 +109,8 @@ def create_case(request):
         color = request.POST.get('color', '#FF8C00')
         
         if not name:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': 'Case name is required'}, status=400)
             messages.error(request, 'Case name is required')
             return redirect('core:case_list')
         
@@ -129,6 +131,14 @@ def create_case(request):
         
         try:
             with transaction.atomic():
+                # Check if case with this name already exists for this user
+                existing = Case.objects.filter(name=name, user=request.user).first()
+                if existing:
+                    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                        return JsonResponse({'error': f'A case with the name "{name}" already exists.'}, status=400)
+                    messages.error(request, f'A case with the name "{name}" already exists.')
+                    return redirect('core:case_list')
+                
                 case = Case.objects.create(
                     name=name,
                     description=description,
@@ -142,16 +152,28 @@ def create_case(request):
                 ArchiveDocument.create_standard_folder_structure(case, request.user)
                 
                 request.session['selected_case_id'] = str(case.id)
+                request.session['case_just_created'] = True
+                
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'status': 'success',
+                        'case_id': str(case.id),
+                        'redirect': '/timeline/'
+                    })
                 
                 messages.success(request, f'Case "{name}" created and selected!')
                 return redirect('timeline:timeline')
         except IntegrityError as e:
-            if 'unique constraint' in str(e).lower() or 'duplicate key' in str(e).lower():
-                messages.error(request, f'A case with the name "{name}" already exists. Please choose a different name.')
-            else:
-                messages.error(request, f'Database error: {e}')
+            error_msg = f'Database error: {e}'
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': error_msg}, status=400)
+            messages.error(request, error_msg)
         except Exception as e:
-            messages.error(request, f'Failed to create case: {e}')
+            error_msg = f'Failed to create case: {e}'
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': error_msg}, status=400)
+            messages.error(request, error_msg)
+            
             # Re-render form with pre-filled values
             context = {
                 'form_name': name,

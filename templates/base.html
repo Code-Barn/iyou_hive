@@ -100,11 +100,7 @@
     }
     </script>
 
-    {% if DEBUG %}
-    <script src="{% static 'js/theme.js' %}"></script>
-    {% else %}
-    <script src="{% static 'js/theme.min.js' %}"></script>
-    {% endif %}
+    <script src="{% static 'js/theme.js' %}?v={{ settings.STATIC_VERSION|default:'1' }}"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>

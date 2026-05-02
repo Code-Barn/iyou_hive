@@ -73,44 +73,53 @@
             </div>
             <form id="addEventForm" class="event-form">
                 {% csrf_token %}
-                <div class="form-group">
-                    <label>Date *</label>
-                    <input type="date" name="date" required>
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Date *</label>
+                        <input type="date" name="date" required>
+                    </div>
+                    <div class="form-group" style="flex:2;">
+                        <label>Event/Incident *</label>
+                        <input type="text" name="event" placeholder="Event title" required>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Event/Incident *</label>
-                    <input type="text" name="event" placeholder="Event or incident title" required>
-                </div>
-                <div class="form-group">
-                    <label>Category</label>
-                    <select name="category">
-                        <option value="verified">Verified</option>
-                        <option value="contested">Contested</option>
-                        <option value="personal">Personal</option>
-                        <option value="legal">Legal</option>
-                        <option value="medical">Medical</option>
-                        <option value="financial">Financial</option>
-                        <option value="education">Education</option>
-                        <option value="other">Other</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>Supporting Document(s)</label>
-                    <select name="supporting_docs" id="supportingDocsSelect">
-                        <option value="">None</option>
-                        <!-- Documents will be loaded dynamically -->
-                    </select>
-                    <div class="doc-link-info">
-                        <small>Link to documents from your archive</small>
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;">
+                        <label>Category</label>
+                        <select name="category">
+                            <option value="verified">Verified</option>
+                            <option value="contested">Contested</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>Source</label>
+                        <select name="source_party">
+                            <option value="CLIENT" selected>My Claim</option>
+                            <option value="OPPOSING">Opposing</option>
+                            <option value="NEUTRAL">Neutral</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-group">
+                    <label class="checkbox-label" style="font-weight:normal;">
+                        <input type="checkbox" name="contested_flag">
+                        <span>Contested (dispute this claim)</span>
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>Documents</label>
+                    <select name="supporting_docs" id="supportingDocsSelect">
+                        <option value="">None</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Notes</label>
-                    <textarea name="description" rows="4" placeholder="Detailed notes about this event"></textarea>
+                    <textarea name="description" rows="3" placeholder="Notes"></textarea>
                 </div>
                 <div class="form-actions">
                     <button type="button" class="btn-secondary" onclick="closeAddEventPopup()">Cancel</button>
-                    <button type="submit" class="btn-primary">Add Event</button>
+                    <button type="submit" class="btn-primary">Add</button>
                 </div>
             </form>
         </div>
@@ -143,62 +152,30 @@
              data-date="{{ event.date }}"
              data-year="{{ year }}"
              data-section="{{ event.section|default:'' }}"
-             data-source-party="{{ event.source_party|default:'NEUTRAL' }}">
-            
-            <!-- Source Party Label -->
-            <span class="source-party">{{ event.source_party|source_party_label|default:"Neutral" }}</span>
+             data-source-party="{{ event.source_party|default:'NEUTRAL' }}"
+             data-notes="{{ event.description|default:event.notes }}"
+             onclick="openMarkdownEventPopup(this)">
+             
+            <!-- Source Party Label (only show if Client or Opposing) -->
+            {% if event.source_party == 'CLIENT' or event.source_party == 'OPPOSING' %}
+            <span class="source-party {{ event.source_party|timeline_class }}">{{ event.source_party|source_party_label }}</span>
+            {% endif %}
             
             <!-- Date Badge -->
             <div class="event-date-badge">
-                <span class="date-month">{{ month }}</span>
-                <span class="date-day">{{ day }}</span>
-                <span class="date-year">{{ year }}</span>
+                <span class="date-month">{{ event.date|date:"M" }}</span>
+                <span class="date-day">{{ event.date|date:"j" }}</span>
+                <span class="date-year">{{ event.date|date:"Y" }}</span>
             </div>
-
+            
             <!-- Event Content -->
             <div class="event-content">
-                <h3 class="event-title">{{ event.event }}</h3>
-                <p class="event-category">{{ event.category|title }}</p>
-                <p class="event-description">{{ event.description|truncatechars:150 }}</p>
-                {% if event.documents and event.documents|length > 0 %}
-                <div class="event-docs-indicator">
-                    <span class="docs-icon">📎</span>
-                    <span class="docs-count">{{ event.documents|length }} document(s)</span>
-                </div>
-                {% endif %}
-                {% if event.citation %}
-                <div class="citation">({{ event.category|title }}: {{ event.citation }})</div>
-                {% endif %}
-            </div>
-
-            <!-- Visual Connector Line -->
-            <div class="event-connector"></div>
-        </div>
-        {% endwith %}
-        {% empty %}
-        <div class="empty-timeline">
-            <p>No timeline events yet. Upload a markdown file to get started.</p>
-        </div>
-        {% endfor %}
-        {% else %}
-        <!-- Backward compatibility: show events from 'events' variable -->
-        {% for event in events %}
-        {% if event.pk %}
-        <!-- Database event -->
-        <div class="timeline-event {{ event.source_party|timeline_class|default:'neutral' }}" 
-             data-event-id="{{ event.pk }}"
-             data-date="{{ event.date|date:'Y-m-d' }}"
-             data-year="{{ event.date|date:'Y' }}"
-             data-source-party="{{ event.source_party|default:'NEUTRAL' }}"
-             onclick="openEventPopup({{ event.pk }})">
-            <span class="source-party">{{ event.source_party|source_party_label|default:"Neutral" }}</span>
-            <div class="event-date-badge">
-                <span class="date-month">{{ event.date|date:'M' }}</span>
-                <span class="date-day">{{ event.date|date:'j' }}</span>
-                <span class="date-year">{{ event.date|date:'Y' }}</span>
-            </div>
-            <div class="event-content">
-                <h3 class="event-title">{{ event.event }}</h3>
+                <h3 class="event-title">
+                    {{ event.event }}
+                    {% if event.category == 'contested' %}
+                    <span class="contested-badge" title="This claim is contested">⚠️ Contested</span>
+                    {% endif %}
+                </h3>
                 <p class="event-category">{{ event.get_category_display }}</p>
                 <p class="event-description">{{ event.notes|truncatechars:150 }}</p>
                 {% if event.supporting_docs %}
@@ -208,43 +185,12 @@
                 </div>
                 {% endif %}
                 {% if event.citation %}
-                <div class="citation">({{ event.category|title }}: {{ event.citation }})</div>
-                {% endif %}
-            </div>
-            <div class="event-connector"></div>
-        </div>
-        {% else %}
-        <!-- Markdown event -->
-        {% with year=event.date|slice:":4" month=event.date|slice:"5:7" day=event.date|slice:"8:10" %}
-        <div class="timeline-event {{ event.source_party|timeline_class|default:'neutral' }}" 
-             data-date="{{ event.date }}"
-             data-year="{{ year }}"
-             data-section="{{ event.section|default:'' }}"
-             data-source-party="{{ event.source_party|default:'NEUTRAL' }}">
-            <span class="source-party">{{ event.source_party|source_party_label|default:"Neutral" }}</span>
-            <div class="event-date-badge">
-                <span class="date-month">{{ month }}</span>
-                <span class="date-day">{{ day }}</span>
-                <span class="date-year">{{ year }}</span>
-            </div>
-            <div class="event-content">
-                <h3 class="event-title">{{ event.event }}</h3>
-                <p class="event-category">{{ event.category|title }}</p>
-                <p class="event-description">{{ event.description|truncatechars:150 }}</p>
-                {% if event.documents and event.documents|length > 0 %}
-                <div class="event-docs-indicator">
-                    <span class="docs-icon">📎</span>
-                    <span class="docs-count">{{ event.documents|length }} document(s)</span>
-                </div>
-                {% endif %}
-                {% if event.citation %}
-                <div class="citation">({{ event.category|title }}: {{ event.citation }})</div>
+                <div class="citation">({{ event.get_category_display }}: {{ event.citation }})</div>
                 {% endif %}
             </div>
             <div class="event-connector"></div>
         </div>
         {% endwith %}
-        {% endif %}
         {% empty %}
         <div class="empty-timeline">
             <p>No timeline events yet. Upload a markdown file to get started.</p>
@@ -310,56 +256,12 @@ window.timelinesData = {{ timelines|json_script }};
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/timeline.js' %}"></script>
-<style>
-.archive-pane-container, .ai-pane-container {
-    padding: 0.5rem;
-}
-.archive-header, .ai-header {
-    margin-bottom: 0.75rem;
-}
-.archive-header .btn-sm, .ai-header .btn-sm {
-    font-size: 0.8rem;
-    padding: 0.4rem 0.75rem;
-    background: var(--primary);
-    color: #000;
-    border-radius: 4px;
-    text-decoration: none;
-}
-.document-list, .conversation-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-.document-item, .conversation-item {
-    padding: 0.5rem;
-    background: var(--bg-alt);
-    border-radius: 4px;
-}
-.document-item a, .conversation-item a {
-    color: var(--text);
-    text-decoration: none;
-}
-.document-item a:hover, .conversation-item a:hover {
-    color: var(--primary);
-}
-.doc-date {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-    margin-left: 0.5rem;
-}
-.empty-state {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    text-align: center;
-    padding: 1rem;
-}
-</style>
+<script src="{% static 'js/timeline.js' %}?v={{ settings.STATIC_VERSION|default:'1' }}"></script>
 <script>
-// Global variable to store events data for popup
+// Global variable to store events data for popup (legacy - for backward compatibility)
 const timelineEvents = {
     {% for event in events %}
-    {{ event.pk }}: {
+    "{{ event.id }}": {
         title: "{{ event.event|escapejs }}",
         date: "{{ event.date|date:'F j, Y' }}",
         date_iso: "{{ event.date|date:'Y-m-d' }}",
@@ -370,9 +272,6 @@ const timelineEvents = {
     }{% if not forloop.last %},{% endif %}
     {% endfor %}
 };
-
-// Global variable to store current event being viewed
-var currentEventId = null;
 
 // Track AI analysis state
 let isAnalyzingWithAI = false;
@@ -431,6 +330,52 @@ document.addEventListener('DOMContentLoaded', function() {
 <style>
 .timeline-actions { display: flex; gap: 0.5rem; align-items: center; }
 .print-btn { padding: 0.5rem 0.75rem; font-size: 1rem; }
+
+.form-row {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+}
+.form-row .form-group {
+    margin-bottom: 0;
+}
+.radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+}
+.radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: normal;
+}
+.radio-label input[type="radio"] {
+    cursor: pointer;
+}
+.checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    font-weight: normal;
+}
+.checkbox-label input[type="checkbox"] {
+    cursor: pointer;
+}
+.contested-badge {
+    display: inline-block;
+    background: #ff4444;
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 3px;
+    margin-left: 0.5rem;
+    font-weight: 600;
+    vertical-align: middle;
+}
 
 .event-popup-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -547,7 +492,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 body: formData,
                 headers: { 
-                    'X-CSRFToken': csrfToken,
+                    'X-CsrfToken': csrfToken,
                     'Accept': 'application/json'
                 }
             })

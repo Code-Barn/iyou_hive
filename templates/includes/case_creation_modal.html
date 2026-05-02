@@ -23,6 +23,10 @@
         z-index: 2000;
     }
     
+    .modal-overlay.hidden {
+        display: none !important;
+    }
+    
     .modal-overlay .modal-content {
         background-color: var(--bg-card, #1a1a1a);
         padding: 2.5rem;
@@ -127,28 +131,28 @@ document.addEventListener('DOMContentLoaded', function() {
                 method: 'POST',
                 body: formData,
                 headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
                     'X-CSRFToken': csrfToken
                 }
             })
             .then(function(response) {
-                if (response.redirected) {
-                    window.location.href = response.url;
-                } else if (response.ok) {
-                    return response.text();
+                if (response.ok) {
+                    return response.json();
                 }
                 throw new Error('Network response was not ok');
             })
-            .then(function(text) {
-                if (text && text.includes('timeline')) {
-                    window.location.href = '{% url "timeline:timeline" %}';
-                } else if (text && text.includes('error') || text && text.includes('Failed')) {
-                    var name = encodeURIComponent(formData.get('name'));
-                    window.location.href = '{% url "core:create_case" %}?name=' + name;
+            .then(function(data) {
+                if (data.status === 'success' && data.redirect) {
+                    // Hide modal and redirect to timeline (home page)
+                    modal.classList.add('hidden');
+                    window.location.href = data.redirect;
+                } else if (data.error) {
+                    alert(data.error);
                 }
             })
             .catch(function(error) {
                 console.error('Error:', error);
-                form.submit();
+                alert('Failed to create case. Please try again.');
             });
         });
     }

@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.conf import settings
 
@@ -10,24 +11,48 @@ class TimelineEvent(models.Model):
     with supporting documents and notes.
     
     Attributes:
+        id: UUID primary key for shareable URLs
         date: Date of the event
         event: Title/name of the event
-        category: Category (e.g., Contract, Email, Court Filing)
+        category: Category (e.g., Verified, Contested, Contract, Email)
+        source_type: How the event was created (Manual, Markdown, AI)
         supporting_docs: JSON field or list of ArchiveDocument IDs/URLs
         notes: Detailed notes about the event
         created_by: User who created this event
-        timeline_file: Path to Markdown file this event belongs to
+        timeline_file: ForeignKey to TimelineFile (source document)
         case: Case this event belongs to (for compartmentalization)
     """
     
+    # Use UUID as primary key for shareable URLs
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    
     CATEGORY_CHOICES = [
+        ('verified', 'Verified'),
+        ('contested', 'Contested'),
         ('contract', 'Contract'),
         ('email', 'Email'),
         ('court_filing', 'Court Filing'),
         ('communication', 'Communication'),
         ('meeting', 'Meeting'),
         ('deadline', 'Deadline'),
+        ('personal', 'Personal'),
+        ('legal', 'Legal'),
+        ('medical', 'Medical'),
+        ('financial', 'Financial'),
+        ('education', 'Education'),
         ('other', 'Other'),
+    ]
+    
+    SOURCE_TYPE_CHOICES = [
+        ('MANUAL', 'Manual Entry'),
+        ('MARKDOWN', 'Markdown Import'),
+        ('AI_GENERATED', 'AI Generated'),
+    ]
+    
+    SOURCE_PARTY_CHOICES = [
+        ('CLIENT', 'Client'),
+        ('OPPOSING', 'Opposing Party'),
+        ('NEUTRAL', 'Neutral'),
     ]
     
     date = models.DateField(help_text="Date of the event", db_index=True)
@@ -36,7 +61,25 @@ class TimelineEvent(models.Model):
         max_length=100, 
         choices=CATEGORY_CHOICES,
         default='other',
-        help_text="Category of the event"
+        help_text="Category of the event (Verified/Contested/Other)"
+    )
+    source_type = models.CharField(
+        max_length=20,
+        choices=SOURCE_TYPE_CHOICES,
+        default='MANUAL',
+        help_text="How this event was created"
+    )
+    source_party = models.CharField(
+        max_length=20,
+        choices=SOURCE_PARTY_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Party associated with this event (Client/Opposing/Neutral)"
+    )
+    citation = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Citation or reference for this event"
     )
     
     # Supporting documents can be:
@@ -52,12 +95,14 @@ class TimelineEvent(models.Model):
     
     notes = models.TextField(blank=True, help_text="Detailed notes about the event")
     
-    # Link to Markdown file this event belongs to
-    timeline_file = models.CharField(
-        max_length=512,
-        blank=True,
+    # Link to TimelineFile (source document) - ForeignKey as requested
+    timeline_file = models.ForeignKey(
+        'core.TimelineFile',
+        on_delete=models.SET_NULL,
         null=True,
-        help_text="Path to the Markdown file this event belongs to"
+        blank=True,
+        related_name='timeline_events',
+        help_text="Source TimelineFile this event was parsed from"
     )
     
     # Case compartmentalization (required for data isolation)
@@ -84,12 +129,14 @@ class TimelineEvent(models.Model):
         ordering = ['date']
         verbose_name = 'Timeline Event'
         verbose_name_plural = 'Timeline Events'
+        # Deduplication constraint for sync
+        unique_together = ['case', 'date', 'event']
     
     def __str__(self):
         return f"{self.date}: {self.event}"
     
     def get_absolute_url(self):
-        """Get URL to view this event."""
+        """Get URL to view this event (shareable UUID-based URL)."""
         from django.urls import reverse
         return reverse('timeline:detail', args=[str(self.id)])
     
@@ -113,7 +160,7 @@ class TimelineEvent(models.Model):
         
         documents = []
         
-        # Case 1: List of ArchiveDocument IDs or mixed
+        # Case1: List of ArchiveDocument IDs or mixed
         if isinstance(self.supporting_docs, list):
             for item in self.supporting_docs:
                 if isinstance(item, int):
@@ -141,7 +188,7 @@ class TimelineEvent(models.Model):
                         except (ValueError, TypeError):
                             pass
         
-        # Case 2: String (markdown links or comma-separated IDs)
+        # Case2: String (markdown links or comma-separated IDs)
         elif isinstance(self.supporting_docs, str):
             # Try to parse as markdown links
             import re

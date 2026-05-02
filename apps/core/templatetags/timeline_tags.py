@@ -45,16 +45,16 @@ def category_badge_class(category):
 def source_party_label(source_party):
     """
     Returns a human-readable label for source_party.
+    Only returns label for CLIENT or OPPOSING (not NEUTRAL).
     
     Args:
         source_party: The source party value
         
     Returns:
-        str: Human-readable label
+        str: Human-readable label, or empty string if NEUTRAL/unknown
     """
     mapping = {
         'CLIENT': 'Client',
         'OPPOSING': 'Opposing Party',
-        'NEUTRAL': 'Neutral',
     }
-    return mapping.get(source_party, 'Unknown')
+    return mapping.get(source_party, '')

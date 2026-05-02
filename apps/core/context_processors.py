@@ -25,7 +25,12 @@ def cases_processor(request):
             'id', 'name', 'color', 'is_active'
         ))
         
-        show_create_modal = len(case_list) == 0
+        # Only show modal if user has no cases AND hasn't just created one
+        show_create_modal = len(case_list) == 0 and not request.session.get('case_just_created')
+        
+        # Clear the flag after checking
+        if request.session.get('case_just_created'):
+            request.session.pop('case_just_created', None)
         
         selected_case_id = request.session.get('selected_case_id')
         if selected_case_id:

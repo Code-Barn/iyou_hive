@@ -15,6 +15,7 @@ from .utils import (
     validate_timeline_events,
     parse_timeline_events_from_table
 )
+from .services import ingest_event, ingest_markdown_events, sync_timeline_file
 from django.utils import timezone
 import tempfile
 import os
@@ -31,6 +32,17 @@ def timeline_view(request):
     # Get selected case from session - middleware ensures this exists
     case_id = request.session.get('selected_case_id')
     if not case_id:
+        return redirect('core:case_list')
+    
+    # Validate case_id is valid format (UUID or int)
+    try:
+        # Try to convert to UUID if it's a string
+        if isinstance(case_id, str):
+            import uuid
+            uuid.UUID(case_id)
+    except (ValueError, AttributeError):
+        # Invalid format, clear session and redirect
+        request.session.pop('selected_case_id', None)
         return redirect('core:case_list')
     
     # Get case - verify it belongs to user
@@ -85,6 +97,7 @@ def timeline_view(request):
     markdown_timelines = {}
     markdown_headings = []
     markdown_events = []
+    db_events_from_markdown = []
     
     if all_timeline_files and all_timeline_files[0].get('file_path'):
         try:
@@ -100,6 +113,29 @@ def timeline_view(request):
                 except ValueError as e:
                     # Add warning but don't fail
                     pass
+            
+            # Ingest markdown events into database for UUID-based access
+            if markdown_events or markdown_timelines:
+                # Get or create TimelineFile object
+                tf_path = all_timeline_files[0].get('file_path')
+                timeline_file_obj = None
+                try:
+                    timeline_file_obj = TimelineFile.objects.filter(
+                        file_path=tf_path,
+                        user=request.user
+                    ).first()
+                except Exception:
+                    pass
+                
+                # Ingest all events
+                ingest_result = ingest_markdown_events(
+                    parsed,
+                    case,
+                    request.user,
+                    timeline_file_obj=timeline_file_obj
+                )
+                db_events_from_markdown = ingest_result.get('events', [])
+                
         except Exception as e:
             markdown_events = []
             markdown_headings = []
@@ -137,8 +173,8 @@ def timeline_view(request):
     else:
         current_timeline_events = list(events)
     
-    # Use markdown events if available, otherwise fall back to database events
-    display_events = markdown_events if markdown_events else list(events)
+    # Use DB events (now including ingested markdown events) for display
+    display_events = list(events) + db_events_from_markdown
     
     context = {
         'events': display_events,
@@ -267,11 +303,61 @@ def upload_markdown(request):
     })
 
 
+import uuid
+
 @login_required
 def event_detail(request, pk):
     """Display detailed information about a timeline event."""
+    # Validate UUID format
+    try:
+        uuid.UUID(str(pk))
+    except (ValueError, AttributeError):
+        return JsonResponse({'error': 'Invalid event ID format'}, status=400)
+    
     event = get_object_or_404(TimelineEvent, pk=pk)
     return render(request, 'timeline/event_detail.html', {'event': event})
+
+
+@login_required
+def event_api(request, pk):
+    """
+    API endpoint to get event data by UUID.
+    Used by frontend to populate popups dynamically.
+    """
+    # Validate UUID format
+    try:
+        uuid.UUID(str(pk))
+    except (ValueError, AttributeError):
+        return JsonResponse({'error': 'Invalid event ID format'}, status=400)
+    
+    try:
+        event = TimelineEvent.objects.get(pk=pk)
+    except (TimelineEvent.DoesNotExist, ValueError):
+        return JsonResponse({'error': 'Event not found'}, status=404)
+    
+    # Check user has access to this event's case
+    if event.case and event.case.user != request.user:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    # Build event data
+    event_data = {
+        'id': str(event.id),
+        'date': event.date.isoformat(),
+        'date_display': event.date.strftime('%B %d, %Y'),
+        'event': event.event,
+        'category': event.get_category_display(),
+        'category_raw': event.category,
+        'source_type': event.get_source_type_display(),
+        'notes': event.notes,
+        'citation': event.citation,
+        'source_party': event.get_source_party_display() if event.source_party else '',
+        'supporting_docs': event.supporting_docs,
+        'document_urls': event.get_document_urls(),
+        'timeline_file': str(event.timeline_file.id) if event.timeline_file else None,
+        'case': str(event.case.id) if event.case else None,
+    }
+    
+    return JsonResponse(event_data)
 
 
 @login_required
@@ -297,6 +383,8 @@ def create_event(request):
     category = request.POST.get('category', 'other')
     description = request.POST.get('description', '').strip()
     supporting_docs = request.POST.get('supporting_docs', '')
+    source_party = request.POST.get('source_party', 'CLIENT')
+    contested_flag = request.POST.get('contested_flag') == 'on'
     
     if not date or not event:
         return JsonResponse({'error': 'Date and event are required'}, status=400)
@@ -316,14 +404,30 @@ def create_event(request):
         except (ArchiveDocument.DoesNotExist, ValueError):
             pass  # Document doesn't exist or invalid ID, ignore it
     
+    # If contested flag is set, override category
+    if contested_flag:
+        category = 'contested'
+    elif category not in ['verified', 'contested']:
+        # Map old categories to new system
+        category_mapping = {
+            'personal': 'other',
+            'legal': 'other',
+            'medical': 'other',
+            'financial': 'other',
+            'education': 'other',
+        }
+        category = category_mapping.get(category, 'other')
+    
     TimelineEvent.objects.create(
         date=date,
         event=event,
         category=category,
         notes=description,
         supporting_docs=docs_list,
+        source_party=source_party,
         case=case,
         created_by=request.user,
+        source_type='MANUAL'
     )
     
     return JsonResponse({'status': 'success'})
@@ -573,3 +677,20 @@ def create_timeline_file(request):
         })
     
     return JsonResponse({'error': 'POST required'}, status=405)
+
+
+@login_required
+def sync_timeline_api(request, timeline_file_id):
+    """
+    API endpoint to sync a timeline file.
+    Re-parses the file and updates/creates events in the database.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    
+    result = sync_timeline_file(timeline_file_id, request.user)
+    
+    if 'error' in result:
+        return JsonResponse(result, status=404)
+    
+    return JsonResponse(result)
