@@ -17,6 +17,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "requests>=2.33.1",
     "celery",
+    "django-cors-headers",
     "redis",
 ]
 

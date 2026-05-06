@@ -372,31 +372,18 @@ def generate_archive_map(request):
 
 @login_required  
 def link_to_timeline(request, document_id, event_id):
-    """Link an archive document to a timeline event."""
+    """Link an archive document to a timeline event via evidence M2M."""
     from apps.timeline.models import TimelineEvent
     
     document = get_object_or_404(ArchiveDocument, pk=document_id)
     event = get_object_or_404(TimelineEvent, pk=event_id)
     
-    # Add document ID to event's supporting_docs
-    current_docs = event.supporting_docs or []
-    if isinstance(current_docs, str):
-        # Parse existing string
-        try:
-            import json
-            current_docs = json.loads(current_docs)
-        except:
-            current_docs = []
+    # Check if document is already linked via evidence M2M
+    if document not in event.evidence.all():
+        event.evidence.add(document)
     
-    if not isinstance(current_docs, list):
-        current_docs = [current_docs]
-    
-    if document_id not in current_docs:
-        current_docs.append(document_id)
-        event.supporting_docs = current_docs
-        event.save()
-    
-    document.timeline_event = event
+    # Remove legacy timeline_event FK reference (use evidence M2M only)
+    document.timeline_event = None
     document.save()
     
     return JsonResponse({

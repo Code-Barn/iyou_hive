@@ -49,6 +49,15 @@ class ArchiveDocument(models.Model):
         help_text="Read-only to preserve integrity (automatically True for non-drafts)"
     )
     upload_date = models.DateTimeField(auto_now_add=True)
+    promoted_at = models.DateTimeField(
+        null=True, 
+        blank=True,
+        help_text="When this document was promoted to formal evidence"
+    )
+    is_promoted = models.BooleanField(
+        default=False,
+        help_text="Whether this document has been promoted to formal evidence"
+    )
     category = models.CharField(max_length=100, blank=True, null=True, 
                                help_text="Document category (e.g., Contract, Email, Court Filing)")
     tags = models.JSONField(default=list, blank=True, help_text="List of tags for filtering")

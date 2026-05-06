@@ -99,6 +99,8 @@ class TimelineIntegrationTest(TestCase):
     
     def setUp(self):
         """Set up test data."""
+        from apps.core.models import Case
+        
         self.client = Client()
         self.user = User.objects.create_user(
             username='testuser',
@@ -107,14 +109,30 @@ class TimelineIntegrationTest(TestCase):
         )
         self.client.login(username='testuser', password='testpass123')
         
+        self.case = Case.objects.create(name='Test Case', user=self.user)
+        
         # Create timeline events
+        pdf_file = SimpleUploadedFile('contract.pdf', b'PDF content')
+        self.doc = ArchiveDocument.objects.create(
+            title='Contract',
+            file=pdf_file,
+            file_type='pdf',
+            category='contract',
+            uploader=self.user,
+            case=self.case
+        )
+        
         self.event1 = TimelineEvent.objects.create(
             date=date(2023, 1, 15),
             event='Contract Signed',
             category='contract',
             notes='Signed with X Corp',
-            supporting_docs=json.dumps([{'title': 'Contract', 'url': 'https://example.com/c.pdf'}])
+            source_party='CLIENT',
+            status='UNDISPUTED',
+            case=self.case,
+            created_by=self.user
         )
+        self.event1.evidence.set([self.doc])
         
         self.event2 = TimelineEvent.objects.create(
             date=date(2023, 3, 20),

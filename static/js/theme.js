@@ -122,7 +122,7 @@ document.addEventListener("DOMContentLoaded", function () {
           return;
       }
       console.log('Setting up collapse for pane:', pane.id);
-      
+
       const savedState = localStorage.getItem(pane.id + '_state');
       if (savedState === 'collapsed') {
         pane.classList.add('collapsed');
@@ -130,7 +130,7 @@ document.addEventListener("DOMContentLoaded", function () {
       } else {
         button.textContent = '◀';
       }
-      
+
       button.onclick = function(e) {
         e.stopPropagation();
         console.log('Collapse clicked for:', pane.id);
@@ -418,7 +418,7 @@ function openEventPopup(eventId) {
     .then(event => {
       // Populate popup content from API data
       setPopupContentFromAPI(event);
-      
+
       // Reset AI section
       resetAISection();
 
@@ -586,11 +586,10 @@ function renderDocuments(event) {
   // Clear previous content
   docsContainer.innerHTML = "";
 
-  // Check if there are documents
-  const docUrls = event.document_urls || [];
-  const supportingDocs = event.supporting_docs;
+  // Check if there are evidence documents
+  const evidence = event.evidence || [];
 
-  if (!docUrls || docUrls.length === 0) {
+  if (!evidence || evidence.length === 0) {
     if (mediaSection) {
       mediaSection.style.display = "none";
     }
@@ -601,21 +600,21 @@ function renderDocuments(event) {
     mediaSection.style.display = "block";
   }
 
-  // Render each document
-  docUrls.forEach((doc, index) => {
+  // Render each evidence document
+  evidence.forEach((doc, index) => {
     const docElement = document.createElement("div");
     docElement.className = "document-item";
 
     // Add loading attribute for lazy loading
     const docLink = document.createElement("a");
-    docLink.href = doc.url || "#";
+    docLink.href = doc.file_url || "#";
     docLink.target = "_blank";
     docLink.rel = "noopener noreferrer";
 
     // Determine icon based on file type
     let icon = "📄";
-    if (doc.url) {
-      const ext = doc.url.split(".").pop().toLowerCase();
+    if (doc.file_url) {
+      const ext = doc.file_url.split(".").pop().toLowerCase();
       if (ext === "pdf") icon = "📕";
       else if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext))
         icon = "🖼️";
@@ -662,11 +661,10 @@ function renderDocumentsFromAPI(event) {
   // Clear previous content
   docsContainer.innerHTML = "";
 
-  // Check if there are documents
-  const docUrls = event.document_urls || [];
-  const supportingDocs = event.supporting_docs;
+  // Check if there are evidence documents
+  const evidence = event.evidence || [];
 
-  if (!docUrls || docUrls.length === 0) {
+  if (!evidence || evidence.length === 0) {
     if (mediaSection) {
       mediaSection.style.display = "none";
     }
@@ -677,13 +675,13 @@ function renderDocumentsFromAPI(event) {
     mediaSection.style.display = "block";
   }
 
-  // Render each document
-  docUrls.forEach((doc, index) => {
+  // Render each evidence document
+  evidence.forEach((doc, index) => {
     const docElement = document.createElement("div");
     docElement.className = "document-item";
 
     const docLink = document.createElement("a");
-    docLink.href = doc.url || "#";
+    docLink.href = doc.file_url || "#";
     docLink.target = "_blank";
     docLink.rel = "noopener noreferrer";
 
@@ -936,7 +934,7 @@ function closeEventPopup() {
 function checkUrlForEvent() {
   const urlParams = new URLSearchParams(window.location.search);
   const eventId = urlParams.get('event');
-  
+
   if (eventId) {
     // Validate UUID format (basic check)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -949,7 +947,7 @@ function checkUrlForEvent() {
 // Check URL on page load
 document.addEventListener("DOMContentLoaded", function() {
   // ... existing initialization code ...
-  
+
   // Check if we should auto-open an event popup from URL
   setTimeout(checkUrlForEvent, 100);
 });

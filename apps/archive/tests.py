@@ -276,12 +276,15 @@ class DocumentLinkingTest(TestCase):
     def setUp(self):
         """Set up test data."""
         from django.core.files.uploadedfile import SimpleUploadedFile
+        from apps.core.models import Case
         
         self.user = User.objects.create_user(
             username='testuser',
             email='test@example.com',
             password='testpass123'
         )
+        
+        self.case = Case.objects.create(name='Test Case', user=self.user)
         
         # Create test files
         pdf_file = SimpleUploadedFile('contract.pdf', b'PDF content', content_type='application/pdf')
@@ -292,38 +295,37 @@ class DocumentLinkingTest(TestCase):
             file=pdf_file,
             file_type='pdf',
             category='contract',
-            uploader=self.user
+            uploader=self.user,
+            case=self.case
         )
         self.doc2 = ArchiveDocument.objects.create(
             title='Email PDF',
             file=pdf_file,
             file_type='pdf',
             category='email',
-            uploader=self.user
+            uploader=self.user,
+            case=self.case
         )
         
-        # Create event with supporting docs as list of IDs
+        # Create event and link documents via evidence M2M
         self.event = TimelineEvent.objects.create(
             date=date(2023, 1, 15),
             event='Contract and Email Event',
             category='contract',
             notes='Event with linked documents',
-            supporting_docs=json.dumps([self.doc1.id, self.doc2.id]),
+            source_party='CLIENT',
+            status='UNDISPUTED',
+            case=self.case,
             created_by=self.user
         )
         
-        # Link documents to event
-        self.doc1.timeline_event = self.event
-        self.doc1.save()
-        self.doc2.timeline_event = self.event
-        self.doc2.save()
+        # Link documents to event via evidence M2M
+        self.event.evidence.set([self.doc1, self.doc2])
     
-    def test_get_archive_documents_by_id(self):
-        """Test getting linked ArchiveDocument objects by ID."""
-        docs = self.event.get_archive_documents()
-        self.assertEqual(len(docs), 2)
-        
-        doc_ids = [d.id for d in docs]
+    def test_evidence_m2m_relationship(self):
+        """Test evidence M2M relationship."""
+        self.assertEqual(self.event.evidence.count(), 2)
+        doc_ids = [d.id for d in self.event.evidence.all()]
         self.assertIn(self.doc1.id, doc_ids)
         self.assertIn(self.doc2.id, doc_ids)
         
@@ -345,8 +347,8 @@ class DocumentLinkingTest(TestCase):
         docs = ArchiveDocument.objects.filter(timeline_event=self.event)
         self.assertEqual(docs.count(), 2)
         
-        # Verify event can access documents
-        linked_docs = self.event.get_archive_documents()
+        # Verify event can access documents via evidence M2M
+        linked_docs = self.event.evidence.all()
         self.assertEqual(len(linked_docs), 2)
 
 

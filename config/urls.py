@@ -26,6 +26,8 @@ urlpatterns = [
     path('timeline/', include('apps.timeline.urls')),
     path('archive/', include('apps.archive.urls')),
     path('ai/', include('apps.ai_assistant.urls')),
+    # API endpoints for Competing Timelines
+    path('api/timeline/', include('apps.timeline.api_urls')),
 ]
 
 # Note: conversation_logs URLs are commented out until templates are created

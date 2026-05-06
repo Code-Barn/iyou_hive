@@ -15,4 +15,11 @@ urlpatterns = [
     path('select-timeline/', views.select_timeline, name='select_timeline'),
     path('api/create-timeline-file/', views.create_timeline_file, name='create_timeline_file'),
     path('api/sync-timeline/<uuid:timeline_file_id>/', views.sync_timeline_api, name='sync_timeline'),
+    
+    # Export endpoints for competing timelines
+    path('export/<uuid:case_id>/<str:party>/', views.export_party_timeline, name='export_party_timeline'),
+    path('export/<uuid:case_id>/', views.export_case_timeline, name='export_case_timeline'),
+    
+    # Potential matches API for duplicate detection
+    path('api/potential-matches/', views.get_potential_matches, name='potential_matches'),
 ]

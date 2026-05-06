@@ -108,8 +108,8 @@
                     </label>
                 </div>
                 <div class="form-group">
-                    <label>Documents</label>
-                    <select name="supporting_docs" id="supportingDocsSelect">
+                    <label>Evidence</label>
+                    <select name="evidence_ids" id="evidenceSelect" multiple>
                         <option value="">None</option>
                     </select>
                 </div>
@@ -178,10 +178,10 @@
                 </h3>
                 <p class="event-category">{{ event.get_category_display }}</p>
                 <p class="event-description">{{ event.notes|truncatechars:150 }}</p>
-                {% if event.supporting_docs %}
+                {% if event.evidence.count %}
                 <div class="event-docs-indicator">
                     <span class="docs-icon">📎</span>
-                    <span class="docs-count">{{ event.get_document_urls|length }} document(s)</span>
+                    <span class="docs-count">{{ event.evidence.count }} document(s)</span>
                 </div>
                 {% endif %}
                 {% if event.citation %}
@@ -258,7 +258,7 @@ window.timelinesData = {{ timelines|json_script }};
 {% block extra_js %}
 <script src="{% static 'js/timeline.js' %}?v={{ settings.STATIC_VERSION|default:'1' }}"></script>
 <script>
-// Global variable to store events data for popup (legacy - for backward compatibility)
+// Global variable to store events data for popup
 const timelineEvents = {
     {% for event in events %}
     "{{ event.id }}": {
@@ -267,8 +267,17 @@ const timelineEvents = {
         date_iso: "{{ event.date|date:'Y-m-d' }}",
         category: "{{ event.get_category_display|escapejs }}",
         description: "{{ event.notes|escapejs }}",
-        supporting_docs: {{ event.supporting_docs|safe }},
-        document_urls: {{ event.get_document_urls|safe }}
+        evidence: [
+            {% for doc in event.evidence.all %}
+            {
+                id: "{{ doc.id }}",
+                title: "{{ doc.title|escapejs }}",
+                file_url: "{{ doc.get_file_url }}",
+                file_type: "{{ doc.file_type }}"
+            }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ],
+        evidence_count: {{ event.evidence.count }}
     }{% if not forloop.last %},{% endif %}
     {% endfor %}
 };

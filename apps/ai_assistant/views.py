@@ -152,12 +152,15 @@ def query_timeline(request):
                 pk=event_id,
                 created_by=request.user
             )
+            # Build evidence list from M2M
+            evidence_list = [doc.title for doc in event.evidence.all()]
+            evidence_str = ', '.join(evidence_list) if evidence_list else 'None'
             context = f"""Timeline Event Context:
 Date: {event.date}
 Event: {event.event}
 Category: {event.category}
 Notes: {event.notes}
-Supporting Documents: {event.supporting_docs}
+Evidence: {evidence_str}
 
 User Query: {query}
 
@@ -246,8 +249,8 @@ def analyze_timeline_event(request, event_id):
     """Analyze a specific timeline event with AI and return structured data."""
     event = get_object_or_404(TimelineEvent, pk=event_id)
     
-    # Get linked documents
-    documents = event.get_archive_documents()
+    # Get linked documents via evidence M2M
+    documents = event.evidence.all()
     docs_text = []
     for d in documents:
         docs_text.append(f"- {d.title}: {d.description}")

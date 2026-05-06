@@ -34,7 +34,8 @@ def test_add_event_functionality():
         'event': 'Test Event',
         'category': 'other',
         'description': 'Test description',
-        'supporting_docs': ''
+        'source_party': 'CLIENT',
+        'status': 'UNDISPUTED'
     })
     
     # Add user and session
@@ -106,7 +107,8 @@ def test_csrf_token():
             'event': 'CSRF Test Event',
             'category': 'other',
             'description': 'Testing CSRF',
-            'supporting_docs': ''
+            'source_party': 'CLIENT',
+            'status': 'UNDISPUTED'
         })
         
         print(f"✅ Request sent successfully")

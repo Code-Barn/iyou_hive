@@ -1,5 +1,5 @@
 from django.shortcuts import render, get_object_or_404, redirect
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.db.models import Q
@@ -268,16 +268,33 @@ def upload_markdown(request):
                 skipped_count += 1
                 continue
             
+            # Link evidence documents first
+            evidence_docs = []
+            docs_data = event_data.get('documents') or event_data.get('evidence')
+            if docs_data:
+                if isinstance(docs_data, list):
+                    for doc_id in docs_data:
+                        try:
+                            doc = ArchiveDocument.objects.get(id=int(doc_id), case=case)
+                            evidence_docs.append(doc)
+                        except (ArchiveDocument.DoesNotExist, ValueError):
+                            pass
+
             event = TimelineEvent.objects.create(
                 date=parsed_date,
                 event=event_title,
                 category=event_data.get('category', 'other'),
                 notes=event_data.get('notes', ''),
-                supporting_docs=event_data.get('supporting_docs'),
+                citation=event_data.get('citation', ''),
                 timeline_file=timeline_file_path if timeline_file_path else None,
                 case=case,
+                source_party='CLIENT',
+                status='UNDISPUTED',
                 created_by=request.user
             )
+            
+            if evidence_docs:
+                event.evidence.set(evidence_docs)
             created_count += 1
         
         result = {'status': 'success', 'created': created_count, 'redirect': '/timeline/'}
@@ -351,8 +368,17 @@ def event_api(request, pk):
         'notes': event.notes,
         'citation': event.citation,
         'source_party': event.get_source_party_display() if event.source_party else '',
-        'supporting_docs': event.supporting_docs,
-        'document_urls': event.get_document_urls(),
+        'status': event.status,
+        'evidence': [
+            {
+                'id': str(doc.id),
+                'title': doc.title,
+                'file_url': doc.get_file_url(),
+                'file_type': doc.file_type
+            }
+            for doc in event.evidence.all()
+        ],
+        'replaces_event': str(event.replaces_event.id) if event.replaces_event else None,
         'timeline_file': str(event.timeline_file.id) if event.timeline_file else None,
         'case': str(event.case.id) if event.case else None,
     }
@@ -382,53 +408,39 @@ def create_event(request):
     event = request.POST.get('event', '').strip()
     category = request.POST.get('category', 'other')
     description = request.POST.get('description', '').strip()
-    supporting_docs = request.POST.get('supporting_docs', '')
+    evidence_ids = request.POST.getlist('evidence_ids', [])
     source_party = request.POST.get('source_party', 'CLIENT')
-    contested_flag = request.POST.get('contested_flag') == 'on'
+    status = request.POST.get('status', 'UNDISPUTED')
     
     if not date or not event:
         return JsonResponse({'error': 'Date and event are required'}, status=400)
     
-    # Prepare supporting documents list
-    docs_list = []
-    if supporting_docs and supporting_docs != '':
+    # Link evidence documents via M2M
+    evidence_docs = []
+    if evidence_ids:
         try:
             from apps.archive.models import ArchiveDocument
-            doc = ArchiveDocument.objects.get(id=supporting_docs, user=request.user)
-            docs_list = [{
-                'id': str(doc.id),
-                'title': doc.title,
-                'file_type': doc.file_type,
-                'upload_date': doc.upload_date.isoformat() if doc.upload_date else None
-            }]
+            docs = ArchiveDocument.objects.filter(id__in=evidence_ids, case=case)
+            evidence_docs = list(docs)
         except (ArchiveDocument.DoesNotExist, ValueError):
-            pass  # Document doesn't exist or invalid ID, ignore it
+            pass
     
-    # If contested flag is set, override category
-    if contested_flag:
-        category = 'contested'
-    elif category not in ['verified', 'contested']:
-        # Map old categories to new system
-        category_mapping = {
-            'personal': 'other',
-            'legal': 'other',
-            'medical': 'other',
-            'financial': 'other',
-            'education': 'other',
-        }
-        category = category_mapping.get(category, 'other')
-    
-    TimelineEvent.objects.create(
+    # Create the event
+    new_event = TimelineEvent.objects.create(
         date=date,
         event=event,
         category=category,
         notes=description,
-        supporting_docs=docs_list,
         source_party=source_party,
+        status=status,
         case=case,
         created_by=request.user,
         source_type='MANUAL'
     )
+    
+    # Link evidence after creation
+    if evidence_docs:
+        new_event.evidence.set(evidence_docs)
     
     return JsonResponse({'status': 'success'})
 
@@ -522,7 +534,7 @@ def parse_markdown(content):
                     'event': event,
                     'category': category,
                     'notes': notes,
-                    'supporting_docs': documents
+                    'evidence': documents
                 })
         
         # If we found table events, return them
@@ -542,7 +554,7 @@ def parse_markdown(content):
             if current_event:
                 events.append(current_event)
             try:
-                current_event = {'date': line[2:], 'event': '', 'category': '', 'supporting_docs': None, 'notes': ''}
+                current_event = {'date': line[2:], 'event': '', 'category': '', 'evidence': None, 'notes': ''}
             except ValueError:
                 current_event = {}
                 continue
@@ -552,8 +564,8 @@ def parse_markdown(content):
             current_event['category'] = line[13:].strip()
         elif line.startswith('**Notes:**'):
             current_event['notes'] = line[10:].strip()
-        elif line.startswith('**Supporting Docs:**'):
-            current_event['supporting_docs'] = line[18:].strip()
+        elif line.startswith('**Supporting Docs:**') or line.startswith('**Documents:**'):
+            current_event['evidence'] = line.split(':', 1)[1].strip()
 
     if current_event:
         events.append(current_event)
@@ -694,3 +706,121 @@ def sync_timeline_api(request, timeline_file_id):
         return JsonResponse(result, status=404)
     
     return JsonResponse(result)
+
+
+@login_required
+def export_party_timeline(request, case_id, party):
+    """
+    Export a party's timeline as Markdown file.
+    
+    This generates a 5-column Markdown table that can be:
+    - Viewed in the browser
+    - Downloaded as a .md file
+    - Processed by the existing PDF generation script
+    
+    Args:
+        case_id: UUID of the case
+        party: Source party (CLIENT, OPPOSING, NEUTRAL, COURT, WITNESS)
+    
+    Returns:
+        HttpResponse with markdown content and download headers
+    """
+    from apps.core.models import Case
+    from .services import MarkdownExportService
+    
+    case = get_object_or_404(Case, id=case_id, user=request.user)
+    
+    # Validate party
+    valid_parties = [p[0] for p in TimelineEvent.SOURCE_PARTY_CHOICES]
+    if party not in valid_parties:
+        return HttpResponseBadRequest(f"Invalid party: {party}. Valid parties are: {', '.join(valid_parties)}")
+    
+    # Generate markdown content
+    markdown_content = MarkdownExportService.export_party_timeline(case, party)
+    
+    # Return as downloadable file
+    response = HttpResponse(markdown_content, content_type='text/markdown; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{case.name} - {party} Timeline.md"'
+    return response
+
+
+@login_required
+def export_case_timeline(request, case_id):
+    """
+    Export the complete case timeline with all parties.
+    
+    Args:
+        case_id: UUID of the case
+    
+    Returns:
+        HttpResponse with complete markdown content
+    """
+    from apps.core.models import Case
+    from .services import MarkdownExportService
+    
+    case = get_object_or_404(Case, id=case_id, user=request.user)
+    
+    # Generate complete timeline
+    markdown_content = MarkdownExportService.export_full_case_timeline(case)
+    
+    # Return as downloadable file
+    response = HttpResponse(markdown_content, content_type='text/markdown; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="{case.name} - Complete Timeline.md"'
+    return response
+
+
+@login_required
+def get_potential_matches(request):
+    """
+    API endpoint to find potential duplicate matches for an event.
+    
+    Used during markdown ingestion to prevent duplicates.
+    
+    POST data should include:
+        - case_id: UUID of the case
+        - date: Event date (YYYY-MM-DD)
+        - event: Event title
+    
+    Returns:
+        JsonResponse with list of potential matches
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+    
+    from .services import MarkdownIngestionService
+    from apps.core.models import Case
+    
+    case_id = request.POST.get('case_id')
+    date = request.POST.get('date')
+    event_title = request.POST.get('event')
+    
+    if not case_id or not date or not event_title:
+        return JsonResponse({
+            'error': 'case_id, date, and event are required'
+        }, status=400)
+    
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        return JsonResponse({'error': 'Case not found'}, status=404)
+    
+    # Build event data dict
+    event_data = {
+        'date': date,
+        'event': event_title,
+        'category': request.POST.get('category', ''),
+        'notes': request.POST.get('notes', ''),
+    }
+    
+    # Find potential matches
+    matches = MarkdownIngestionService.find_potential_matches(event_data, case)
+    
+    # Serialize matches for JSON response
+    matches_list = list(matches.values(
+        'id', 'date', 'event', 'source_party', 'status', 'category'
+    ))
+    
+    return JsonResponse({
+        'matches': matches_list,
+        'count': len(matches_list)
+    })

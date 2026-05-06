@@ -223,10 +223,10 @@ class TimelineEvent(models.Model):
     date = models.DateField()
     event = models.CharField(max_length=255)
     category = models.CharField(max_length=100, choices=CATEGORY_CHOICES)
-    supporting_docs = models.JSONField(blank=True, null=True)
+    evidence = models.ManyToManyField(ArchiveDocument)  # SOLE mechanism for document linking
     notes = models.TextField(blank=True)
-    timeline_file = models.CharField(max_length=512, blank=True, null=True)
-    case = models.ForeignKey(Case, on_delete=models.SET_NULL, null=True, blank=True)
+    timeline_file = models.ForeignKey(TimelineFile, on_delete=models.SET_NULL, null=True, blank=True)
+    case = models.ForeignKey(Case, on_delete=models.CASCADE)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
  
     # Category Choices
@@ -271,7 +271,7 @@ class ArchiveDocument(models.Model):
     tags = models.JSONField(default=list, blank=True)
     upload_date = models.DateTimeField(auto_now_add=True)
     uploader = models.ForeignKey(User, on_delete=models.SET_NULL)
-    case = models.ForeignKey(Case, on_delete=models.SET_NULL, null=True, blank=True)
+    case = models.ForeignKey(Case, on_delete=models.CASCADE)
     timeline_event = models.ForeignKey(TimelineEvent, on_delete=models.SET_NULL, null=True, blank=True)
  
     # Methods
