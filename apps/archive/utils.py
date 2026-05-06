@@ -9,6 +9,9 @@ import re
 import fitz  # PyMuPDF
 from pathlib import Path
 from datetime import datetime
+from apps.core.document_processing import convert_pdf_to_markdown as core_convert_pdf_to_markdown
+from PIL import Image
+from PIL.ExifTags import TAGS, GPSTAGS
 
 
 def extract_text_with_formatting(pdf_path):
@@ -139,63 +142,8 @@ def convert_pdf_to_markdown(pdf_path, output_path=None):
     Returns:
         str: Path to generated Markdown file, or None if failed
     """
-    pdf_path = Path(pdf_path)
-    
-    if output_path is None:
-        output_path = pdf_path.with_suffix('.md')
-    else:
-        output_path = Path(output_path)
-    
-    try:
-        # Extract basic text with formatting
-        text_content = extract_text_with_formatting(pdf_path)
-        
-        # Extract tables
-        tables = extract_tables(pdf_path)
-        
-        # Extract metadata
-        metadata = extract_metadata(pdf_path)
-        
-        # Build Markdown content
-        markdown_lines = []
-        
-        # Add metadata header
-        if metadata['title']:
-            markdown_lines.append(f"# {metadata['title']}")
-        else:
-            markdown_lines.append(f"# {pdf_path.stem.replace('_', ' ').title()}")
-        
-        markdown_lines.append(f"\n**Document Metadata:**")
-        markdown_lines.append(f"- Author: {metadata['author']}")
-        markdown_lines.append(f"- Subject: {metadata['subject']}")
-        markdown_lines.append(f"- Pages: {metadata['page_count']}")
-        if metadata['creation_date']:
-            try:
-                creation_date = datetime.strptime(metadata['creation_date'][2:10], '%Y%m%d')
-                markdown_lines.append(f"- Created: {creation_date.strftime('%Y-%m-%d')}")
-            except:
-                pass
-        
-        # Add main content
-        markdown_lines.append("\n## Document Content")
-        markdown_lines.append(text_content)
-        
-        # Add tables
-        if tables:
-            markdown_lines.append("\n## Tables")
-            for i, table in enumerate(tables, 1):
-                markdown_lines.append(f"\n### Table {i}")
-                markdown_lines.append(format_table_as_markdown(table))
-        
-        # Write to file
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(markdown_lines))
-        
-        return str(output_path)
-        
-    except Exception as e:
-        print(f"Error converting PDF to Markdown: {e}")
-        return None
+    # Use the centralized document processing logic
+    return core_convert_pdf_to_markdown(pdf_path)
 
 
 def pdf_to_markdown_string(pdf_path):
@@ -208,43 +156,104 @@ def pdf_to_markdown_string(pdf_path):
     Returns:
         str: Markdown content, or None if failed
     """
+    # Use the centralized document processing logic
+    md_path = core_convert_pdf_to_markdown(pdf_path)
+    if md_path:
+        with open(md_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    return None
+
+
+def extract_exif_metadata(image_path):
+    """
+    Extract EXIF metadata from an image file.
+    
+    Args:
+        image_path (str/Path): Path to the image file
+        
+    Returns:
+        dict: Extracted metadata including timestamp, GPS, and device info
+    """
     try:
-        # Extract basic text with formatting
-        text_content = extract_text_with_formatting(pdf_path)
+        image = Image.open(image_path)
+        exif_data = image._getexif()
         
-        # Extract tables
-        tables = extract_tables(pdf_path)
+        if not exif_data:
+            return {}
         
-        # Extract metadata
-        metadata = extract_metadata(pdf_path)
+        metadata = {}
         
-        # Build Markdown content
-        markdown_lines = []
+        for tag_id, value in exif_data.items():
+            tag = TAGS.get(tag_id, tag_id)
+            
+            if tag == 'DateTimeOriginal':
+                # Parse EXIF datetime format: 'YYYY:MM:DD HH:MM:SS'
+                try:
+                    datetime_str = value.replace(':', '-', 2)  # Replace first two colons
+                    metadata['timestamp'] = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M:%S')
+                except (ValueError, TypeError):
+                    pass
+            
+            elif tag == 'Make':
+                metadata['device_make'] = value
+            
+            elif tag == 'Model':
+                metadata['device_model'] = value
+            
+            elif tag == 'GPSInfo':
+                gps_info = {}
+                for gps_tag_id in value.keys():
+                    gps_tag = GPSTAGS.get(gps_tag_id, gps_tag_id)
+                    gps_info[gps_tag] = value[gps_tag_id]
+                
+                # Extract latitude and longitude
+                if 'GPSLatitude' in gps_info and 'GPSLongitude' in gps_info:
+                    lat = gps_info['GPSLatitude']
+                    lat_ref = gps_info.get('GPSLatitudeRef', 'N')
+                    lon = gps_info['GPSLongitude']
+                    lon_ref = gps_info.get('GPSLongitudeRef', 'E')
+                    
+                    # Convert to decimal degrees
+                    metadata['gps_latitude'] = convert_to_decimal_degrees(lat, lat_ref)
+                    metadata['gps_longitude'] = convert_to_decimal_degrees(lon, lon_ref)
         
-        # Add metadata header
-        if metadata['title']:
-            markdown_lines.append(f"# {metadata['title']}")
-        else:
-            markdown_lines.append(f"# {Path(pdf_path).stem.replace('_', ' ').title()}")
+        # Combine device make and model
+        if 'device_make' in metadata or 'device_model' in metadata:
+            device_parts = []
+            if 'device_make' in metadata:
+                device_parts.append(metadata['device_make'])
+            if 'device_model' in metadata:
+                device_parts.append(metadata['device_model'])
+            metadata['device'] = ' '.join(device_parts)
         
-        markdown_lines.append(f"\n**Document Metadata:**")
-        markdown_lines.append(f"- Author: {metadata['author']}")
-        markdown_lines.append(f"- Subject: {metadata['subject']}")
-        markdown_lines.append(f"- Pages: {metadata['page_count']}")
-        
-        # Add main content
-        markdown_lines.append("\n## Document Content")
-        markdown_lines.append(text_content)
-        
-        # Add tables
-        if tables:
-            markdown_lines.append("\n## Tables")
-            for i, table in enumerate(tables, 1):
-                markdown_lines.append(f"\n### Table {i}")
-                markdown_lines.append(format_table_as_markdown(table))
-        
-        return '\n'.join(markdown_lines)
+        return metadata
         
     except Exception as e:
-        print(f"Error converting PDF to Markdown: {e}")
+        print(f"Error extracting EXIF metadata: {e}")
+        return {}
+
+
+def convert_to_decimal_degrees(coordinate, reference):
+    """
+    Convert GPS coordinates from EXIF format to decimal degrees.
+    
+    Args:
+        coordinate (tuple): GPS coordinate in degrees, minutes, seconds
+        reference (str): Direction (N/S/E/W)
+        
+    Returns:
+        float: Decimal degrees
+    """
+    try:
+        degrees = coordinate[0][0] / coordinate[0][1]
+        minutes = coordinate[1][0] / coordinate[1][1]
+        seconds = coordinate[2][0] / coordinate[2][1]
+        
+        decimal = degrees + (minutes / 60.0) + (seconds / 3600.0)
+        
+        if reference in ['S', 'W']:
+            decimal = -decimal
+        
+        return decimal
+    except (IndexError, TypeError, ZeroDivisionError):
         return None

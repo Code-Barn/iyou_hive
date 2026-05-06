@@ -44,14 +44,14 @@ def ocr_pdf_images(pdf_path):
     if not ocr:
         print("  -> PaddleOCR not available. Skipping local OCR.")
         return ""
-        
+
     try:
         doc = fitz.open(pdf_path)
         for page_num, page in enumerate(doc):
             pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
             img_path = f"/tmp/ocr_page_{page_num}.png"
             pix.save(img_path)
-            
+
             result = ocr.ocr(img_path)
             if result and result[0]:
                 r = result[0]
@@ -87,7 +87,7 @@ def get_llm_converter():
 def convert_pdf_to_markdown(pdf_path):
     pdf_path = Path(pdf_path)
     md_path = pdf_path.with_suffix(".md")
-    
+
     form_data = {}
     text = ""
     llm_client = get_llm_converter()
@@ -103,7 +103,7 @@ def convert_pdf_to_markdown(pdf_path):
                 text = result.stdout
         except Exception:
             pass
-        
+
         # Fallback to pdfplumber
         if not text:
             try:
@@ -112,13 +112,13 @@ def convert_pdf_to_markdown(pdf_path):
                     text = "\n\n--- Page Break ---\n\n".join(text_parts)
             except Exception:
                 pass
-        
+
         # Try form extraction
         try:
             form_data = extract_form_fields(str(pdf_path))
         except Exception:
             pass
-        
+
         # Try OCR for empty or short text
         if len(text.strip()) < 300:
             if llm_client:
@@ -126,7 +126,7 @@ def convert_pdf_to_markdown(pdf_path):
                     print(f"  -> Using Vision API...")
                     uploaded = llm_client.files.upload(file=str(pdf_path))
                     result = llm_client.models.generate_content(
-                        model="gemini-1.5-flash",
+                        model="gemini-2.5-flash",
                         contents=[uploaded, "Extract all text from this document."]
                     )
                     text = result.text if hasattr(result, 'text') else str(result)
@@ -144,7 +144,7 @@ def convert_pdf_to_markdown(pdf_path):
 
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(combined)
-            
+
         return md_path
     except Exception as e:
         raise e

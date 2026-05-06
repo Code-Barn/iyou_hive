@@ -2,18 +2,32 @@
     {% load static %}
     <div class="ai-header">
         <h1>AI Research Assistant</h1>
+        <button id="ai-settings-toggle" class="icon-button" title="AI Settings">⚙️</button>
     </div>
 
-    {% if not api_configured %}
-    <div class="api-key-prompt">
-        <p>Set your Mistral API key to use AI assistant:</p>
+    <div id="ai-settings-panel" class="api-key-prompt" {% if api_configured %}style="display: none;"{% endif %}>
+        <p>Configure your AI Assistant settings:</p>
         <form id="api-key-form" class="api-key-form">
-            <input type="password" id="api-key-input" placeholder="Enter MISTRAL_API_KEY">
-            <button type="submit">Save</button>
+            <div class="form-group">
+                <label for="preferred-provider">Preferred Provider:</label>
+                <select id="preferred-provider" class="form-control">
+                    <option value="mistral" {% if not ai_settings or ai_settings.preferred_ai_provider == 'mistral' %}selected{% endif %}>Mistral AI</option>
+                    <option value="gemini" {% if ai_settings and ai_settings.preferred_ai_provider == 'gemini' %}selected{% endif %}>Google Gemini</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="mistral-key-input">Mistral API Key:</label>
+                <input type="password" id="mistral-key-input" placeholder="Enter Mistral API Key" value="{{ ai_settings.mistral_api_key|default:'' }}">
+                <p class="help-text">Get a free API key at <a href="https://mistral.ai" target="_blank">mistral.ai</a></p>
+            </div>
+            <div class="form-group">
+                <label for="gemini-key-input">Gemini API Key:</label>
+                <input type="password" id="gemini-key-input" placeholder="Enter Gemini API Key" value="{{ ai_settings.gemini_api_key|default:'' }}">
+                <p class="help-text">Get a free API key at <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a></p>
+            </div>
+            <button type="submit" class="btn-primary">Save Settings</button>
         </form>
-        <p class="help-text">Get a free API key at <a href="https://mistral.ai" target="_blank">mistral.ai</a></p>
     </div>
-    {% endif %}
 
     <div class="chat-interface">
         <div class="chat-history" id="chat-history">
@@ -40,6 +54,9 @@
 }
 
 .ai-pane .ai-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding-bottom: 0.5rem;
 }
 
@@ -47,6 +64,14 @@
     font-size: 1.1rem;
     color: var(--primary);
     margin: 0;
+}
+
+.icon-button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2rem;
+    padding: 0.2rem;
 }
 
 .api-key-prompt {
@@ -64,11 +89,22 @@
 
 .api-key-form {
     display: flex;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 0.75rem;
 }
 
-.api-key-form input {
-    flex: 1;
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.form-group label {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.form-control, .api-key-form input {
     padding: 0.375rem 0.5rem;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -77,7 +113,7 @@
     font-size: 0.85rem;
 }
 
-.api-key-form button {
+.btn-primary {
     padding: 0.375rem 0.75rem;
     background: var(--primary);
     border: none;
@@ -85,11 +121,13 @@
     color: #000;
     cursor: pointer;
     font-weight: 600;
+    align-self: flex-start;
 }
 
 .help-text {
     font-size: 0.75rem !important;
     color: var(--text-secondary);
+    margin-top: 0.25rem !important;
 }
 
 .help-text a {

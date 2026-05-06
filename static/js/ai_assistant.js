@@ -11,6 +11,19 @@ if (document.readyState === "loading") {
 }
 
 function initAIAssistant() {
+  // Set up settings toggle
+  const settingsToggle = document.getElementById("ai-settings-toggle");
+  if (settingsToggle) {
+    settingsToggle.addEventListener("click", () => {
+      const panel = document.getElementById("ai-settings-panel");
+      if (panel.style.display === "none") {
+        panel.style.display = "block";
+      } else {
+        panel.style.display = "none";
+      }
+    });
+  }
+
   // Set up API key form submission
   const apiKeyForm = document.getElementById("api-key-form");
   if (apiKeyForm) {
@@ -30,18 +43,20 @@ function initAIAssistant() {
 function handleApiKeySubmit(event) {
   event.preventDefault();
 
-  console.log("API key form submitted"); // Debug log
+  console.log("API settings form submitted"); // Debug log
 
-  const apiKeyInput = document.getElementById("api-key-input");
-  const apiKey = apiKeyInput.value.trim();
+  const mistralKeyInput = document.getElementById("mistral-key-input");
+  const geminiKeyInput = document.getElementById("gemini-key-input");
+  const providerInput = document.getElementById("preferred-provider");
 
-  if (!apiKey) {
-    console.log("Empty API key"); // Debug log
-    alert("Please enter your Mistral API key");
+  const mistralApiKey = mistralKeyInput ? mistralKeyInput.value.trim() : "";
+  const geminiApiKey = geminiKeyInput ? geminiKeyInput.value.trim() : "";
+  const preferredProvider = providerInput ? providerInput.value : "mistral";
+
+  if (!mistralApiKey && !geminiApiKey) {
+    alert("Please enter at least one API key (Mistral or Gemini).");
     return;
   }
-
-  console.log("API key:", apiKey.substring(0, 10) + "..."); // Debug log
 
   // Show loading state
   const form = document.getElementById("api-key-form");
@@ -59,7 +74,11 @@ function handleApiKeySubmit(event) {
       "Content-Type": "application/json",
       "X-CSRFToken": getCsrfToken(),
     },
-    body: JSON.stringify({ api_key: apiKey }),
+    body: JSON.stringify({
+      mistral_api_key: mistralApiKey,
+      gemini_api_key: geminiApiKey,
+      preferred_provider: preferredProvider,
+    }),
   })
     .then((response) => {
       console.log("Response received:", response.status); // Debug log
@@ -67,7 +86,7 @@ function handleApiKeySubmit(event) {
         return response.json();
       } else {
         return response.json().catch(() => {
-          throw new Error("Failed to save API key: " + response.status);
+          throw new Error("Failed to save API settings: " + response.status);
         });
       }
     })
@@ -75,7 +94,7 @@ function handleApiKeySubmit(event) {
       console.log("Response data:", data); // Debug log
       if (data.success) {
         console.log("Success! Reloading page..."); // Debug log
-        alert("API key saved successfully! Page will reload now.");
+        alert("API settings saved successfully! Page will reload now.");
         // Reload the page to update the UI
         window.location.reload();
       } else {
@@ -83,8 +102,8 @@ function handleApiKeySubmit(event) {
       }
     })
     .catch((error) => {
-      console.error("Error saving API key:", error);
-      alert("Error saving API key: " + error.message);
+      console.error("Error saving API settings:", error);
+      alert("Error saving API settings: " + error.message);
       submitButton.textContent = originalButtonText;
       submitButton.disabled = false;
     });

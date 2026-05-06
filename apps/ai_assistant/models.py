@@ -19,6 +19,25 @@ class UserSettings(models.Model):
         null=True,
         help_text="Mistral AI API key for this user"
     )
+
+    gemini_api_key = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Google Gemini API key for this user"
+    )
+
+    PROVIDER_CHOICES = [
+        ('mistral', 'Mistral AI'),
+        ('gemini', 'Google Gemini'),
+    ]
+
+    preferred_ai_provider = models.CharField(
+        max_length=20,
+        choices=PROVIDER_CHOICES,
+        default='mistral',
+        help_text="Preferred AI provider for the assistant"
+    )
     
     created_at = models.DateTimeField(
         auto_now_add=True,

@@ -4,6 +4,43 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 
 
+class PhotoEventLink(models.Model):
+    """
+    Model for linking photos to timeline events with AI matching.
+    """
+    photo = models.ForeignKey(
+        'archive.Photo',
+        on_delete=models.CASCADE,
+        related_name='event_links',
+        db_index=True,
+        help_text="Linked photo"
+    )
+    event = models.ForeignKey(
+        'TimelineEvent',
+        on_delete=models.CASCADE,
+        related_name='photo_links',
+        db_index=True,
+        help_text="Linked timeline event"
+    )
+    confidence = models.FloatField(
+        help_text="Confidence score (0-1) for the match"
+    )
+    notes = models.TextField(
+        blank=True,
+        help_text="AI explanation for the match"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-confidence']
+        verbose_name = 'Photo-Event Link'
+        verbose_name_plural = 'Photo-Event Links'
+    
+    def __str__(self):
+        return f"{self.photo.file.name} -> {self.event.event} ({self.confidence:.2f})"
+
+
 class TimelineEvent(models.Model):
     """
     Model for timeline events in legal cases.

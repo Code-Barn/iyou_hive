@@ -520,6 +520,7 @@ function uploadFiles(files) {
         body: formData,
         headers: {
             'X-CSRFToken': getCSRFToken()
+            // Note: DO NOT set Content-Type header - browser sets it with FormData boundary
         }
     })
     .then(response => {
@@ -546,8 +547,9 @@ function getCSRFToken() {
     var cookies = document.cookie.split(';');
     for (var i = 0; i < cookies.length; i++) {
         var cookie = cookies[i].trim();
-        if (cookie.startsWith('csrftoken=')) {
-            return cookie.substring('csrftoken='.length);
+        // Check for both 'csrftoken' and 'csrfmiddlewaretoken'
+        if (cookie.startsWith('csrftoken=') || cookie.startsWith('csrfmiddlewaretoken=')) {
+            return cookie.split('=')[1];
         }
     }
     return '';

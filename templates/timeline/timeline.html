@@ -451,7 +451,9 @@ function getCSRFToken() {
     var cs = document.cookie.split(';');
     for (var i = 0; i < cs.length; i++) {
         var c = cs[i].trim();
-        if (c.startsWith('csrftoken=')) return c.substring(9);
+        if (c.startsWith('csrftoken=') || c.startsWith('csrfmiddlewaretoken=')) {
+            return c.split('=')[1];
+        }
     }
     return '';
 }

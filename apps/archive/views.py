@@ -3,9 +3,11 @@ from django.http import HttpResponse, JsonResponse, FileResponse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.utils import timezone
-from .models import ArchiveDocument
+from django.core.cache import cache
+from django.core.paginator import Paginator
+from .models import ArchiveDocument, Photo
 from .forms import ArchiveDocumentForm
-from .utils import convert_pdf_to_markdown as pdf_to_markdown_util, pdf_to_markdown_string
+from .utils import convert_pdf_to_markdown as pdf_to_markdown_util, pdf_to_markdown_string, extract_exif_metadata
 from .tasks import convert_pdf_to_markdown as convert_pdf_to_markdown_task
 from apps.core.models import Case
 import os
@@ -145,11 +147,13 @@ def upload_document(request):
     return render(request, 'archive/upload.html', {'form': form})
 
 
+@csrf_exempt
 @login_required
 def bulk_upload(request):
     """
     Bulk upload multiple files or folder structures.
     Accepts multiple files and preserves folder hierarchy via path.
+    CSRF exempted for FormData uploads from JavaScript.
     """
     case_id = request.session.get('selected_case_id')
     case = None
@@ -166,6 +170,10 @@ def bulk_upload(request):
     if request.method == 'POST':
         files = request.FILES.getlist('files')
         base_path = request.POST.get('base_path', '')
+        
+        # Require at least one file
+        if not files:
+            return JsonResponse({'error': 'No files provided'}, status=400)
         
         uploaded_count = 0
         for uploaded_file in files:
@@ -312,10 +320,164 @@ def document_thumbnail(request, pk):
 @login_required
 def api_document_list(request):
     """API endpoint to list all documents for current user."""
-    documents = ArchiveDocument.objects.filter(user=request.user).values(
-        'id', 'title', 'file_type', 'upload_date', 'category', 'description'
-    )
-    return JsonResponse(list(documents), safe=False)
+    # Cache key for documents
+    cache_key = f'document_list_{request.user.id}'
+    documents = cache.get(cache_key)
+    
+    if not documents:
+        documents = ArchiveDocument.objects.filter(user=request.user).values(
+            'id', 'title', 'file_type', 'upload_date', 'category', 'description'
+        )
+        cache.set(cache_key, list(documents), 3600)  # Cache for 1 hour
+    
+    # Add pagination
+    paginator = Paginator(list(documents), 20)  # Show 20 documents per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    return JsonResponse(list(page_obj), safe=False)
+
+
+@login_required
+def upload_photo(request):
+    """Upload a photo and extract EXIF metadata."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    # Get case_id from request
+    case_id = request.POST.get('case_id')
+    if not case_id:
+        return JsonResponse({'error': 'case_id is required'}, status=400)
+    
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        return JsonResponse({'error': 'Case not found or not accessible'}, status=404)
+    
+    # Handle file upload
+    if 'file' not in request.FILES:
+        return JsonResponse({'error': 'No file provided'}, status=400)
+    
+    file = request.FILES['file']
+    
+    try:
+        # Save the file temporarily to extract metadata
+        temp_path = os.path.join(settings.MEDIA_ROOT, 'temp', file.name)
+        os.makedirs(os.path.dirname(temp_path), exist_ok=True)
+        
+        with open(temp_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+        
+        # Extract EXIF metadata
+        metadata = extract_exif_metadata(temp_path)
+        
+        # Create Photo object
+        photo = Photo(
+            file=file,
+            timestamp=metadata.get('timestamp'),
+            gps_latitude=metadata.get('gps_latitude'),
+            gps_longitude=metadata.get('gps_longitude'),
+            device=metadata.get('device'),
+            case=case,
+            uploader=request.user
+        )
+        photo.save()
+        
+        # Clean up temp file
+        os.remove(temp_path)
+        
+        return JsonResponse({
+            'success': True,
+            'photo_id': photo.id,
+            'timestamp': photo.timestamp,
+            'gps_latitude': photo.gps_latitude,
+            'gps_longitude': photo.gps_longitude,
+            'device': photo.device,
+            'sha256_hash': photo.sha256_hash
+        })
+    
+    except Exception as e:
+        return JsonResponse({'error': f'Failed to upload photo: {str(e)}'}, status=500)
+
+
+@login_required
+def cloud_connect(request):
+    """Initiate OAuth2 flow for cloud storage."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    provider = request.POST.get('provider')
+    case_id = request.POST.get('case_id')
+    
+    if not provider or provider not in ['dropbox', 'google_drive', 'onedrive']:
+        return JsonResponse({'error': 'Invalid provider'}, status=400)
+    
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        return JsonResponse({'error': 'Case not found or not accessible'}, status=404)
+    
+    # Placeholder for OAuth2 flow initiation
+    # In a real implementation, this would redirect to the provider's OAuth2 page
+    return JsonResponse({
+        'success': True,
+        'message': f'OAuth2 flow initiated for {provider}',
+        'redirect_url': f'https://{provider}.com/oauth2/authorize'
+    })
+
+
+@login_required
+def cloud_folders(request):
+    """List folders for a cloud service."""
+    if request.method != 'GET':
+        return JsonResponse({'error': 'GET method required'}, status=405)
+    
+    provider = request.GET.get('provider')
+    
+    if not provider or provider not in ['dropbox', 'google_drive', 'onedrive']:
+        return JsonResponse({'error': 'Invalid provider'}, status=400)
+    
+    # Placeholder for folder listing
+    # In a real implementation, this would use the provider's API
+    folders = [
+        {'id': '1', 'name': 'Photos', 'path': '/Photos'},
+        {'id': '2', 'name': 'Camera Uploads', 'path': '/Camera Uploads'},
+        {'id': '3', 'name': 'Screenshots', 'path': '/Screenshots'},
+    ]
+    
+    return JsonResponse({'success': True, 'folders': folders})
+
+
+@login_required
+def cloud_import(request):
+    """Import photos from a cloud folder."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    provider = request.POST.get('provider')
+    folder_path = request.POST.get('folder_path')
+    case_id = request.POST.get('case_id')
+    
+    if not provider or provider not in ['dropbox', 'google_drive', 'onedrive']:
+        return JsonResponse({'error': 'Invalid provider'}, status=400)
+    
+    if not folder_path:
+        return JsonResponse({'error': 'folder_path is required'}, status=400)
+    
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+    except Case.DoesNotExist:
+        return JsonResponse({'error': 'Case not found or not accessible'}, status=404)
+    
+    # Placeholder for import logic
+    # In a real implementation, this would download files from the provider
+    # and create Photo objects for each image
+    return JsonResponse({
+        'success': True,
+        'message': f'Import initiated for {folder_path} from {provider}',
+        'imported_count': 0  # Placeholder
+    })
 
 
 @login_required

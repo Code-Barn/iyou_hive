@@ -18,9 +18,18 @@ def cases_processor(request):
     case_list = []
     show_create_modal = False
     archive_documents = []
-    api_configured = bool(getattr(settings, 'MISTRAL_API_KEY', None))
+    api_configured = bool(getattr(settings, 'MISTRAL_API_KEY', None)) or bool(getattr(settings, 'GEMINI_API_KEY', None))
+    user_settings = None
     
     if request.user and request.user.is_authenticated:
+        from apps.ai_assistant.models import UserSettings
+        try:
+            user_settings = UserSettings.objects.get(user=request.user)
+            if user_settings.mistral_api_key or user_settings.gemini_api_key:
+                api_configured = True
+        except UserSettings.DoesNotExist:
+            pass
+            
         case_list = list(Case.objects.filter(user=request.user).values(
             'id', 'name', 'color', 'is_active'
         ))
@@ -55,4 +64,5 @@ def cases_processor(request):
         'show_create_modal': show_create_modal,
         'archive_documents': archive_documents,
         'api_configured': api_configured,
+        'ai_settings': user_settings,
     }

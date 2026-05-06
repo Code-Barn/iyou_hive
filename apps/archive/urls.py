@@ -32,4 +32,10 @@ urlpatterns = [
     path('api/preview/<int:pk>/', views.api_file_preview, name='api_file_preview'),
     path('api/get-content/<int:pk>/', views.api_get_content, name='api_get_content'),
     path('api/save-canvas/', views.api_save_canvas, name='api_save_canvas'),
+    
+    # Photo upload and cloud import endpoints
+    path('photos/upload/', views.upload_photo, name='upload_photo'),
+    path('cloud/connect/', views.cloud_connect, name='cloud_connect'),
+    path('cloud/folders/', views.cloud_folders, name='cloud_folders'),
+    path('cloud/import/', views.cloud_import, name='cloud_import'),
 ]

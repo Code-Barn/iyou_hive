@@ -3,15 +3,17 @@ from django.http import JsonResponse
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from apps.timeline.models import TimelineEvent
-from apps.archive.models import ArchiveDocument
+from apps.archive.models import ArchiveDocument, Photo
 from apps.core.models import Case, WikiPage, RawDocument
 from apps.ai_assistant.models import AIConversation
+from apps.ai_assistant.services import analyze_photo, match_photos_to_events
+from apps.ai_assistant.api_client import call_ai_api
 from apps.core.prompts import CROSS_EXAMINATION_PROMPT
 from apps.core.utils import validate_adversarial_disclaimers
 import json
 
 
-def get_ai_response(user_query: str, case_id: str) -> str:
+def get_ai_response(user_query: str, case_id: str, user=None) -> str:
     """
     Generates a response from the AI Assistant for a user query.
     Applies cross-examination rules and citations.
@@ -44,8 +46,8 @@ def get_ai_response(user_query: str, case_id: str) -> str:
 {context_text}
 """
 
-    # 4. Call the LLM (placeholder for actual LLM integration)
-    llm_response = call_ai_api(full_prompt)
+    # 4. Call the LLM
+    llm_response = call_ai_api(full_prompt, user=user)
 
     # 5. Validate adversarial disclaimers
     cited_sources = [doc.source_party for doc in raw_docs if str(doc.id) in cited_doc_ids]
@@ -58,16 +60,15 @@ def get_ai_response(user_query: str, case_id: str) -> str:
 
 @login_required
 def save_api_key(request):
-    """Save user's Mistral API key to their profile."""
+    """Save user's AI API key and provider preference to their profile."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST method required'}, status=405)
     
     try:
         data = json.loads(request.body)
-        api_key = data.get('api_key', '').strip()
-        
-        if not api_key:
-            return JsonResponse({'error': 'API key is required'}, status=400)
+        mistral_api_key = data.get('mistral_api_key', '').strip()
+        gemini_api_key = data.get('gemini_api_key', '').strip()
+        preferred_provider = data.get('preferred_provider', 'mistral').strip()
         
         # Save the API key to user settings
         from .models import UserSettings
@@ -79,24 +80,32 @@ def save_api_key(request):
             # Create new settings if none exist
             user_settings = UserSettings(user=request.user)
         
-        # Check if the API key is the same as the current one
-        if user_settings.mistral_api_key == api_key:
-            print(f"API key is already set for user: {request.user.username}")
+        changed = False
+        
+        if mistral_api_key and user_settings.mistral_api_key != mistral_api_key:
+            user_settings.mistral_api_key = mistral_api_key
+            changed = True
+            
+        if gemini_api_key and user_settings.gemini_api_key != gemini_api_key:
+            user_settings.gemini_api_key = gemini_api_key
+            changed = True
+            
+        if preferred_provider in ['mistral', 'gemini'] and user_settings.preferred_ai_provider != preferred_provider:
+            user_settings.preferred_ai_provider = preferred_provider
+            changed = True
+            
+        if changed:
+            user_settings.save()
+            print(f"API settings updated for user: {request.user.username}")
             return JsonResponse({
                 'success': True,
-                'message': 'API key is already set. No changes needed.'
+                'message': 'API settings saved successfully. Page will reload to apply changes.'
             })
-        
-        # Save the API key
-        user_settings.mistral_api_key = api_key
-        user_settings.save()
-        
-        print(f"API key saved for user: {request.user.username}")
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'API key saved successfully. Page will reload to apply changes.'
-        })
+        else:
+            return JsonResponse({
+                'success': True,
+                'message': 'API settings are already set. No changes needed.'
+            })
     
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON data'}, status=400)
@@ -193,7 +202,7 @@ Document content:
 Please format your response in markdown with clear sections.
 """
         
-        response_text = call_ai_api(prompt)
+        response_text = call_ai_api(prompt, user=request.user)
         
         return JsonResponse({
             'status': 'success',
@@ -249,7 +258,7 @@ User Query: {query}
 Please analyze the timeline and provide insights, connections, and recommendations.
 """
         
-        response_text = call_ai_api(context)
+        response_text = call_ai_api(context, user=request.user)
         
         return JsonResponse({
             'status': 'success',
@@ -300,7 +309,7 @@ Based on this information, suggest:
 Format your suggestions as markdown with clear sections.
 """
         
-        response_text = call_ai_api(context)
+        response_text = call_ai_api(context, user=request.user)
         
         return JsonResponse({
             'status': 'success',
@@ -342,7 +351,7 @@ Please provide:
 Format as markdown with clear headings.
 """
     
-    response_text = call_ai_api(prompt)
+    response_text = call_ai_api(prompt, user=request.user)
     
     return JsonResponse({
         'status': 'success',
@@ -357,56 +366,60 @@ Format as markdown with clear headings.
     })
 
 
-def call_ai_api(prompt, model="mistral-tiny", temperature=0.7, max_tokens=2000):
-    """
-    Call the Mistral AI API to get a response.
+@login_required
+def analyze_photo(request):
+    """Analyze a single photo using AI."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
     
-    Uses the Mistral API when configured, falls back to simulated responses for development.
-    """
-    api_key = settings.MISTRAL_API_KEY
+    photo_id = request.POST.get('photo_id')
+    if not photo_id:
+        return JsonResponse({'error': 'photo_id is required'}, status=400)
     
-    if not api_key:
-        # Return a helpful error message instead of simulation
-        return (
-            "Error: Mistral API key not configured.\n\n"
-            "Please set MISTRAL_API_KEY in your .env file to enable AI features.\n"
-            "For development, you can use a test API key or configure the key in settings.py."
-        )
+    result = analyze_photo(photo_id)
+    
+    if result['success']:
+        return JsonResponse({
+            'status': 'success',
+            'photo_id': photo_id,
+            'analysis': result['analysis']
+        })
+    else:
+        return JsonResponse({'error': result['error']}, status=500)
+
+
+@login_required
+def match_photos_to_events_view(request):
+    """Match photos to timeline events for a case."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    case_id = request.POST.get('case_id')
+    if not case_id:
+        return JsonResponse({'error': 'case_id is required'}, status=400)
     
     try:
-        # Make actual API call to Mistral using requests
-        import json
-        import requests
+        case = Case.objects.get(id=case_id, user=request.user)
+        links = match_photos_to_events(case, request.user)
         
-        url = "https://api.mistral.ai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        
-        data = response.json()
-        return data['choices'][0]['message']['content']
-        
-    except requests.exceptions.RequestException as e:
-        # Network or API error
-        return f"API Request Failed: {str(e)}\n\nPlease check:"
-    except (KeyError, json.JSONDecodeError) as e:
-        # API response format error
-        return f"API Response Error: {str(e)}\n\nThe Mistral API may have changed or returned an unexpected format."
+        return JsonResponse({
+            'status': 'success',
+            'case_id': case_id,
+            'matched_links': len(links),
+            'links': [
+                {
+                    'photo_id': link.photo.id,
+                    'event_id': link.event.id,
+                    'confidence': link.confidence,
+                    'notes': link.notes
+                }
+                for link in links
+            ]
+        })
+    except Case.DoesNotExist:
+        return JsonResponse({'error': 'Case not found or not accessible'}, status=404)
     except Exception as e:
-        # Other errors
-        return f"Error processing AI request: {str(e)}\n\nPlease check your Mistral API configuration."
+        return JsonResponse({'error': f'Failed to match photos: {str(e)}'}, status=500)
 
 
 

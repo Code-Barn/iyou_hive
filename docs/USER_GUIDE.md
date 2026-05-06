@@ -433,34 +433,82 @@ User ← Hiver (Authenticated/Error)
 ---
 
 ## 🏗️ Workspace Layout
+Hiver uses a **three-pane workspace** design with collapsible panels and smooth transitions.
 
-Hiver uses a **three-pane workspace** design:
+### Panel Controls (Two-Button System)
 
-### Main Pane (Timeline) - 2/3 width
-- Timeline events in vertical scrollable format
-- Sticky date headers
-- Event cards with hover effects
-- Primary focus area
+Each pane has two control buttons in the top-right corner:
 
-### Left Pane (Archive) - 1/3 width, Collapsible
-- Document list
-- Search and filter
-- Document previews
-- Can be collapsed to save space
+| Button | Icon | Action | Behavior |
+|--------|------|--------|-----------|
+| **Left Arrow** | `←` | Collapse | Collapses the pane (width → 0) |
+| **Right Arrow** | `→` | Expand | Expands pane to fullscreen (others collapse) |
 
-### Right Pane (AI Assistant) - 1/3 width, Collapsible
-- AI chat interface
-- Context selection
-- Response display
-- Can be collapsed to save space
+**Special Cases:**
+- When pane is **fullscreen**: Left arrow becomes `↖` (Restore all panes)
+- When pane is **collapsed**: Right arrow becomes `↗` (Restore pane)
+
+### Pane States
+
+#### 1. Default State
+- **Timeline**: 2/3 width (2fr)
+- **Archive**: 1/3 width (1fr)
+- **AI Assistant**: 1/3 width (1fr)
+- All panes visible and functional
+
+#### 2. Collapsed State
+- Pane width collapses to 0 (hidden)
+- Other panes expand to fill space
+- State persists across page refreshes (localStorage)
+
+#### 3. Fullscreen State
+- Selected pane expands to 100% width
+- All other panes collapse automatically
+- Perfect for focused work
+
+### How to Use
+
+**Collapse a Pane:**
+1. Click the **←** (Left Arrow) button in the pane header
+2. The pane will smoothly collapse (300ms transition)
+3. Other panes will expand to fill the space
+
+**Expand to Fullscreen:**
+1. Click the **→** (Right Arrow) button in the pane header
+2. That pane will expand to full width
+3. All other panes will collapse automatically
+
+**Restore Default View:**
+- From fullscreen: Click **↖** (Restore all panes)
+- From collapsed: Click **↗** (Restore pane)
+
+### State Persistence
+
+Hiver remembers your workspace layout:
+- Pane states are saved in **localStorage**
+- Collapsed panes stay collapsed after refresh
+- Fullscreen panes stay fullscreen after refresh
+- Storage keys: `pane-{paneId}-state`
 
 ### Responsive Design
 
-| Breakpoint | Layout |
-|------------|--------|
-| Desktop (≥1200px) | Three panes: 2fr 1fr 1fr |
-| Tablet (≥900px, <1200px) | Two panes: 2fr 1fr (AI hidden) |
-| Mobile (<900px) | Single column, stacked |
+| Breakpoint | Layout | Behavior |
+|------------|--------|------------|
+| Desktop (≥1200px) | Three panes: 2fr 1fr 1fr | All panes visible |
+| Tablet (≥900px, <1200px) | Two panes: 2fr 1fr | AI pane hidden |
+| Mobile (<900px) | Single column, stacked | Only active pane visible |
+
+**Mobile Tips:**
+- Buttons are touch-friendly (44x44px minimum)
+- Panes stack vertically
+- Use nav buttons to switch between panes
+
+### Tips & Tricks
+
+1. **Quick Fullscreen**: Click → to focus on one pane
+2. **Compare Side-by-Side**: Keep two panes in default, collapse the third
+3. **Mobile Workflow**: Use fullscreen mode on small screens
+4. **State Memory**: Your layout is remembered across sessions
 
 ---
 

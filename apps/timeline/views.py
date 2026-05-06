@@ -3,6 +3,8 @@ from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.db.models import Q
+from django.core.cache import cache
+from django.core.paginator import Paginator
 from .models import TimelineEvent
 from apps.core.models import Case, TimelineFile
 from .utils import (
@@ -56,8 +58,14 @@ def timeline_view(request):
         request.session.pop('selected_case_id', None)
         return redirect('core:case_list')
     
-    # Get events for this case only
-    events = TimelineEvent.objects.filter(case=case, created_by=request.user)
+    # Cache key for events
+    cache_key = f'timeline_events_{case_id}_{request.user.id}'
+    events = cache.get(cache_key)
+    
+    if not events:
+        # Get events for this case only
+        events = TimelineEvent.objects.filter(case=case, created_by=request.user)
+        cache.set(cache_key, events, 3600)  # Cache for 1 hour
     
     # Get timeline file information for this case
     timeline_files = []
@@ -180,8 +188,13 @@ def timeline_view(request):
     # Use DB events (now including ingested markdown events) for display
     display_events = list(events) + db_events_from_markdown
     
+    # Add pagination
+    paginator = Paginator(display_events, 20)  # Show 20 events per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
     context = {
-        'events': display_events,
+        'events': page_obj,
         'case': case,
         'main_heading': main_heading,
         'headings': markdown_headings,

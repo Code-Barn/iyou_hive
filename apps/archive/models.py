@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 import os
+import hashlib
 
 
 class ArchiveDocument(models.Model):
@@ -260,6 +261,241 @@ class ArchiveDocument(models.Model):
         else:
             self.is_immutable = True
         super().save(*args, **kwargs)
+
+
+class Photo(models.Model):
+    """
+    Model for storing photos with EXIF metadata for forensic timelines.
+    """
+    file = models.ImageField(upload_to='archive/photos/', help_text="Photo file")
+    timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp from EXIF DateTimeOriginal"
+    )
+    gps_latitude = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="GPS latitude from EXIF"
+    )
+    gps_longitude = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="GPS longitude from EXIF"
+    )
+    device = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Device make and model from EXIF"
+    )
+    sha256_hash = models.CharField(
+        max_length=64,
+        blank=True,
+        help_text="SHA-256 hash for tamper detection"
+    )
+    case = models.ForeignKey(
+        'core.Case',
+        on_delete=models.CASCADE,
+        related_name='photos',
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Case this photo belongs to"
+    )
+    uploader = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='uploaded_photos',
+        db_index=True,
+        help_text="User who uploaded this photo"
+    )
+    upload_date = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-upload_date']
+        verbose_name = 'Photo'
+        verbose_name_plural = 'Photos'
+    
+    def __str__(self):
+        return f"{self.file.name} ({self.timestamp})"
+    
+    def get_absolute_url(self):
+        """Get URL to view this photo."""
+        from django.urls import reverse
+        return reverse('archive:photo_detail', args=[str(self.id)])
+    
+    def get_file_url(self):
+        """Get URL to the photo file."""
+        if self.file:
+            return self.file.url
+        return ""
+    
+    def calculate_sha256(self):
+        """Calculate SHA-256 hash of the photo file."""
+        if self.file:
+            sha256 = hashlib.sha256()
+            for chunk in self.file.chunks():
+                sha256.update(chunk)
+            return sha256.hexdigest()
+        return ""
+    
+    def save(self, *args, **kwargs):
+        """Auto-calculate SHA-256 hash on save."""
+        if not self.sha256_hash:
+            self.sha256_hash = self.calculate_sha256()
+        super().save(*args, **kwargs)
+    
+    def verify_hash(self):
+        """Verify the SHA-256 hash of the photo file."""
+        current_hash = self.calculate_sha256()
+        return current_hash == self.sha256_hash
+
+
+class CloudImport(models.Model):
+    """
+    Model for tracking cloud storage imports (Dropbox/Google Drive/OneDrive).
+    """
+    CLOUD_PROVIDERS = [
+        ('dropbox', 'Dropbox'),
+        ('google_drive', 'Google Drive'),
+        ('onedrive', 'OneDrive'),
+    ]
+    
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='cloud_imports',
+        db_index=True,
+        help_text="User who owns this import"
+    )
+    case = models.ForeignKey(
+        'core.Case',
+        on_delete=models.CASCADE,
+        related_name='cloud_imports',
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Case this import belongs to"
+    )
+    provider = models.CharField(
+        max_length=50,
+        choices=CLOUD_PROVIDERS,
+        help_text="Cloud storage provider"
+    )
+    access_token = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="OAuth2 access token"
+    )
+    refresh_token = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="OAuth2 refresh token"
+    )
+    token_expires = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the access token expires"
+    )
+    folder_path = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="Path to the folder being imported"
+    )
+    last_imported = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the last import was performed"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Whether this import is active"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Cloud Import'
+        verbose_name_plural = 'Cloud Imports'
+    
+    def __str__(self):
+        return f"{self.provider}: {self.folder_path}"
+    
+    def is_token_expired(self):
+        """Check if the access token is expired."""
+        if not self.token_expires:
+            return True
+        return timezone.now() > self.token_expires
+    
+    def refresh_access_token(self):
+        """Refresh the access token using the refresh token."""
+        # Placeholder for OAuth2 token refresh logic
+        pass
+
+
+class CustodyLog(models.Model):
+    """
+    Model for tracking all actions on photos for forensic integrity.
+    """
+    ACTION_TYPES = [
+        ('UPLOAD', 'Upload'),
+        ('VIEW', 'View'),
+        ('EDIT', 'Edit'),
+        ('DELETE', 'Delete'),
+        ('EXPORT', 'Export'),
+        ('ANALYZE', 'Analyze'),
+        ('LINK', 'Link to Event'),
+        ('UNLINK', 'Unlink from Event'),
+    ]
+    
+    photo = models.ForeignKey(
+        'Photo',
+        on_delete=models.CASCADE,
+        related_name='custody_logs',
+        db_index=True,
+        help_text="Photo this action relates to"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='photo_custody_logs',
+        db_index=True,
+        help_text="User who performed the action"
+    )
+    action = models.CharField(
+        max_length=50,
+        choices=ACTION_TYPES,
+        help_text="Type of action performed"
+    )
+    timestamp = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(
+        null=True,
+        blank=True,
+        help_text="IP address of the user"
+    )
+    user_agent = models.CharField(
+        max_length=512,
+        blank=True,
+        help_text="User agent string"
+    )
+    details = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional details about the action"
+    )
+    
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Custody Log'
+        verbose_name_plural = 'Custody Logs'
+    
+    def __str__(self):
+        return f"{self.action}: {self.photo.file.name} by {self.user}"
 
 
 class SyncedArchive(models.Model):
