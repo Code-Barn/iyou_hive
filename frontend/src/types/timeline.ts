@@ -1,7 +1,31 @@
 // Timeline Event Types
-export type Status = 'UNDISPUTED' | 'CONTESTED' | 'REFUTED' | 'STIPULATED' | 'PENDING';
-export type SourceParty = 'CLIENT' | 'OPPOSING' | 'NEUTRAL' | 'COURT' | 'WITNESS';
-export type Category = 'contract' | 'email' | 'court_filing' | 'communication' | 'meeting' | 'deadline' | 'verified' | 'contested' | 'personal' | 'legal' | 'medical' | 'financial' | 'education' | 'other';
+export type Status =
+  | "UNDISPUTED"
+  | "CONTESTED"
+  | "REFUTED"
+  | "STIPULATED"
+  | "PENDING";
+export type SourceParty =
+  | "CLIENT"
+  | "OPPOSING"
+  | "NEUTRAL"
+  | "COURT"
+  | "WITNESS";
+export type Category =
+  | "contract"
+  | "email"
+  | "court_filing"
+  | "communication"
+  | "meeting"
+  | "deadline"
+  | "verified"
+  | "contested"
+  | "personal"
+  | "legal"
+  | "medical"
+  | "financial"
+  | "education"
+  | "other";
 
 // Archive Document
 export interface ArchiveDocument {
@@ -35,6 +59,10 @@ export interface TimelineEvent {
   created_by: string;
   created_by_username: string;
   timeline_file: string | null;
+  // Phase 2: System source fields
+  is_system_source: boolean;
+  trust_level: number;
+  has_gold_seal: boolean;
 }
 
 // Contested Pair

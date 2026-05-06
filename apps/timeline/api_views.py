@@ -1,3 +1,5 @@
+import os
+import tempfile
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -131,6 +133,8 @@ class TimelineEventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def contest(self, request, pk=None, case_id=None):
         """Create a counter-claim to contest an event."""
+        from .services import ConflictResolverService
+        
         try:
             original_event = TimelineEvent.objects.get(
                 pk=pk, case__id=case_id, case__user=request.user
@@ -138,91 +142,96 @@ class TimelineEventViewSet(viewsets.ModelViewSet):
         except TimelineEvent.DoesNotExist:
             raise NotFound("Event not found")
         
-        # User's party for the counter-claim
-        user_party = request.data.get('source_party')
-        if not user_party:
-            # Determine user's party - for now, assume they're the opposing party
-            # In a real system, this would come from user profile
-            user_party = 'OPPOSING' if original_event.source_party == 'CLIENT' else 'CLIENT'
+        service = ConflictResolverService()
         
-        # Create counter-claim
-        counter_claim = TimelineEvent.objects.create(
-            case=original_event.case,
-            date=original_event.date,
-            event=original_event.event,
-            category=original_event.category,
-            notes=request.data.get('notes', original_event.notes),
-            citation=request.data.get('citation', ''),
-            source_party=user_party,
-            status='CONTESTED',
-            source_type='MANUAL',
-            created_by=request.user,
-            replaces_event=original_event
-        )
+        # Prepare event data
+        event_data = {
+            'date': request.data.get('date', original_event.date),
+            'event': request.data.get('event', original_event.event),
+            'category': request.data.get('category', original_event.category),
+            'notes': request.data.get('notes', original_event.notes),
+            'citation': request.data.get('citation', original_event.citation),
+            'status': request.data.get('status', 'CONTESTED'),
+            'source_type': request.data.get('source_type', 'MANUAL'),
+        }
         
-        # Link evidence if provided
+        # Get evidence IDs
         evidence_ids = request.data.get('evidence_ids', [])
-        if evidence_ids:
-            docs = ArchiveDocument.objects.filter(
-                id__in=evidence_ids, case=original_event.case
-            )
-            counter_claim.evidence.set(docs)
         
-        return Response(
-            TimelineEventSerializer(counter_claim).data,
-            status=status.HTTP_201_CREATED
-        )
+        try:
+            counter_claim = service.contest_event(
+                original_event=original_event,
+                user=request.user,
+                event_data=event_data,
+                evidence_ids=evidence_ids
+            )
+            
+            return Response(
+                TimelineEventSerializer(counter_claim).data,
+                status=status.HTTP_201_CREATED
+            )
+        except PermissionDenied as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        except ValidationError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
     
     @action(detail=True, methods=['post'])
     def resolve(self, request, pk=None, case_id=None):
-        """Resolve a conflict by creating a stipulated version."""
+        """Resolve a conflict for an event.
+        
+        Supports three resolution paths:
+        - KEEP_ORIGINAL: Keep the original event, mark counter-claim as superseded
+        - KEEP_COUNTER: Keep the counter-claim, mark original as superseded
+        - MERGE: Create new STIPULATED event combining both
+        """
+        from .services import ConflictResolverService
+        
         try:
-            # Get the contested event
-            contested_event = TimelineEvent.objects.get(
+            event = TimelineEvent.objects.get(
                 pk=pk, case__id=case_id, case__user=request.user
             )
         except TimelineEvent.DoesNotExist:
-            raise NotFound("Contested event not found")
+            raise NotFound("Event not found")
         
-        resolution = request.data.get('resolution', 'STIPULATED')
+        resolution = request.data.get('resolution')
+        notes = request.data.get('notes', '')
         
-        # Get the original event (the one being replaced)
-        original_event = contested_event.replaces_event
-        
-        # Create new stipulated event
-        new_event = TimelineEvent.objects.create(
-            case=contested_event.case,
-            date=request.data.get('date', contested_event.date),
-            event=request.data.get('event', contested_event.event),
-            category=request.data.get('category', contested_event.category),
-            notes=request.data.get('notes', contested_event.notes),
-            citation=request.data.get('citation', contested_event.citation),
-            source_party='NEUTRAL',
-            status='STIPULATED',
-            source_type='MANUAL',
-            created_by=request.user
-        )
-        
-        # Link evidence
-        evidence_ids = request.data.get('evidence_ids', [])
-        if evidence_ids:
-            docs = ArchiveDocument.objects.filter(
-                id__in=evidence_ids, case=contested_event.case
+        if not resolution:
+            return Response(
+                {'error': 'resolution is required. Use KEEP_ORIGINAL, KEEP_COUNTER, or MERGE'},
+                status=status.HTTP_400_BAD_REQUEST
             )
-            new_event.evidence.set(docs)
         
-        # Both contested events now point to the stipulated version
-        contested_event.replaces_event = new_event
-        contested_event.save()
+        service = ConflictResolverService()
         
-        if original_event:
-            original_event.replaces_event = new_event
-            original_event.save()
-        
-        return Response(
-            TimelineEventSerializer(new_event).data,
-            status=status.HTTP_201_CREATED
-        )
+        try:
+            resolved_event = service.resolve_conflict(
+                event=event,
+                resolution=resolution,
+                user=request.user,
+                notes=notes
+            )
+            
+            return Response(
+                TimelineEventSerializer(resolved_event).data,
+                status=status.HTTP_200_OK
+            )
+        except ValidationError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except PermissionDenied as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_403_FORBIDDEN
+            )
 
 
 class TimelineCollectionViewSet(viewsets.ModelViewSet):
@@ -398,3 +407,201 @@ class DiffViewAPI(viewsets.ViewSet):
             'evidence': set(e1.evidence.values_list('id', flat=True)) != 
                       set(e2.evidence.values_list('id', flat=True))
         }
+
+
+class HiveExportViewSet(viewsets.ViewSet):
+    """API for exporting a case to a .hive bundle."""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def create(self, request, case_id=None):
+        """Export a case to a .hive bundle.
+        
+        POST /api/timeline/cases/{case_id}/export/
+        
+        Optional query params:
+        - include_private=true: Include user's private workspace files
+        - user_uuid: Specific user UUID for private files (if include_private)
+        """
+        from .services import HiveExportService
+        from apps.core.models import Case
+        from django.http import HttpResponse
+        import os
+        
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+        except Case.DoesNotExist:
+            raise NotFound("Case not found or access denied")
+        
+        # Get optional parameters
+        include_private = request.query_params.get('include_private', 'false').lower() == 'true'
+        user_uuid = request.query_params.get('user_uuid')
+        
+        # Use current user's UUID if include_private but no user_uuid specified
+        if include_private and not user_uuid:
+            user_uuid = str(request.user.uuid)
+        
+        service = HiveExportService(
+            case=case,
+            include_private=include_private,
+            user_uuid=user_uuid
+        )
+        
+        try:
+            hive_path = service.export()
+            
+            # Return the file as a downloadable response
+            if os.path.exists(hive_path):
+                with open(hive_path, 'rb') as f:
+                    response = HttpResponse(f.read(), content_type='application/gzip')
+                    response['Content-Disposition'] = f'attachment; filename="{os.path.basename(hive_path)}"'
+                    return response
+            else:
+                return Response(
+                    {'error': 'Export file not created'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class HiveImportViewSet(viewsets.ViewSet):
+    """API for importing a .hive bundle."""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def create(self, request, case_id=None):
+        """Import a .hive bundle.
+        
+        POST /api/timeline/cases/{case_id}/import/
+        
+        Request body: The .hive file as multipart form data
+        Query params:
+        - target_case: UUID of existing case to import into (optional)
+        """
+        from .services import HiveImportService
+        from apps.core.models import Case
+        import tempfile
+        
+        # Get the uploaded file
+        hive_file = request.FILES.get('file')
+        if not hive_file:
+            return Response(
+                {'error': 'No file provided. Use multipart form with field name "file"'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Save to temp file
+        temp_dir = tempfile.mkdtemp()
+        temp_path = os.path.join(temp_dir, hive_file.name)
+        
+        try:
+            with open(temp_path, 'wb+') as destination:
+                for chunk in hive_file.chunks():
+                    destination.write(chunk)
+            
+            # Get target case if specified
+            target_case = None
+            target_case_uuid = request.query_params.get('target_case')
+            if target_case_uuid:
+                try:
+                    target_case = Case.objects.get(
+                        uuid=target_case_uuid,
+                        user=request.user
+                    )
+                except Case.DoesNotExist:
+                    return Response(
+                        {'error': 'Target case not found or access denied'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            service = HiveImportService(
+                hive_path=temp_path,
+                target_case=target_case,
+                user=request.user
+            )
+            
+            case, errors, warnings = service.import_bundle()
+            
+            # Clean up temp file
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            
+            return Response({
+                'status': 'success',
+                'case_uuid': str(case.uuid),
+                'case_name': case.name,
+                'errors': errors,
+                'warnings': warnings,
+                'stats': service.stats
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            # Clean up temp file on error
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        finally:
+            # Clean up temp directory
+            try:
+                import shutil
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
+
+
+class ShredderViewSet(viewsets.ViewSet):
+    """API for secure data shredding."""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def create(self, request, case_id=None):
+        """Shred a case or user's private data.
+        
+        POST /api/timeline/cases/{case_id}/shred/
+        
+        Request body:
+        - shred_private_only: true to only shred user's private data (default: false)
+        """
+        from apps.core.models import Case
+        from apps.core.services import ShredderService
+        
+        try:
+            case = Case.objects.get(id=case_id)
+        except Case.DoesNotExist:
+            raise NotFound("Case not found")
+        
+        shred_private_only = request.data.get('shred_private_only', False)
+        
+        service = ShredderService(case)
+        
+        try:
+            counts = service.shred_case(
+                user=request.user,
+                shred_private_only=shred_private_only
+            )
+            
+            return Response({
+                'status': 'success',
+                'message': 'Case shredded successfully' if not shred_private_only 
+                           else 'Private data shredded successfully',
+                'deleted': counts
+            }, status=status.HTTP_200_OK)
+            
+        except PermissionDenied as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

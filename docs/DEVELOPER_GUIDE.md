@@ -5,15 +5,19 @@ This guide covers the architecture, APIs, and customization options for Hiver de
 ## 📖 Table of Contents
 
 1. [Architecture Overview](#-architecture-overview)
-2. [Models Reference](#-models-reference)
-3. [API Endpoints](#-api-endpoints)
-4. [Markdown Parsing Logic](#-markdown-parsing-logic)
-5. [Authentication System](#-authentication-system)
-6. [Case Compartmentalization](#-case-compartmentalization)
-7. [Extending Hiver](#-extending-hiver)
-8. [Customization Guide](#-customization-guide)
-9. [Performance Considerations](#-performance-considerations)
-10. [Security Guide](#-security-guide)
+2. [Hive Architecture](#-hive-architecture)
+3. [Trust Model](#-trust-model)
+4. [Portability Protocols](#-portability-protocols)
+5. [Security Protocols](#-security-protocols)
+6. [Models Reference](#-models-reference)
+7. [API Endpoints](#-api-endpoints)
+8. [Markdown Parsing Logic](#-markdown-parsing-logic)
+9. [Authentication System](#-authentication-system)
+10. [Case Compartmentalization](#-case-compartmentalization)
+11. [Extending Hiver](#-extending-hiver)
+12. [Customization Guide](#-customization-guide)
+13. [Performance Considerations](#-performance-considerations)
+14. [Security Guide](#-security-guide)
 
 ---
 
@@ -124,6 +128,483 @@ Hiver follows Django's MVC pattern with a **3-Layer LLM Wiki Architecture** for 
 - **Lazy Loading**: Markdown files parsed on-demand
 - **Event Sourcing**: Timeline events stored as immutable records
 - **CQRS-like**: Separate read/write operations for performance
+
+---
+
+## 🏛️ Hive Architecture
+
+Hiver implements a **strictly isolated directory structure** for data compartmentalization, separating shared evidence (Vault) from user workspaces (Workspace).
+
+### Directory Structure
+
+```
+media/
+└── hives/
+    └── [case_uuid]/                    # Case-root directory
+        ├── formal/                     # ✅ VAULT: Shared evidence vault
+        │   ├── evidence/               # ArchiveDocument files (shared across all users)
+        │   │   └── [document_uuid].[ext]
+        │   ├── timeline/               # Markdown exports
+        │   │   └── timeline.md
+        │   └── hive.json               # Export manifest cache (optional)
+        │
+        └── private/                    # 🔒 WORKSPACE: User-isolated compartments
+            └── [user_uuid]/            # Per-user private directory
+                ├── drafts/            # Unpromoted timeline events & documents
+                ├── wiki/               # LLM Wiki pages (markdown)
+                ├── research/           # AI analysis outputs
+                └── temp/               # Upload staging (auto-cleaned after 7 days)
+```
+
+### Vault vs. Workspace Isolation
+
+| Aspect | Formal (Vault) | Private (Workspace) |
+|--------|---------------|-------------------|
+| **Access** | All case users | User-only |
+| **Purpose** | Shared evidence, master timeline | Drafts, personal research |
+| **File Types** | Promoted documents, exports | Unpromoted docs, wiki, AI outputs |
+| **Deletion** | Case owner/admin only | User can delete own |
+| **Backup** | Included in .hive export by default | Optional include via flag |
+
+### The Gate Logic
+
+The **promote_to_evidence** function is the ONLY mechanism for moving files from Private to Formal:
+
+1. **Validation**: User must own the document and the case
+2. **Copy**: File is copied from `private/[user_uuid]/drafts/` to `formal/evidence/`
+3. **Update**: ArchiveDocument record updated with new path
+4. **Mark**: `is_promoted = True`, `promoted_at` timestamp set
+5. **Atomic**: Entire operation in a database transaction
+
+```python
+from apps.core.services import HiveDirectoryService
+
+# Promote a user's document to shared evidence
+service = HiveDirectoryService()
+promoted_doc = service.promote_to_evidence(
+    document=archive_doc,
+    case=case,
+    user=user
+)
+```
+
+**Important**: Files in the Vault are **immutable** once promoted. This ensures evidence integrity for all case participants.
+
+---
+
+## 🛡️ Trust Model
+
+Hiver implements a **multi-level trust system** for timeline events, enabling courts, arbitrators, and users to assess fact reliability.
+
+### Trust Level Scale
+
+| Level | Value | Description | Source |
+|-------|-------|-------------|--------|
+| ⭐ | 1 | Low - Unverified | User claim without evidence |
+| ⭐⭐ | 2 | Medium - User Verified | User claim with evidence |
+| ⭐⭐⭐ | 3 | High - Documented | Documented claim (default) |
+| ⭐⭐⭐⭐ | 4 | Very High - Official Record | Official documents, filings |
+| ⭐⭐⭐⭐⭐ | 5 | Maximum - Court Stipulated | COURT/NEUTRAL sources |
+
+### System Source Model
+
+**Core Fields:**
+
+```python
+# TimelineEvent model
+is_system_source = models.BooleanField(
+    default=False,
+    help_text="Whether this event comes from an authoritative system source"
+)
+
+trust_level = models.PositiveSmallIntegerField(
+    default=3,
+    choices=[
+        (1, 'Low - Unverified'),
+        (2, 'Medium - User Verified'),
+        (3, 'High - Documented'),
+        (4, 'Very High - Official Record'),
+        (5, 'Maximum - Court Stipulated'),
+    ]
+)
+
+@property
+def has_gold_seal(self) -> bool:
+    """Returns True if is_system_source=True AND status=STIPULATED"""
+    return self.is_system_source and self.status == 'STIPULATED'
+```
+
+### Defaulting Rules
+
+When a TimelineEvent is created or updated:
+
+- If `source_party` is **COURT** or **NEUTRAL**:
+  - Auto-sets `is_system_source = True`
+  - Auto-sets `status = STIPULATED`
+  - Auto-sets `trust_level = 5` (Maximum)
+
+- If `is_system_source = True` but `source_party` is NOT COURT/NEUTRAL:
+  - **Validation Error**: "System sources must have COURT or NEUTRAL as source_party"
+
+### Hardened Validation
+
+**System Source Protection**: COURT and NEUTRAL facts cannot be arbitrarily contested.
+
+A system source event (`is_system_source = True`) **CANNOT** be set to `CONTESTED` status unless:
+
+1. **Replaces Event Chain**: The contested event has a `replaces_event` (counter-claim)
+   - This preserves the original as the "truth of record"
+   - The counter-claim is the user's alternative version
+
+2. **Correction Document**: At least one evidence document has "Correction" in its title
+   - Allows courts to issue official corrections to their own records
+   - Maintains audit trail while allowing factual updates
+
+```python
+# In TimelineEvent.clean()
+if self.is_system_source and self.status == 'CONTESTED':
+    has_replaces = self.replaces_event is not None
+    has_correction_doc = self.evidence.filter(
+        title__icontains='Correction'
+    ).exists()
+    
+    if not has_replaces and not has_correction_doc:
+        raise ValidationError({
+            'status': 'System source events cannot be CONTESTED '
+                      'without a replaces_event chain or Correction document'
+        })
+```
+
+### Gold Seal Visual Indicator
+
+Events with `has_gold_seal = True` display a **🏆 Gold Seal** badge in the UI:
+
+```tsx
+// In EventCard.tsx
+{event.has_gold_seal && (
+  <span className="text-xs bg-yellow-400 text-black px-2 py-1 rounded-full font-bold">
+    🏆 Gold Seal
+  </span>
+)}
+```
+
+**Interpretation**: The Gold Seal indicates this fact has been stipulated by a neutral authority (court, mediator) and is considered **maximum trust**. These facts form the foundation of the "Truth Graph" and should only be modified through official correction processes.
+
+---
+
+## 📦 Portability Protocols
+
+Hiver's **.hive bundle** format enables complete case portability across server instances while preserving all relationships and metadata.
+
+### .hive Bundle Specification
+
+A .hive file is a **tar.gz archive** containing:
+
+```
+hive.tar.gz
+├── hive.json              # Manifest (UTF-8 JSON)
+├── formal/                # Vault files (optional)
+│   └── evidence/          # All promoted documents
+│       └── [uuid].[ext]
+└── private/               # Workspace files (if include_private=true)
+    └── [user_uuid]/       # Per-user private data
+        ├── drafts/
+        ├── wiki/
+        └── research/
+```
+
+### Manifest Schema (hive.json v1.0)
+
+```json
+{
+  "version": "1.0",
+  "exported_at": "2024-05-06T15:20:00Z",
+  
+  "case": {
+    "uuid": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Smith v. Jones",
+    "description": "Breach of contract dispute",
+    "created_at": "2024-01-15T10:00:00Z",
+    "updated_at": "2024-05-20T14:30:00Z",
+    "user_uuid": "ffffffff-eeee-dddd-cccc-bbbb-aaaaaaaaaaaa"
+  },
+  
+  "archive_documents": [
+    {
+      "uuid": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      "title": "Contract.pdf",
+      "file_type": "pdf",
+      "category": "contract",
+      "file_path": "formal/evidence/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pdf",
+      "is_promoted": true,
+      "promoted_at": "2024-01-16T09:00:00Z",
+      "case_uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "uploader_uuid": "ffffffff-eeee-dddd-cccc-bbbb-aaaaaaaaaaaa",
+      "checksum": "sha256:abc123...",
+      "tags": ["exhibit", "agreement"],
+      "upload_date": "2024-01-15T10:00:00Z"
+    }
+  ],
+  
+  "timeline_events": [
+    {
+      "uuid": "11111111-2222-3333-4444-555555555555",
+      "date": "2023-11-05",
+      "event": "Contract Signed",
+      "category": "contract",
+      "notes": "Signed with X Corp",
+      "source_party": "CLIENT",
+      "source_type": "MANUAL",
+      "status": "UNDISPUTED",
+      "is_system_source": false,
+      "trust_level": 3,
+      "version": 1,
+      "replaces_event_uuid": null,
+      "evidence_uuids": ["aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"],
+      "case_uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "created_by_uuid": "ffffffff-eeee-dddd-cccc-bbbb-aaaaaaaaaaaa",
+      "created_at": "2024-01-15T10:00:00Z",
+      "updated_at": "2024-01-15T10:00:00Z"
+    }
+  ],
+  
+  "timeline_collections": [
+    {
+      "uuid": "99999999-8888-7777-6666-555555555555",
+      "name": "Plaintiff Timeline",
+      "description": "Client's version of events",
+      "case_uuid": "550e8400-e29b-41d4-a716-446655440000",
+      "created_by_uuid": "ffffffff-eeee-dddd-cccc-bbbb-aaaaaaaaaaaa",
+      "is_public": false,
+      "event_uuids": ["11111111-2222-3333-4444-555555555555"]
+    }
+  ]
+}
+```
+
+### Key Design Principles
+
+1. **UUID Stability**: All records use their original UUIDs
+   - Ensures citations within Markdown files remain valid
+   - Preserves cross-references across imports
+   - Enables merging of partial exports
+
+2. **Relative Paths Only**: All file paths are relative to the Hive root
+   - `"formal/evidence/uuid.pdf"` NOT `/var/www/media/hives/...`
+   - Makes bundles **server-agnostic**
+   - Allows deployment to any environment
+
+3. **Relationships via UUID**: All M2M and FK relationships stored as UUID references
+   - `evidence_uuids`: Array of ArchiveDocument UUIDs
+   - `replaces_event_uuid`: UUID of the original event being contested
+   - `event_uuids`: Array of TimelineEvent UUIDs in a collection
+
+4. **Truth Graph Preservation**: The complete conflict history is captured
+   - Original events
+   - Counter-claims (with `replaces_event_uuid`)
+   - Merged STIPULATED events
+   - All evidence linkages
+
+### UUID Stability During Import
+
+The **HiveImportService** recreates records with their **original UUIDs**:
+
+```python
+# For each document in manifest:
+doc = ArchiveDocument.objects.create(
+    uuid=doc_data["uuid"],  # ✅ Original UUID preserved
+    title=doc_data["title"],
+    ...
+)
+
+# For each event in manifest:
+event = TimelineEvent.objects.create(
+    uuid=event_data["uuid"],  # ✅ Original UUID preserved
+    ...
+)
+```
+
+**Collision Handling**: If a UUID already exists in a **different case**, import halts with error:
+
+```python
+# In HiveImportService._import_archive_documents()
+if existing_doc.case != case:
+    raise IntegrityError(
+        f"UUID collision: ArchiveDocument {doc_uuid} already exists "
+        f"in case {existing_doc.case.uuid}"
+    )
+```
+
+### Relational Mapping Logic
+
+The import service uses a **multi-pass approach** to ensure all relationships are correctly established:
+
+```
+Pass 1: Create all ArchiveDocuments
+Pass 2: Create all TimelineEvents
+Pass 3: Set up replaces_event relationships (using UUID map)
+Pass 4: Set up evidence M2M relationships (using UUID map)
+Pass 5: Create all TimelineCollections
+Pass 6: Set up collection-event M2M relationships (using UUID map)
+Pass 7: Copy all files to their proper locations
+```
+
+This ensures that when we reference an entity by UUID, it already exists in the database.
+
+### Export Service Usage
+
+```python
+from apps.timeline.services import HiveExportService
+
+# Export with only formal files (default)
+service = HiveExportService(case=case)
+hive_path = service.export()
+
+# Export with user's private files
+service = HiveExportService(
+    case=case,
+    include_private=True,
+    user_uuid=str(user.uuid)
+)
+hive_path = service.export()
+```
+
+### Import Service Usage
+
+```python
+from apps.timeline.services import HiveImportService
+
+# Import into a new case (created from manifest)
+service = HiveImportService(
+    hive_path="/path/to/bundle.hive",
+    user=request.user
+)
+case, errors, warnings = service.import_bundle()
+
+# Import into an existing case
+service = HiveImportService(
+    hive_path="/path/to/bundle.hive",
+    target_case=existing_case,
+    user=request.user
+)
+```
+
+---
+
+## 🔒 Security Protocols
+
+Hiver implements **military-grade secure deletion** for sensitive legal data through the **ShredderService**.
+
+### Secure Wipe Requirement
+
+**CRITICAL**: Every file MUST be overwritten with cryptographically secure random data before deletion.
+
+```python
+import os
+
+def _secure_wipe_file(self, file_path: str):
+    # Get file size
+    file_size = os.path.getsize(file_path)
+    
+    # Open in binary write mode (truncates file)
+    with open(file_path, 'wb') as f:
+        remaining = file_size
+        while remaining > 0:
+            # Generate cryptographically secure random bytes
+            chunk_size = min(4096, remaining)
+            random_data = os.urandom(chunk_size)  # ✅ CRITICAL: os.urandom
+            f.write(random_data)
+            remaining -= chunk_size
+        
+        # Force write to disk
+        f.flush()
+        os.fsync(f.fileno())
+    
+    # Delete the file
+    os.unlink(file_path)
+```
+
+**Why os.urandom?**
+- `os.urandom()` uses the **operating system's cryptographically secure random number generator**
+- On Linux: Reads from `/dev/urandom`
+- On Windows: Uses `CryptGenRandom` API
+- **NOT** `random.random()` which is predictable and unsuitable for security
+
+### ShredderService Methods
+
+| Method | Purpose | Permission |
+|--------|---------|------------|
+| `shred_case(user, shred_private_only=False)` | Shred entire case or private data | Owner/Admin (full), User (private) |
+| `_secure_wipe_directory(path)` | Recursively wipe all files in directory | Internal |
+| `_secure_wipe_file(path)` | Overwrite single file with random data | Internal |
+| `get_shreddable_cases(user)` | List cases user can shred | N/A |
+
+### Permission Model
+
+```python
+def _validate_case_permission(self, user: User):
+    # Only case owner or admin can shred entire case
+    if not (user.is_staff or user.is_superuser):
+        if self.case.user != user:
+            raise PermissionDenied(
+                "Only case owner or admin can shred this case"
+            )
+    
+    # Users can always shred their own private data
+```
+
+### Shred Levels
+
+#### Full Case Shred (Owner/Admin Only)
+
+Deletes **everything** associated with a case:
+
+1. **Secure Wipe All Files**: Every file in `/media/hives/[case_uuid]/` is overwritten with random data
+2. **Delete TimelineCollections**: All curated timelines for the case
+3. **Delete TimelineEvents**: All timeline events for the case
+4. **Delete ArchiveDocuments**: All documents for the case
+5. **Delete Case**: The case record itself
+6. **Atomic**: All database deletions in a single transaction
+
+#### Private Data Shred (User Only)
+
+Deletes only the user's private workspace:
+
+1. **Secure Wipe Private Files**: All files in `/media/hives/[case_uuid]/private/[user_uuid]/`
+2. **Delete User's TimelineCollections**: Collections created by this user
+3. **Delete User's TimelineEvents**: Events created by this user
+4. **Delete User's ArchiveDocuments**: Documents uploaded by this user
+5. **Atomic**: All deletions in a single transaction
+
+### Security Testing Verification
+
+To verify secure deletion:
+
+1. **File Recovery Test**: After shredding, attempt file recovery with forensic tools
+   - Expected: **No recoverable data**
+   
+2. **Database Cascade Test**: Delete a case, verify all related records are removed
+   - Check: TimelineEvent, ArchiveDocument, TimelineCollection tables
+   - Expected: **Zero orphaned records**
+   
+3. **Directory Removal Test**: Verify directory trees are fully unlinked
+   - Expected: **No residual directories or files**
+
+### API Endpoint
+
+```bash
+# Shred entire case (requires owner/admin)
+POST /api/timeline/cases/{case_id}/shred/
+{
+  "shred_private_only": false
+}
+
+# Shred only user's private data
+POST /api/timeline/cases/{case_id}/shred/
+{
+  "shred_private_only": true
+}
+```
 
 ---
 
@@ -247,17 +728,27 @@ class TimelineEvent(models.Model):
         ('other', 'Other'),
     ]
  
+    # Properties
+    has_gold_seal: Returns True if is_system_source=True AND status=STIPULATED
+    
     # Methods
+    clean(): Gatekeeper validation - enforces:
+      - CONTESTED/REFUTED events MUST have evidence (ManyToMany)
+      - COURT/NEUTRAL source_party auto-sets is_system_source=True and status=STIPULATED
+      - System sources cannot be CONTESTED without replaces_event or Correction document
+      - Circular reference detection in replaces_event chain
+    
+    full_clean(): Runs clean() + field validation
+    save(): Increments version on update, calls full_clean()
     get_absolute_url(): Reverse URL for event detail
     get_category_display(): Human-readable category
-    get_archive_documents(): Get linked ArchiveDocument objects
-    get_document_urls(): Extract all document URLs from supporting_docs
-```
 
-**NEW: Manual Event Creation**
-- Added `create_event` view for AJAX event creation
-- Supports dynamic document linking from archive
-- Uses standard 5-column format: Date, Event/Incident, Category, Supporting Documents, Notes
+**NEW: System Source & Trust Model**
+- `is_system_source`: Boolean flag for authoritative sources (COURT, NEUTRAL)
+- `trust_level`: Integer 1-5 (1=Low/Unverified, 5=Maximum/Court Stipulated)
+- `has_gold_seal`: Property returning True for system-source STIPULATED events
+- Defaulting Rules: COURT/NEUTRAL auto-sets is_system_source=True, status=STIPULATED, trust_level=5
+- Hardened Validation: System sources require replaces_event chain or Correction document to be CONTESTED
 
 ### Archive Models (apps/archive/models.py)
 

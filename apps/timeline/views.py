@@ -15,7 +15,10 @@ from .utils import (
     validate_timeline_events,
     parse_timeline_events_from_table
 )
-from .services import ingest_event, ingest_markdown_events, sync_timeline_file
+from .services import (
+    sync_timeline_file,
+    MarkdownIngestionService, MarkdownExportService
+)
 from django.utils import timezone
 import tempfile
 import os
@@ -127,14 +130,14 @@ def timeline_view(request):
                 except Exception:
                     pass
                 
-                # Ingest all events
-                ingest_result = ingest_markdown_events(
-                    parsed,
-                    case,
-                    request.user,
-                    timeline_file_obj=timeline_file_obj
+                # Ingest all events using MarkdownIngestionService
+                ingest_result = MarkdownIngestionService.ingest_markdown_file(
+                    file_path=timeline_file_obj.file_path if timeline_file_obj else '',
+                    case=case,
+                    user=request.user,
+                    timeline_file=timeline_file_obj
                 )
-                db_events_from_markdown = ingest_result.get('events', [])
+                db_events_from_markdown = []  # Events are created directly by the service
                 
         except Exception as e:
             markdown_events = []
@@ -726,7 +729,6 @@ def export_party_timeline(request, case_id, party):
         HttpResponse with markdown content and download headers
     """
     from apps.core.models import Case
-    from .services import MarkdownExportService
     
     case = get_object_or_404(Case, id=case_id, user=request.user)
     
@@ -756,7 +758,6 @@ def export_case_timeline(request, case_id):
         HttpResponse with complete markdown content
     """
     from apps.core.models import Case
-    from .services import MarkdownExportService
     
     case = get_object_or_404(Case, id=case_id, user=request.user)
     
@@ -787,7 +788,6 @@ def get_potential_matches(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
     
-    from .services import MarkdownIngestionService
     from apps.core.models import Case
     
     case_id = request.POST.get('case_id')

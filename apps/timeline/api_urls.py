@@ -19,4 +19,11 @@ urlpatterns = [
     # Action endpoints for collections
     path('cases/<uuid:case_id>/collections/<uuid:pk>/add-event/', api_views.TimelineCollectionViewSet.as_view({'post': 'add_event'}), name='timeline-collection-add-event'),
     path('cases/<uuid:case_id>/collections/<uuid:pk>/remove-event/', api_views.TimelineCollectionViewSet.as_view({'post': 'remove_event'}), name='timeline-collection-remove-event'),
+    
+    # Hive portability endpoints
+    path('cases/<uuid:case_id>/export/', api_views.HiveExportViewSet.as_view({'post': 'create'}), name='hive-export'),
+    path('cases/<uuid:case_id>/import/', api_views.HiveImportViewSet.as_view({'post': 'create'}), name='hive-import'),
+    
+    # Shredder endpoint
+    path('cases/<uuid:case_id>/shred/', api_views.ShredderViewSet.as_view({'post': 'create'}), name='case-shred'),
 ]
