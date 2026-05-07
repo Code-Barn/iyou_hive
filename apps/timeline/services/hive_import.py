@@ -173,7 +173,7 @@ class HiveImportService:
         case = self._import_case()
         
         # Ensure hive directory structure exists
-        HiveDirectoryService.ensure_hive_structure(case.uuid)
+        HiveDirectoryService.ensure_hive_structure(case.id)
         
         # Import in dependency order:
         # 1. ArchiveDocuments (needed for evidence M2M)
@@ -205,7 +205,8 @@ class HiveImportService:
             return case
         
         # Check if case with this UUID already exists
-        existing_case = Case.objects.filter(uuid=case_uuid).first()
+        # Use id since Case.uuid is a property that returns id
+        existing_case = Case.objects.filter(id=case_uuid).first()
         
         if existing_case:
             # Update existing case
@@ -217,8 +218,9 @@ class HiveImportService:
             return existing_case
         
         # Create new case
+        # Use id since Case's primary key is UUID (stored in id field)
         case = Case.objects.create(
-            uuid=case_uuid,
+            id=case_uuid,
             name=case_data.get("name", "Unnamed Case"),
             description=case_data.get("description", ""),
             user=self.user,
@@ -273,8 +275,6 @@ class HiveImportService:
             title=doc_data.get("title", "Untitled"),
             file_type=doc_data.get("file_type", "other"),
             category=doc_data.get("category", ""),
-            original_filename=doc_data.get("original_filename", doc_data.get("title", "")),
-            checksum=doc_data.get("checksum", ""),
             description=doc_data.get("description", ""),
             path=doc_data.get("file_path", ""),
             is_promoted=doc_data.get("is_promoted", False),
@@ -307,7 +307,6 @@ class HiveImportService:
         doc.file_type = doc_data.get("file_type", doc.file_type)
         doc.category = doc_data.get("category", doc.category)
         doc.description = doc_data.get("description", doc.description)
-        doc.checksum = doc_data.get("checksum", doc.checksum)
         doc.is_promoted = doc_data.get("is_promoted", doc.is_promoted)
         doc.promoted_at = self._parse_datetime(doc_data.get("promoted_at")) or doc.promoted_at
         doc.is_draft = doc_data.get("is_draft", doc.is_draft)
@@ -332,7 +331,7 @@ class HiveImportService:
             event_uuid = event_data["uuid"]
             
             # Check for collision
-            existing_event = TimelineEvent.objects.filter(uuid=event_uuid).first()
+            existing_event = TimelineEvent.objects.filter(id=event_uuid).first()
             if existing_event:
                 if existing_event.case != case:
                     error_msg = (
@@ -364,7 +363,7 @@ class HiveImportService:
         from apps.timeline.models import TimelineEvent
         
         event = TimelineEvent.objects.create(
-            uuid=event_data["uuid"],
+            id=event_data["uuid"],
             date=self._parse_date(event_data.get("date")),
             event=event_data.get("event", "Untitled Event"),
             category=event_data.get("category", "other"),
@@ -415,7 +414,7 @@ class HiveImportService:
         event_uuid_map = {}
         for event_data in event_data_list:
             event = TimelineEvent.objects.filter(
-                uuid=event_data["uuid"],
+                id=event_data["uuid"],
                 case=case
             ).first()
             if event:
@@ -455,7 +454,7 @@ class HiveImportService:
         # Set up evidence for each event
         for event_data in event_data_list:
             event = TimelineEvent.objects.filter(
-                uuid=event_data["uuid"],
+                id=event_data["uuid"],
                 case=case
             ).first()
             
@@ -479,7 +478,7 @@ class HiveImportService:
         Uses original UUIDs for UUID stability.
         Checks for collisions (collection with same UUID but different case).
         """
-        from apps.timeline.models import TimelineCollection
+        from apps.timeline.models import TimelineCollection, TimelineEvent
         
         collection_data_list = self.manifest.get("timeline_collections", [])
         
@@ -487,7 +486,7 @@ class HiveImportService:
         event_uuid_map = {}
         for event_data in self.manifest.get("timeline_events", []):
             event = TimelineEvent.objects.filter(
-                uuid=event_data["uuid"],
+                id=event_data["uuid"],
                 case=case
             ).first()
             if event:
@@ -498,7 +497,7 @@ class HiveImportService:
             
             # Check for collision
             existing_collection = TimelineCollection.objects.filter(
-                uuid=collection_uuid
+                id=collection_uuid
             ).first()
             if existing_collection:
                 if existing_collection.case != case:
@@ -585,7 +584,7 @@ class HiveImportService:
         if os.path.exists(temp_formal):
             self._copy_directory_to_hive(
                 temp_formal,
-                HiveDirectoryService.get_formal_root(case.uuid)
+                HiveDirectoryService.get_formal_root(case.id)
             )
         
         # Copy private files (if present)
@@ -616,15 +615,30 @@ class HiveImportService:
                 self.stats["files_copied"] += 1
 
     def _get_user(self, user_uuid: Optional[str]) -> Optional[User]:
-        """Get a User by UUID, or return None if not found."""
+        """
+        Get a User by UUID or ID.
+        
+        Tries uuid field first (if User model has it), falls back to id.
+        Uses importing user as fallback if neither works.
+        """
         if not user_uuid:
             return None
         try:
+            # Try UUID lookup first (for custom User models with UUID)
             return User.objects.get(uuid=user_uuid)
         except User.DoesNotExist:
-            # Log warning but don't fail - use importing user as fallback
-            self.warnings.append(f"User {user_uuid} not found, using importer as fallback")
-            return self.user
+            pass
+        except AttributeError:
+            # User model doesn't have uuid field - try by id (integer primary key)
+            try:
+                return User.objects.get(id=user_uuid)
+            except (User.DoesNotExist, ValueError):
+                # ValueError if user_uuid is not a valid integer
+                pass
+        
+        # Log warning but don't fail - use importing user as fallback
+        self.warnings.append(f"User {user_uuid} not found, using importer as fallback")
+        return self.user
 
     @staticmethod
     def _parse_date(date_str: Optional[str]):

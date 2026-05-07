@@ -438,7 +438,7 @@ class HiveExportViewSet(viewsets.ViewSet):
         
         # Use current user's UUID if include_private but no user_uuid specified
         if include_private and not user_uuid:
-            user_uuid = str(request.user.uuid)
+            user_uuid = str(request.str(user.id))
         
         service = HiveExportService(
             case=case,

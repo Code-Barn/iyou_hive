@@ -76,7 +76,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
     fetch("/core/api/cases/")
       .then((response) => response.json())
-      .then((cases) => {
+      .then((response) => {
+        const cases = response.cases || [];
         const options = caseSelector.querySelectorAll(
           "option:not(:first-child)",
         );

@@ -162,7 +162,7 @@ class HiveDirectoryService:
         # Note: This may be expensive for cases with many users
         # In production, consider creating on-demand instead
         for user in User.objects.filter(cases=case):
-            cls.ensure_hive_structure(case.uuid, user.uuid)
+            cls.ensure_hive_structure(case.uuid, str(user.id))
 
     @classmethod
     def get_relative_path(cls, absolute_path: str) -> str:
@@ -283,7 +283,7 @@ class HiveDirectoryService:
         # Validate ownership
         if document.uploader != user:
             raise PermissionDenied(
-                f"User {user.uuid} does not own document {document.uuid}"
+                f"User {str(user.id)} does not own document {document.uuid}"
             )
         
         if document.case != case:
@@ -360,7 +360,7 @@ class HiveDirectoryService:
         
         # Move to private/drafts
         private_drafts = cls.get_private_drafts_path(
-            document.case.uuid, user.uuid
+            document.case.uuid, str(user.id)
         )
         os.makedirs(private_drafts, exist_ok=True)
         

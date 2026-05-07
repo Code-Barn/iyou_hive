@@ -80,6 +80,11 @@ class Case(models.Model):
         verbose_name_plural = 'Cases'
         unique_together = ['name', 'user']
     
+    @property
+    def uuid(self):
+        """Alias for id - returns the UUID primary key."""
+        return self.id
+    
     def __str__(self):
         return f"{self.name} (User: {self.user.username})"
     

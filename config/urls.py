@@ -28,6 +28,8 @@ urlpatterns = [
     path('ai/', include('apps.ai_assistant.urls')),
     # API endpoints for Competing Timelines
     path('api/timeline/', include('apps.timeline.api_urls')),
+    # API endpoints for Archive (Gate Logic)
+    path('api/archive/', include('apps.archive.api_urls')),
 ]
 
 # Note: conversation_logs URLs are commented out until templates are created

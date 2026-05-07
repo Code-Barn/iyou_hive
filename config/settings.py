@@ -37,6 +37,8 @@ INSTALLED_APPS = [
     'apps.conversation_logs',
 ]
 
+
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',

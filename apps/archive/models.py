@@ -2,13 +2,15 @@ from django.db import models
 from django.conf import settings
 import os
 import hashlib
+import uuid
 
 
 class ArchiveDocument(models.Model):
     """
     Model for storing legal documents in the archive.
-    
+
     Attributes:
+    uuid: Unique identifier for portability across server instances
         title: Human-readable title of the document
         file: The actual document file (PDF, image, etc.)
         file_type: Type of document (pdf, image, text, etc.)
@@ -22,6 +24,14 @@ class ArchiveDocument(models.Model):
         timeline_event: Foreign key to linked TimelineEvent (if applicable)
         uploader: User who uploaded the document
     """
+    
+    # UUID for portability across server instances (Hive Portability)
+    uuid = models.UUIDField(
+        default=uuid.uuid4,
+        unique=True,
+        editable=False,
+        help_text="Unique identifier for portability across server instances"
+    )
     
     DOCUMENT_TYPES = [
         ('pdf', 'PDF'),

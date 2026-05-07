@@ -134,12 +134,12 @@ class HiveExportService:
     def _serialize_case(self) -> Dict[str, Any]:
         """Serialize Case to manifest format."""
         return {
-            "uuid": str(self.case.uuid),
+            "uuid": str(self.case.id),
             "name": self.case.name,
             "description": self.case.description or "",
             "created_at": self.case.created_at.isoformat() + "Z" if self.case.created_at else None,
             "updated_at": self.case.updated_at.isoformat() + "Z" if self.case.updated_at else None,
-            "user_uuid": str(self.case.user.uuid) if self.case.user else None,
+            "user_uuid": str(self.case.user.id) if self.case.user else None,
         }
 
     def _serialize_timeline_event(self, event) -> Dict[str, Any]:
@@ -150,7 +150,7 @@ class HiveExportService:
         and preserves relationships via UUID references.
         """
         return {
-            "uuid": str(event.uuid),
+            "uuid": str(event.id),
             "date": event.date.isoformat() if event.date else None,
             "event": event.event,
             "category": event.category,
@@ -163,10 +163,10 @@ class HiveExportService:
             "trust_level": event.trust_level,
             "version": event.version,
             # Relationships via UUID
-            "replaces_event_uuid": str(event.replaces_event.uuid) if event.replaces_event else None,
-            "evidence_uuids": [str(doc.uuid) for doc in event.evidence.all()],
-            "case_uuid": str(event.case.uuid),
-            "created_by_uuid": str(event.created_by.uuid) if event.created_by else None,
+            "replaces_event_uuid": str(event.replaces_event.id) if event.replaces_event else None,
+            "evidence_uuids": [str(doc.id) for doc in event.evidence.all()],
+            "case_uuid": str(event.case.id),
+            "created_by_uuid": str(event.created_by.id) if event.created_by else None,
             "created_at": event.created_at.isoformat() + "Z" if event.created_at else None,
             "updated_at": event.updated_at.isoformat() + "Z" if event.updated_at else None,
             "citation": event.citation or "",
@@ -190,8 +190,6 @@ class HiveExportService:
             "title": doc.title,
             "file_type": doc.file_type,
             "category": doc.category or "",
-            "original_filename": doc.original_filename or doc.title,
-            "checksum": doc.checksum or "",
             "description": doc.description or "",
             # Hive-relative file path
             "file_path": file_path,
@@ -200,10 +198,10 @@ class HiveExportService:
             "promoted_at": doc.promoted_at.isoformat() + "Z" if doc.promoted_at else None,
             # Relationships via UUID
             "case_uuid": str(doc.case.uuid) if doc.case else None,
-            "uploader_uuid": str(doc.uploader.uuid) if doc.uploader else None,
+            "uploader_uuid": str(doc.uploader.id) if doc.uploader else None,
             # Legacy fields (for backward compat if needed, though we're strict no-legacy)
-            "user_uuid": str(doc.user.uuid) if doc.user else None,
-            "timeline_event_uuid": str(doc.timeline_event.uuid) if doc.timeline_event else None,
+            "user_uuid": str(doc.user.id) if doc.user else None,
+            "timeline_event_uuid": str(doc.timeline_event.id) if doc.timeline_event else None,
             # Metadata
             "tags": doc.tags or [],
             "metadata": doc.metadata or {},
@@ -222,15 +220,15 @@ class HiveExportService:
     def _serialize_timeline_collection(self, collection) -> Dict[str, Any]:
         """Serialize TimelineCollection to manifest format."""
         return {
-            "uuid": str(collection.uuid),
+            "uuid": str(collection.id),
             "name": collection.name,
             "description": collection.description or "",
-            "case_uuid": str(collection.case.uuid),
-            "created_by_uuid": str(collection.created_by.uuid) if collection.created_by else None,
+            "case_uuid": str(collection.case.id),
+            "created_by_uuid": str(collection.created_by.id) if collection.created_by else None,
             "is_public": collection.is_public,
             "created_at": collection.created_at.isoformat() + "Z" if collection.created_at else None,
             "updated_at": collection.updated_at.isoformat() + "Z" if collection.updated_at else None,
-            "event_uuids": [str(event.uuid) for event in collection.events.all()],
+            "event_uuids": [str(event.id) for event in collection.events.all()],
         }
 
     def _get_file_relative_path(self, absolute_path: str) -> str:
@@ -258,7 +256,7 @@ class HiveExportService:
 
     def _copy_formal_files(self):
         """Copy all files from the formal directory to the temp export directory."""
-        formal_root = HiveDirectoryService.get_formal_root(self.case.uuid)
+        formal_root = HiveDirectoryService.get_formal_root(self.case.id)
         
         if not os.path.exists(formal_root):
             return
@@ -287,7 +285,7 @@ class HiveExportService:
             from django.contrib.auth import get_user_model
             User = get_user_model()
             users_to_copy = [
-                str(u.uuid) 
+                str(u.id) 
                 for u in User.objects.filter(cases=self.case)
             ]
         

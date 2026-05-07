@@ -216,7 +216,7 @@ class ConflictResolverService:
             f"{counter_claim.notes}\n\n"
             f"[RESOLVED: {timezone.now().isoformat()}Z]\n"
             f"Resolution: KEEP_ORIGINAL\n"
-            f"Resolved by: {user.email or str(user.uuid)}\n"
+            f"Resolved by: {user.email or str(str(user.id))}\n"
             f"Notes: {notes}"
         )
         counter_claim.save()
@@ -239,7 +239,7 @@ class ConflictResolverService:
             f"{original_event.notes}\n\n"
             f"[RESOLVED: {timezone.now().isoformat()}Z]\n"
             f"Resolution: KEEP_COUNTER\n"
-            f"Resolved by: {user.email or str(user.uuid)}\n"
+            f"Resolved by: {user.email or str(str(user.id))}\n"
             f"Notes: {notes}"
         )
         original_event.save()
@@ -275,7 +275,7 @@ class ConflictResolverService:
                 f"Date: {counter_claim.date}\n"
                 f"Notes: {counter_claim.notes}\n\n"
                 f"=== RESOLUTION ===\n"
-                f"Merged by: {user.email or str(user.uuid)}\n"
+                f"Merged by: {user.email or str(str(user.id))}\n"
                 f"Resolution notes: {notes}"
             ),
             source_party='NEUTRAL',  # Neutral authority for stipulated facts

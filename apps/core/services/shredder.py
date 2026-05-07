@@ -144,7 +144,7 @@ class ShredderService:
         
         # Log the shred operation
         logger.warning(
-            f"SHREDDER: User {user.email or user.uuid} shredded case {self.case.uuid}. "
+            f"SHREDDER: User {user.email or str(user.id)} shredded case {self.case.uuid}. "
             f"Deleted: {counts}"
         )
         
@@ -171,7 +171,7 @@ class ShredderService:
             'files_secure_wiped': 0,
         }
         
-        user_uuid = str(user.uuid)
+        user_uuid = str(str(user.id))
         
         # 1. Securely wipe and delete user's private files
         private_root = HiveDirectoryService.get_private_root(
@@ -213,7 +213,7 @@ class ShredderService:
         
         # Log the shred operation
         logger.warning(
-            f"SHREDDER: User {user.email or user.uuid} shredded private data "
+            f"SHREDDER: User {user.email or str(user.id)} shredded private data "
             f"for case {self.case.uuid}. Deleted: {counts}"
         )
         
