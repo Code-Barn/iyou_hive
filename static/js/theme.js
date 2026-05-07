@@ -702,67 +702,13 @@ function renderDocumentsFromAPI(event) {
     docsContainer.appendChild(docElement);
   });
 }
-    return;
-  }
 
-  if (mediaSection) {
-    mediaSection.style.display = "block";
-  }
-
-  // Render each document
-  docUrls.forEach((doc, index) => {
-    const docElement = document.createElement("div");
-    docElement.className = "document-item";
-
-    // Add loading attribute for lazy loading
-    const docLink = document.createElement("a");
-    docLink.href = doc.url || "#";
-    docLink.target = "_blank";
-    docLink.rel = "noopener noreferrer";
-
-    // Determine icon based on file type
-    let icon = "📄";
-    if (doc.url) {
-      const ext = doc.url.split(".").pop().toLowerCase();
-      if (ext === "pdf") icon = "📕";
-      else if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext))
-        icon = "🖼️";
-      else if (["doc", "docx"].includes(ext)) icon = "📝";
-      else if (["xls", "xlsx"].includes(ext)) icon = "📊";
-      else if (["txt", "md", "markdown"].includes(ext)) icon = "📄";
-      else if (["email", "eml"].includes(ext)) icon = "✉️";
-    }
-
-    docLink.innerHTML = `<span class="doc-icon">${icon}</span> <span class="doc-title">${doc.title || "Document " + (index + 1)}</span>`;
-
-    // Add file size or type if available
-    if (doc.size || doc.type) {
-      const metaElement = document.createElement("span");
-      metaElement.className = "doc-meta";
-      metaElement.textContent = `[${doc.type || "File"} ${doc.size ? " - " + doc.size : ""}]`;
-      docLink.appendChild(metaElement);
-    }
-
-    docElement.appendChild(docLink);
-
-    // Add preview for images
-    if (doc.url && isImageUrl(doc.url)) {
-      const previewElement = document.createElement("div");
-      previewElement.className = "doc-preview";
-      previewElement.innerHTML = `<img src="${doc.url}" alt="${doc.title || "Preview"}" loading="lazy">`;
-      docElement.appendChild(previewElement);
-    }
-
-    docsContainer.appendChild(docElement);
-  });
-}
-
-/**
- * Check if a URL points to an image
- * @param {string} url - The URL to check
- * @returns {boolean} - True if URL is an image
- */
-function isImageUrl(url) {
+  /**
+   * Check if a URL points to an image
+   * @param {string} url - The URL to check
+   * @returns {boolean} - True if URL is an image
+   */
+  function isImageUrl(url) {
   const ext = url.split(".").pop().toLowerCase();
   return ["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp"].includes(ext);
 }

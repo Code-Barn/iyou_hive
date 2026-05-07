@@ -218,6 +218,8 @@
             localStorage.setItem(`pane-${paneId}-state`, 'collapsed');
             const paneName = getPaneName(pane);
             showToast(`${paneName} pane collapsed`, 'info');
+            // Update layout (if one pane left, make it fullscreen)
+            updateLayout();
         }
     }
 
@@ -234,6 +236,8 @@
             localStorage.setItem(`pane-${paneId}-state`, 'default');
             const paneName = getPaneName(pane);
             showToast(`${paneName} pane restored`, 'success');
+            // Update layout (if two panes, share space)
+            updateLayout();
         } else {
             // Set this pane to fullscreen, collapse others
             document.querySelectorAll('.workspace-pane').forEach(p => {
@@ -249,6 +253,34 @@
             const paneName = getPaneName(pane);
             showToast(`${paneName} pane expanded to fullscreen`, 'success');
         }
+    }
+
+    /**
+     * Update layout based on visible panes
+     * - 1 pane visible → fullscreen
+     * - 2 panes visible → share space equally
+     * - 3 panes visible → default grid layout
+     */
+    function updateLayout() {
+        const visiblePanes = document.querySelectorAll('.workspace-pane:not([data-state="collapsed"])');
+        const collapsedPanes = document.querySelectorAll('.workspace-pane[data-state="collapsed"]');
+        
+        if (visiblePanes.length === 1) {
+            // One pane remaining - make it fullscreen
+            visiblePanes[0].dataset.state = 'fullscreen';
+            const id = visiblePanes[0].id || visiblePanes[0].dataset.pane;
+            localStorage.setItem(`pane-${id}-state`, 'fullscreen');
+        } else if (visiblePanes.length === 2) {
+            // Two panes - set them to share space (not fullscreen)
+            visiblePanes.forEach(p => {
+                if (p.dataset.state === 'fullscreen') {
+                    p.dataset.state = 'default';
+                    const id = p.id || p.dataset.pane;
+                    localStorage.setItem(`pane-${id}-state`, 'default');
+                }
+            });
+        }
+        // For 3 visible panes, they already use the default grid layout
     }
 
     /**

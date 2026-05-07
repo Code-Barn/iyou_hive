@@ -1,6 +1,6 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="{% if settings.DEBUG %}dark{% else %}{{ request.session.theme|default:'dark' }}{% endif %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -39,7 +39,7 @@
             </nav>
             <div class="logo-and-toggle">
                 <a href="/" class="logo-link">
-                    <img id="site-logo" src="{% static 'core/images/logos/light_mode_LOGO.png' %}" alt="Hiver" width="150">
+                    <img id="site-logo" src="{% static 'core/images/logos/DARK_mode_LOGO.png' %}" alt="Hiver" width="150">
                 </a>
                 <button id="theme-toggle" class="theme-toggle" aria-label="Toggle dark/light mode">
                     <span class="theme-icon">☀️</span>
@@ -109,7 +109,46 @@
                 if (window.HiverWorkspace && window.HiverWorkspace.updateButtons) {
                     window.HiverWorkspace.updateButtons();
                 }
+            } else if (pane.dataset.state === 'fullscreen') {
+                // If fullscreen, restore all panes to default
+                document.querySelectorAll('.workspace-pane').forEach(p => {
+                    p.dataset.state = 'default';
+                    const id = p.id || p.dataset.pane;
+                    localStorage.setItem(`pane-${id}-state`, 'default');
+                });
+                if (window.HiverWorkspace && window.HiverWorkspace.updateButtons) {
+                    window.HiverWorkspace.updateButtons();
+                }
+            } else {
+                // If default, toggle to collapsed
+                pane.dataset.state = 'collapsed';
+                localStorage.setItem(paneId + '-state', 'collapsed');
+                // If only one pane left visible, make it fullscreen
+                updateLayout();
+                if (window.HiverWorkspace && window.HiverWorkspace.updateButtons) {
+                    window.HiverWorkspace.updateButtons();
+                }
             }
+        }
+    }
+    
+    function updateLayout() {
+        // Count visible (non-collapsed) panes
+        var visiblePanes = document.querySelectorAll('.workspace-pane:not([data-state="collapsed"])');
+        if (visiblePanes.length === 1) {
+            // One pane remaining - make it fullscreen
+            visiblePanes[0].dataset.state = 'fullscreen';
+            var id = visiblePanes[0].id || visiblePanes[0].dataset.pane;
+            localStorage.setItem(`pane-${id}-state`, 'fullscreen');
+        } else if (visiblePanes.length === 2) {
+            // Two panes - set them to share space (not fullscreen)
+            visiblePanes.forEach(p => {
+                if (p.dataset.state === 'fullscreen') {
+                    p.dataset.state = 'default';
+                    var id = p.id || p.dataset.pane;
+                    localStorage.setItem(`pane-${id}-state`, 'default');
+                }
+            });
         }
     }
     </script>
