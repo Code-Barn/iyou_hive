@@ -30,6 +30,15 @@ export const archiveApi = {
   // Demote a document from formal evidence
   demoteDocument: (docUuid: string) =>
     api.post(`/documents/${docUuid}/demote/`),
+
+  // Upload documents to workspace
+  uploadDocuments: (caseId: string, formData: FormData, config?: any) =>
+    api.post("/documents/upload/", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+      ...config,
+    }),
 };
 
 export default archiveApi;

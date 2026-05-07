@@ -1,11 +1,11 @@
-import axios from 'axios';
+import axios from "axios";
 
 // Create axios instance with Django CSRF support
 const api = axios.create({
-  baseURL: '/api/timeline',
+  baseURL: "/api/timeline",
   withCredentials: true,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
@@ -32,12 +32,40 @@ export const timelineApi = {
     api.delete(`/cases/${caseId}/events/${eventId}/`),
 
   // Contest an event (create counter-claim)
-  contestEvent: (caseId: string, eventId: string, data: { source_party?: string; notes?: string; evidence_ids?: string[] }) =>
-    api.post(`/cases/${caseId}/events/${eventId}/contest/`, data),
+  contestEvent: (
+    caseId: string,
+    eventId: string,
+    data: { source_party?: string; notes?: string; evidence_ids?: string[] },
+  ) => api.post(`/cases/${caseId}/events/${eventId}/contest/`, data),
 
   // Resolve a conflict
-  resolveConflict: (caseId: string, eventId: string, data: { resolution: string; evidence_ids?: string[]; date?: string; event?: string; category?: string; notes?: string; citation?: string }) =>
-    api.post(`/cases/${caseId}/events/${eventId}/resolve/`, data),
+  resolveConflict: (
+    caseId: string,
+    eventId: string,
+    data: {
+      resolution: string;
+      evidence_ids?: string[];
+      date?: string;
+      event?: string;
+      category?: string;
+      notes?: string;
+      citation?: string;
+    },
+  ) => api.post(`/cases/${caseId}/events/${eventId}/resolve/`, data),
+
+  // Upload timeline markdown file
+  uploadTimeline: (caseId: string, formData: FormData) =>
+    api.post(`/cases/${caseId}/upload-markdown/`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }),
+
+  // Generate PDF of timeline
+  generatePdf: (caseId: string) =>
+    api.get(`/cases/${caseId}/generate-pdf/`, {
+      responseType: "blob", // Important for file downloads
+    }),
 };
 
 // Diff View API
@@ -54,28 +82,41 @@ export const diffApi = {
 // Collections API
 export const collectionApi = {
   // Get all collections for a case
-  getCollections: (caseId: string) =>
-    api.get(`/cases/${caseId}/collections/`),
+  getCollections: (caseId: string) => api.get(`/cases/${caseId}/collections/`),
 
   // Get single collection
   getCollection: (caseId: string, collectionId: string) =>
     api.get(`/cases/${caseId}/collections/${collectionId}/`),
 
   // Create collection
-  createCollection: (caseId: string, data: { name: string; description?: string; is_public?: boolean }) =>
-    api.post(`/cases/${caseId}/collections/`, data),
+  createCollection: (
+    caseId: string,
+    data: { name: string; description?: string; is_public?: boolean },
+  ) => api.post(`/cases/${caseId}/collections/`, data),
 
   // Delete collection
   deleteCollection: (caseId: string, collectionId: string) =>
     api.delete(`/cases/${caseId}/collections/${collectionId}/`),
 
   // Add event to collection
-  addEventToCollection: (caseId: string, collectionId: string, eventId: string) =>
-    api.post(`/cases/${caseId}/collections/${collectionId}/add-event/`, { event_id: eventId }),
+  addEventToCollection: (
+    caseId: string,
+    collectionId: string,
+    eventId: string,
+  ) =>
+    api.post(`/cases/${caseId}/collections/${collectionId}/add-event/`, {
+      event_id: eventId,
+    }),
 
   // Remove event from collection
-  removeEventFromCollection: (caseId: string, collectionId: string, eventId: string) =>
-    api.post(`/cases/${caseId}/collections/${collectionId}/remove-event/`, { event_id: eventId }),
+  removeEventFromCollection: (
+    caseId: string,
+    collectionId: string,
+    eventId: string,
+  ) =>
+    api.post(`/cases/${caseId}/collections/${collectionId}/remove-event/`, {
+      event_id: eventId,
+    }),
 };
 
 export default api;
