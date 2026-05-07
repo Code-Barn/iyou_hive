@@ -410,3 +410,88 @@ class HiveDirectoryService:
                         pass
         
         return deleted_count
+
+    @classmethod
+    @transaction.atomic
+    def move_document(
+        cls,
+        document: ArchiveDocument,
+        destination_folder_document: ArchiveDocument,
+        user
+    ) -> ArchiveDocument:
+        """
+        Move a document from its current location to a new folder.
+
+        Args:
+            document: The ArchiveDocument to move
+            destination_folder_document: The ArchiveDocument representing the destination folder
+            user: The User requesting the move (must be the uploader)
+
+        Returns:
+            The updated ArchiveDocument instance
+
+        Raises:
+            PermissionDenied: If user doesn't own the document or case
+            FileNotFoundError: If the source file doesn't exist
+            ValidationError: If destination_folder_document is not a folder
+        """
+        if document.uploader != user:
+            raise PermissionDenied(f"User {str(user.id)} does not own document {document.uuid}")
+
+        if destination_folder_document.file_type != 'folder':
+            raise ValidationError(f"Destination document {destination_folder_document.uuid} is not a folder.")
+
+        old_absolute_path = document.file.path
+        if not os.path.exists(old_absolute_path):
+            raise FileNotFoundError(f"Document file not found: {old_absolute_path}")
+
+        case_uuid_str = str(document.case.uuid)
+        user_uuid_str = str(user.uuid)
+
+        # Get the new base directory where the file should reside
+        # Example destination_folder_document.file.name: hives/case_uuid/formal/01_Raw/.folder
+        # We need the directory 'hives/case_uuid/formal/01_Raw'
+        new_base_dir_absolute = os.path.dirname(os.path.join(settings.MEDIA_ROOT, destination_folder_document.file.name))
+        os.makedirs(new_base_dir_absolute, exist_ok=True) # Ensure destination directory exists
+
+        ext = document.get_file_extension()
+        new_filename = f"{document.uuid}.{ext}" if ext else f"{document.uuid}"
+        new_absolute_path = os.path.join(new_base_dir_absolute, new_filename)
+
+        # Perform the actual file move
+        shutil.move(old_absolute_path, new_absolute_path)
+
+        # Update document's file.name (path relative to MEDIA_ROOT)
+        document.file.name = os.path.relpath(new_absolute_path, settings.MEDIA_ROOT)
+
+        # Determine new is_promoted status
+        is_in_formal_root = new_absolute_path.startswith(cls.get_formal_root(case_uuid_str))
+        document.is_promoted = is_in_formal_root
+        
+        # Update promoted_at timestamp if status changes
+        if document.is_promoted and not document.promoted_at:
+            document.promoted_at = timezone.now()
+        elif not document.is_promoted and document.promoted_at:
+            document.promoted_at = None
+
+        # Update the ArchiveDocument.path field (logical path within archive)
+        # This path should be relative to either 'formal/' or 'private/<user_uuid>/'
+        # Example: 'evidence/my_document.pdf' or 'drafts/my_document.pdf'
+        
+        # Determine the root of the logical path (formal/ or private/user_uuid/)
+        if is_in_formal_root:
+            logical_root_absolute_path = cls.get_formal_root(case_uuid_str)
+        else:
+            logical_root_absolute_path = cls.get_private_root(case_uuid_str, user_uuid_str)
+        
+        # Calculate the path of the new file relative to its logical root
+        relative_to_logical_root = os.path.relpath(new_absolute_path, logical_root_absolute_path)
+        
+        # The ArchiveDocument.path field is meant to be a folder-like structure,
+        # usually without the filename at the end. For now, I'll set it to the relative path
+        # of the folder the file is in, and the UI can append the file title.
+        document.path = os.path.dirname(relative_to_logical_root) # e.g., 'evidence' or 'drafts/subfolder'
+        
+        document.save()
+
+        return document
