@@ -410,26 +410,17 @@ class DiffViewAPI(viewsets.ViewSet):
         left_party = request.query_params.get('left', 'CLIENT')
         right_party = request.query_params.get('right', 'OPPOSING')
         
-        # Get events for each party
-        left_events = TimelineEvent.objects.filter(
-            case=case, source_party=left_party
-        ).order_by('date')
+        # Get ALL events for this case
+        all_events = TimelineEvent.objects.filter(case=case).order_by('date')
         
-        right_events = TimelineEvent.objects.filter(
-            case=case, source_party=right_party
-        ).order_by('date')
-        
-        # Get shared/undisputed events
-        shared_events = TimelineEvent.objects.filter(
-            case=case, status='UNDISPUTED'
-        ).order_by('date')
-        
-        # Get contested events
+        # Categorize events by source_party and status
+        left_only = []
+        right_only = []
+        shared_events = []
         contested_pairs = {}
-        contested_events = TimelineEvent.objects.filter(
-            case=case, status__in=['CONTESTED', 'REFUTED']
-        )
         
+        # First pass: identify contested pairs
+        contested_events = all_events.filter(status__in=['CONTESTED', 'REFUTED'])
         for event in contested_events:
             if event.replaces_event:
                 pair_id = f"{event.replaces_event.id}-{event.id}"
@@ -438,9 +429,38 @@ class DiffViewAPI(viewsets.ViewSet):
                     'counter_claim': event
                 }
         
-        # Get party-only events
-        left_only = [e for e in left_events if e.status != 'UNDISPUTED']
-        right_only = [e for e in right_events if e.status != 'UNDISPUTED']
+        # Second pass: categorize all events
+        for event in all_events:
+            # Skip contested events (they'll be handled separately)
+            if event.status in ['CONTESTED', 'REFUTED'] and event.replaces_event:
+                # This is a counter-claim, skip it (original will be in its party column)
+                continue
+            
+            # Check if this event is the original of a contested pair
+            is_original_of_contested = any(
+                pair_id.startswith(f"{event.id}-") 
+                for pair_id in contested_pairs.keys()
+            )
+            
+            if is_original_of_contested:
+                # Original events that have counter-claims go to contested
+                # They'll be displayed in the contested section
+                continue
+            
+            # Categorize by source_party
+            if event.source_party == left_party:
+                if event.status == 'UNDISPUTED':
+                    shared_events.append(event)
+                else:
+                    left_only.append(event)
+            elif event.source_party == right_party:
+                if event.status == 'UNDISPUTED':
+                    shared_events.append(event)
+                else:
+                    right_only.append(event)
+            else:
+                # NEUTRAL, COURT, WITNESS - treat as shared
+                shared_events.append(event)
         
         data = {
             'left_party': left_party,

@@ -29,7 +29,9 @@ class TimelineEventSerializer(serializers.ModelSerializer):
             'status', 'source_party', 'citation', 'notes', 'version',
             'created_at', 'updated_at', 'evidence',
             'replaces_event', 'counter_claims', 'case', 'case_id',
-            'created_by', 'created_by_username', 'timeline_file'
+            'created_by', 'created_by_username', 'timeline_file',
+            'is_system_source', 'trust_level', 'has_gold_seal',
+            'section_header', 'last_printed_citation'
         ]
         read_only_fields = [
             'id', 'version', 'created_at', 'updated_at',

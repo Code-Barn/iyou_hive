@@ -233,16 +233,6 @@ const Layout: React.FC<LayoutProps> = ({
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  // Reset panels to default sizes
-  const resetPanels = () => {
-    setPanelSizes({
-      left: DEFAULT_LEFT,
-      center: DEFAULT_CENTER,
-      right: DEFAULT_RIGHT,
-    });
-    setHorizontalSplit(DEFAULT_HORIZONTAL_SPLIT);
-  };
-
   // Calculate actual pixel widths based on percentages
   const getPanelWidths = () => {
     if (!mainRef.current) {
@@ -261,27 +251,59 @@ const Layout: React.FC<LayoutProps> = ({
 
   // Toggle panel collapse/expand with size restoration
   const toggleLeft = () => {
-    if (leftExpanded) {
-      setLeftExpanded(false);
-    } else {
-      setLeftExpanded(true);
-    }
+    setLeftExpanded(!leftExpanded);
   };
 
   const toggleCenter = () => {
-    if (centerExpanded) {
-      setCenterExpanded(false);
-    } else {
-      setCenterExpanded(true);
-    }
+    setCenterExpanded(!centerExpanded);
   };
 
   const toggleRight = () => {
-    if (rightExpanded) {
-      setRightExpanded(false);
-    } else {
-      setRightExpanded(true);
+    setRightExpanded(!rightExpanded);
+  };
+
+  // Count expanded panels for elastic layout
+  const expandedCount =
+    (leftExpanded ? 1 : 0) + (centerExpanded ? 1 : 0) + (rightExpanded ? 1 : 0);
+
+  // Calculate elastic widths: if only center is expanded, it takes 100%
+  // Otherwise, use the stored panel percentages
+  const getElasticWidth = (panel: "left" | "center" | "right") => {
+    if (!centerExpanded) return 0;
+
+    if (expandedCount === 1 && centerExpanded) {
+      // Only center is expanded - it takes all space
+      return panel === "center" ? "100%" : "0%";
     }
+
+    if (expandedCount === 2) {
+      // Two panels expanded - calculate based on which ones
+      if (!leftExpanded && !rightExpanded)
+        return panel === "center" ? "100%" : "0%";
+      if (!leftExpanded) {
+        // Left collapsed, center and right expanded
+        if (panel === "left") return "0%";
+        if (panel === "center")
+          return `${(panelSizes.center / (panelSizes.center + panelSizes.right)) * 100}%`;
+        if (panel === "right")
+          return `${(panelSizes.right / (panelSizes.center + panelSizes.right)) * 100}%`;
+      }
+      if (!rightExpanded) {
+        // Right collapsed, left and center expanded
+        if (panel === "right") return "0%";
+        if (panel === "left")
+          return `${(panelSizes.left / (panelSizes.left + panelSizes.center)) * 100}%`;
+        if (panel === "center")
+          return `${(panelSizes.center / (panelSizes.left + panelSizes.center)) * 100}%`;
+      }
+    }
+
+    // All three expanded - use stored percentages
+    if (panel === "left") return `${panelSizes.left}%`;
+    if (panel === "center") return `${panelSizes.center}%`;
+    if (panel === "right") return `${panelSizes.right}%`;
+
+    return "0%";
   };
 
   return (
@@ -326,15 +348,14 @@ const Layout: React.FC<LayoutProps> = ({
         </div>
       </header>
 
-      {/* 3-Panel Content Area */}
+      {/* 3-Panel Content Area - Elastic Layout */}
       <main ref={mainRef} className="flex-1 flex overflow-hidden relative">
         {/* Panel 1: Timeline (Left) */}
-        {leftExpanded ? (
+        {leftExpanded && (
           <div
             className="bg-white flex flex-col border-r border-gray-200 min-w-0"
-            style={{ width: panelWidths.left }}
+            style={{ width: getElasticWidth("left") }}
           >
-            {/* Standardized Header: [Icon] [Title] | [Full Screen] [Collapse] */}
             <div className="p-3 border-b border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2 truncate">
                 <span>🕰️</span>
@@ -345,7 +366,7 @@ const Layout: React.FC<LayoutProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsFullTimelineOpen(true)}
-                  className="text-xs bg-primary text-white px-2 py-1 rounded hover:bg-orange-600"
+                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
                   title="Full Screen"
                 >
                   ⛶
@@ -367,16 +388,6 @@ const Layout: React.FC<LayoutProps> = ({
               />
             </div>
           </div>
-        ) : (
-          <div className="w-12 border-r border-gray-200 bg-white flex items-center justify-center">
-            <button
-              onClick={toggleLeft}
-              className="w-6 h-12 bg-gray-100 rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
-              title="Expand Timeline"
-            >
-              ▶
-            </button>
-          </div>
         )}
 
         {/* Left Divider (between Timeline and Archive) */}
@@ -387,13 +398,12 @@ const Layout: React.FC<LayoutProps> = ({
           />
         )}
 
-        {/* Panel 2: Archive & Canvas (Center) */}
-        {centerExpanded ? (
+        {/* Panel 2: Archive & Canvas (Center) - ELASTIC ANCHOR */}
+        {centerExpanded && (
           <div
             className="center-panel bg-white flex flex-col border-r border-gray-200 min-w-0 relative"
-            style={{ width: panelWidths.center }}
+            style={{ width: getElasticWidth("center") }}
           >
-            {/* Standardized Header: [Icon] [Title] | [Full Screen] [Collapse] */}
             <div className="p-3 border-b border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2 truncate">
                 <span>📁</span>
@@ -404,7 +414,7 @@ const Layout: React.FC<LayoutProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setIsArchiveFullScreen(true)}
-                  className="text-xs bg-accent text-white px-2 py-1 rounded hover:bg-blue-700"
+                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
                   title="Full Screen"
                 >
                   ⛶
@@ -459,16 +469,6 @@ const Layout: React.FC<LayoutProps> = ({
               </div>
             </div>
           </div>
-        ) : (
-          <div className="w-12 border-r border-gray-200 bg-white flex items-center justify-center">
-            <button
-              onClick={toggleCenter}
-              className="w-6 h-12 bg-gray-100 rounded-l-lg rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
-              title="Expand Archive"
-            >
-              ▶
-            </button>
-          </div>
         )}
 
         {/* Right Divider (between Archive and AI) */}
@@ -480,12 +480,11 @@ const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* Panel 3: AI Assistant (Right) */}
-        {rightExpanded ? (
+        {rightExpanded && (
           <div
             className="bg-white flex flex-col border-l border-gray-200 min-w-0"
-            style={{ width: panelWidths.right }}
+            style={{ width: getElasticWidth("right") }}
           >
-            {/* Standardized Header: [Icon] [Title] | [⚙️ Settings] [⛶ Full Screen] [▶ Collapse] */}
             <div className="p-3 border-b border-gray-200 flex items-center justify-between">
               <div className="flex items-center gap-2 truncate">
                 <span>✨</span>
@@ -496,21 +495,21 @@ const Layout: React.FC<LayoutProps> = ({
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => setAiSettingsOpen(!aiSettingsOpen)}
-                  className="text-xs text-gray-500 hover:text-gray-700 p-1"
+                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
                   title="AI Settings"
                 >
                   ⚙️
                 </button>
                 <button
                   onClick={() => setIsAIFullScreen(true)}
-                  className="text-xs bg-brand-purple text-white px-2 py-1 rounded hover:bg-purple-700"
+                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
                   title="Full Screen"
                 >
                   ⛶
                 </button>
                 <button
                   onClick={toggleRight}
-                  className="text-xs text-gray-500 hover:text-gray-700"
+                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
                   title="Collapse"
                 >
                   ▶
@@ -525,7 +524,34 @@ const Layout: React.FC<LayoutProps> = ({
               />
             </div>
           </div>
-        ) : (
+        )}
+
+        {/* Collapsed Panel Tabs */}
+        {!leftExpanded && (
+          <div className="w-12 border-r border-gray-200 bg-white flex items-center justify-center">
+            <button
+              onClick={toggleLeft}
+              className="w-6 h-12 bg-gray-100 rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
+              title="Expand Timeline"
+            >
+              ▶
+            </button>
+          </div>
+        )}
+
+        {!centerExpanded && (
+          <div className="w-12 border-r border-gray-200 bg-white flex items-center justify-center">
+            <button
+              onClick={toggleCenter}
+              className="w-6 h-12 bg-gray-100 rounded-l-lg rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
+              title="Expand Archive"
+            >
+              ▶
+            </button>
+          </div>
+        )}
+
+        {!rightExpanded && (
           <div className="w-12 border-l border-gray-200 bg-white flex items-center justify-center">
             <button
               onClick={toggleRight}
@@ -550,7 +576,7 @@ const Layout: React.FC<LayoutProps> = ({
         )}
       </main>
 
-      {/* Full Timeline Modal - Uses ForensicTimeline */}
+      {/* Full Timeline Modal */}
       {isFullTimelineOpen && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white">
           <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between shadow-lg">
