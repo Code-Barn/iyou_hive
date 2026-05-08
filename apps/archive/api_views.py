@@ -271,7 +271,8 @@ class ArchiveDirectoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        case_id = request.session.get('selected_case_id')
+        # Get case_id from query parameter first, then fall back to session
+        case_id = request.query_params.get('case_id') or request.session.get('selected_case_id')
         if not case_id:
             raise PermissionDenied("No case selected")
         

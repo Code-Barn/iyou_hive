@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hiver Frontend</title>
+    {% load assets %}
+    {% get_vite_assets as vite_assets %}
+    <script type="module" crossorigin src="{{ vite_assets.js }}"></script>
+    <link rel="stylesheet" crossorigin href="{{ vite_assets.css }}">
+</head>
+<body class="bg-white">
+    <div id="timeline-app" 
+         data-case-id="{{ case_id }}"
+         data-user-party="{{ user_party }}">
+    </div>
+</body>
+</html>

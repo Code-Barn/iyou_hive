@@ -2,6 +2,14 @@ from django.db import models
 from django.conf import settings
 from django.utils import timezone
 import uuid
+from django.contrib.auth.models import User as DjangoUser
+
+# Add uuid property to Django User model to match Case model's uuid pattern
+@property
+def user_uuid_property(self):
+    return str(self.id)
+
+DjangoUser.uuid = user_uuid_property
 
 
 def raw_document_upload_path(instance, filename):

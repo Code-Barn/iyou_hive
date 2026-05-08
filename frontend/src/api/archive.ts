@@ -1,5 +1,22 @@
 import axios from "axios";
 
+// Function to get CSRF token from cookie
+function getCSRFToken(): string | null {
+  const name = "csrftoken";
+  let cookieValue: string | null = null;
+  if (document.cookie && document.cookie !== "") {
+    const cookies = document.cookie.split(";");
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === name + "=") {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
 const api = axios.create({
   baseURL: "/api/archive",
   withCredentials: true,
@@ -8,9 +25,19 @@ const api = axios.create({
   },
 });
 
+// Add CSRF token to all requests
+api.interceptors.request.use((config) => {
+  const csrfToken = getCSRFToken();
+  if (csrfToken) {
+    config.headers["X-CSRFToken"] = csrfToken;
+  }
+  return config;
+});
+
 export const archiveApi = {
   // Get recursive directory tree
-  getDirectoryTree: () => api.get("/directory/"),
+  getDirectoryTree: (caseId?: string) =>
+    api.get("/directory/", { params: caseId ? { case_id: caseId } : {} }),
 
   // Get metadata for a specific document
   getDocumentMetadata: (fileUuid: string) =>

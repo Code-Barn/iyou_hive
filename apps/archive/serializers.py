@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.conf import settings
 from apps.archive.models import ArchiveDocument
 from apps.timeline.models import TimelineEvent
 from apps.core.services.hive_directory import HiveDirectoryService
@@ -58,7 +59,7 @@ class RecursiveFolderSerializer(serializers.Serializer):
         case_uuid_str = str(case_uuid)
         user_uuid_str = str(user_uuid)
 
-        documents = ArchiveDocument.objects.filter(case__uuid=case_uuid_str).select_related('timeline_event', 'uploader').order_by('path')
+        documents = ArchiveDocument.objects.filter(case__id=case_uuid_str).select_related('timeline_event', 'uploader').order_by('path')
 
         tree = [
             {

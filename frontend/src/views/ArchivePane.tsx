@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { FileTree, FileNode } from "../components/FileTree";
 import { InspectorPanel } from "../components/InspectorPanel";
+import { FileActions } from "../components/FileActions";
 import { archiveApi } from "../api/archive";
 import "./ArchivePane.css";
 
-const ArchivePane: React.FC = () => {
+interface ArchivePaneProps {
+  caseId: string;
+}
+
+const ArchivePane: React.FC<ArchivePaneProps> = ({ caseId }) => {
   const [nodes, setNodes] = useState<FileNode[]>([]);
   const [selectedFile, setSelectedFile] = useState<FileNode | null>(null);
   const [loading, setLoading] = useState(true);
@@ -13,20 +18,26 @@ const ArchivePane: React.FC = () => {
   const fetchDirectory = async () => {
     try {
       setLoading(true);
-      const response = await archiveApi.getDirectoryTree();
-      setNodes(response.data);
+      const response = await archiveApi.getDirectoryTree(caseId);
+      // Defensive guard: ensure data is an array
+      const data = response.data;
+      setNodes(Array.isArray(data) ? data : []);
       setError(null);
     } catch (err) {
       console.error("Failed to fetch directory tree:", err);
       setError("Failed to load archive directory.");
+      setNodes([]);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchDirectory();
-  }, []);
+    // Only fetch if caseId is valid
+    if (caseId && caseId !== "") {
+      fetchDirectory();
+    }
+  }, [caseId]);
 
   const handleFileSelect = (node: FileNode) => {
     setSelectedFile(node);
@@ -72,6 +83,11 @@ const ArchivePane: React.FC = () => {
           <div className="archive-error">{error}</div>
         ) : (
           <div className="archive-content">
+            {/* File Actions Toolbar */}
+            <div className="archive-actions-toolbar mb-4">
+              <FileActions caseId={caseId} onFileUploaded={fetchDirectory} />
+            </div>
+
             <FileTree
               nodes={nodes}
               onFileSelect={handleFileSelect}

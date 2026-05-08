@@ -219,7 +219,13 @@ def upload_markdown(request):
     """
     Upload or parse markdown content to create timeline events.
     Requires case to be selected (middleware ensures this).
+    
+    Now uses MarkdownIngestionService for unified parsing and event creation.
     """
+    from .services import MarkdownIngestionService
+    import tempfile
+    import os
+    
     # Get case from session - required
     case_id = request.session.get('selected_case_id')
     if not case_id:
@@ -234,91 +240,60 @@ def upload_markdown(request):
         content = request.POST.get('markdown_content', '')
         timeline_file_path = request.POST.get('timeline_file_path', '')
         
-        # Parse events from markdown
-        events = parse_markdown(content)
+        # If no content provided but timeline_file_path exists, read from file
+        if not content and timeline_file_path:
+            if os.path.exists(timeline_file_path):
+                with open(timeline_file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
         
-        # Create events
-        created_count = 0
-        skipped_count = 0
-        for event_data in events:
-            # Normalize date - try to extract YYYY-MM-DD or use start date of range
-            date_str = event_data.get('date', '')
+        if not content:
+            return JsonResponse({'error': 'No content provided'}, status=400)
+        
+        # Write content to temp file for MarkdownIngestionService
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.md', encoding='utf-8') as temp_file:
+            temp_file.write(content)
+            temp_path = temp_file.name
+        
+        try:
+            # Get timeline file if path provided
+            timeline_file = None
+            if timeline_file_path:
+                try:
+                    timeline_file = TimelineFile.objects.filter(
+                        file=timeline_file_path, 
+                        case=case
+                    ).first()
+                except:
+                    pass
             
-            # Handle date ranges like "2013–2016" or "2013-2016"
-            if '--' in date_str or '–' in date_str:
-                # Extract the start year
-                parts = date_str.replace('–', '-').split('-')
-                if parts and parts[0].strip().isdigit():
-                    date_str = f"{parts[0].strip()}-01-01"  # Use Jan 1 of start year
-                else:
-                    date_str = timezone.now().date()
-            
-            # Handle year-only dates like "2016"
-            elif len(date_str) == 4 and date_str.isdigit():
-                date_str = f"{date_str}-01-01"  # Use Jan 1
-            
-            # Try to parse the date
-            try:
-                from datetime import datetime
-                # Try multiple formats
-                for fmt in ['%Y-%m-%d', '%Y-%m', '%Y']:
-                    try:
-                        parsed_date = datetime.strptime(date_str, fmt).date()
-                        break
-                    except ValueError:
-                        continue
-                else:
-                    # If all formats fail, use today
-                    parsed_date = timezone.now().date()
-            except Exception:
-                parsed_date = timezone.now().date()
-            
-            event_title = event_data.get('event', event_data.get('title', ''))
-            
-            existing = TimelineEvent.objects.filter(
+            # Use MarkdownIngestionService for unified processing
+            result = MarkdownIngestionService.ingest_markdown_file(
+                file_path=temp_path,
                 case=case,
-                date=parsed_date,
-                event=event_title
-            ).first()
-            
-            if existing:
-                skipped_count += 1
-                continue
-            
-            # Link evidence documents first
-            evidence_docs = []
-            docs_data = event_data.get('documents') or event_data.get('evidence')
-            if docs_data:
-                if isinstance(docs_data, list):
-                    for doc_id in docs_data:
-                        try:
-                            doc = ArchiveDocument.objects.get(id=int(doc_id), case=case)
-                            evidence_docs.append(doc)
-                        except (ArchiveDocument.DoesNotExist, ValueError):
-                            pass
-
-            event = TimelineEvent.objects.create(
-                date=parsed_date,
-                event=event_title,
-                category=event_data.get('category', 'other'),
-                notes=event_data.get('notes', ''),
-                citation=event_data.get('citation', ''),
-                timeline_file=timeline_file_path if timeline_file_path else None,
-                case=case,
-                source_party='CLIENT',
-                status='UNDISPUTED',
-                created_by=request.user
+                user=request.user,
+                timeline_file=timeline_file,
+                source_party='CLIENT'
             )
             
-            if evidence_docs:
-                event.evidence.set(evidence_docs)
-            created_count += 1
-        
-        result = {'status': 'success', 'created': created_count, 'redirect': '/timeline/'}
-        if skipped_count > 0:
-            result['skipped'] = skipped_count
-        
-        return JsonResponse(result)
+            # Clean up temp file
+            os.unlink(temp_path)
+            
+            return JsonResponse({
+                'status': 'success',
+                'created': result.get('created', 0),
+                'updated': result.get('updated', 0),
+                'skipped': result.get('skipped', 0),
+                'warnings': result.get('warnings', []),
+                'redirect': '/timeline/'
+            })
+            
+        except Exception as e:
+            if 'temp_path' in locals() and os.path.exists(temp_path):
+                os.unlink(temp_path)
+            return JsonResponse({
+                'status': 'error',
+                'error': str(e)
+            }, status=500)
     
     # GET request - show form
     cases = Case.objects.filter(user=request.user).order_by('-updated_at')

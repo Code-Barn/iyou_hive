@@ -133,6 +133,14 @@ class TimelineEvent(models.Model):
         help_text="Party that created or asserts this event"
     )
 
+    # Section header from Markdown ## headers (e.g., "2016-2020", "Violette's Mental Health")
+    section_header = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Section header this event belongs to (from Markdown ## headers)"
+    )
+
     # System source tracking
     is_system_source = models.BooleanField(
         default=False,
@@ -153,6 +161,12 @@ class TimelineEvent(models.Model):
         max_length=500,
         blank=True,
         help_text="Citation or reference for this event"
+    )
+    # Citation map: stores {pdf_page, row_index} from last PDF generation
+    last_printed_citation = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Citation location in last printed PDF: {page_number, row_index}"
     )
     notes = models.TextField(blank=True, help_text="Detailed notes about the event")
 

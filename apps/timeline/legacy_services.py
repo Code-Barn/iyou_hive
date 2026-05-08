@@ -148,7 +148,7 @@ class MarkdownIngestionService:
             try:
                 # Find potential duplicates
                 potential_matches = cls.find_potential_matches(event_data, case)
-
+                
                 if potential_matches.exists():
                     matches_found.append({
                         'event_data': event_data,
@@ -161,7 +161,17 @@ class MarkdownIngestionService:
                         f"Potential duplicate: {event_data.get('date')} / {event_data.get('event')}"
                     )
                     continue
-
+                
+                # Smart attribution: use section header context
+                section_header = event_data.get('section_header')
+                if section_header:
+                    # Determine source_party based on section context
+                    if 'pauletta' in section_header.lower():
+                        source_party = 'OPPOSING'
+                    elif 'david' in section_header.lower():
+                        source_party = 'CLIENT'
+                    # else: keep provided source_party parameter
+                
                 # Create the event
                 event, was_created = cls.create_timeline_event(
                     event_data=event_data,
@@ -196,26 +206,70 @@ class MarkdownIngestionService:
         """
         Create TimelineEvent from parsed 5-column data.
         Links evidence via M2M.
+        Implements smart attribution logic based on event text.
         Returns: (TimelineEvent, bool_created)
         """
         date_obj = cls._parse_date(event_data.get('date', ''))
         if not date_obj:
             date_obj = timezone.now().date()
-
+        
         event_title = (event_data.get('event') or event_data.get('title') or '').strip()
         if not event_title:
             raise ValueError("Event title required")
-
+        
+        # Truncate event title to 255 characters (model max_length)
+        if len(event_title) > 255:
+            event_title = event_title[:252] + '...'
+        
+        # Validate category against model choices
+        valid_categories = [choice[0] for choice in TimelineEvent.CATEGORY_CHOICES]
         category = (event_data.get('category') or 'other').lower()
+        if category not in valid_categories:
+            category = 'other'
+        
         notes = event_data.get('notes') or event_data.get('description') or ''
         citation = event_data.get('citation') or ''
         evidence_data = event_data.get('evidence') or event_data.get('documents') or ''
-
+        
+        # Get section header from parsed data
+        section_header = event_data.get('section_header') or None
+        
+        # SMART ATTRIBUTION LOGIC
+        # Determine source_party based on event text content
+        event_text = (event_title + ' ' + notes).lower()
+        
+        # First try the existing keyword matching
+        has_david = 'david' in event_text
+        has_pauletta = 'pauletta' in event_text or 'pauletta' in event_text
+        
+        if has_pauletta and not has_david:
+            source_party = 'OPPOSING'  # Pauletta mentioned without David -> Opposing
+        elif has_david and not has_pauletta:
+            source_party = 'CLIENT'     # David mentioned without Pauletta -> Client
+        elif has_david and has_pauletta:
+            # Both mentioned - use section context or default to NEUTRAL
+            if section_header:
+                if 'pauletta' in section_header.lower():
+                    source_party = 'OPPOSING'
+                elif 'david' in section_header.lower():
+                    source_party = 'CLIENT'
+                else:
+                    source_party = 'NEUTRAL'
+            else:
+                source_party = 'NEUTRAL'  # Both mentioned, no clear context
+        else:
+            # No clear keywords - try AI classification
+            try:
+                from apps.ai_assistant.services import AIService
+                source_party = AIService.classify_party(event_text, section_header)
+            except ImportError:
+                source_party = 'NEUTRAL'  # Default fallback
+        
         # Determine status from category if not specified
         status = event_data.get('status', 'UNDISPUTED')
         if status == 'UNDISPUTED' and category in ['contested', 'refuted']:
             status = category.upper()
-
+        
         defaults = {
             'category': category,
             'notes': notes,
@@ -223,10 +277,11 @@ class MarkdownIngestionService:
             'source_type': 'MARKDOWN',
             'status': status,
             'source_party': source_party,
+            'section_header': section_header,  # Store section header
             'created_by': user,
             'timeline_file': timeline_file,
         }
-
+        
         with transaction.atomic():
             event, created = TimelineEvent.objects.update_or_create(
                 case=case,
@@ -235,11 +290,11 @@ class MarkdownIngestionService:
                 source_party=source_party,
                 defaults=defaults
             )
-
+            
             # Link evidence documents
             if evidence_data:
                 cls._link_evidence(event, evidence_data, case)
-
+        
         return event, created
 
     @classmethod

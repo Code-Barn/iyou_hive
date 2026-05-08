@@ -79,8 +79,8 @@ def parse_markdown_file(file_path):
                 'headings': [{'level': int, 'text': str, 'anchor': str}, ...],
                 'first_heading': str or None,
                 'sections': [{'heading': str, 'content': str, 'level': int}, ...],
-                'events': [{'title': str, 'date': str, 'category': str, 'notes': str, 
-                          'description': str, 'documents': list}, ...],
+                'events': [{'event': str, 'date': str, 'category': str, 'notes': str, 
+                          'description': str, 'evidence': list}, ...],
                 'raw_content': str,
                 'html': str or None,
                 'images': [{'url': str, 'alt': str}, ...],
@@ -142,14 +142,15 @@ def parse_markdown_file(file_path):
             result['html'] = None
     
     # Extract headings using regex
-    heading_pattern = r'^(#{1,6})\s+(.+?)\s*$'
+    heading_pattern = r'^(#{1,6})\s+(.+)$'
     headings = []
     
     for line in raw_content.split('\n'):
         match = re.match(heading_pattern, line)
         if match:
-            level_hashes, text = match.groups()
-            level = int(level_hashes[1:])  # Convert # to integer (h1 -> 1)
+            level_hashes = match.group(1)
+            text = match.group(2)
+            level = len(level_hashes)  # Count # symbols (h1 -> 1, h2 -> 2, etc.)
             anchor = re.sub(r'[^\w\-]+', '-', text.lower()).strip('-')
             headings.append({
                 'level': level,
@@ -176,7 +177,7 @@ def parse_markdown_file(file_path):
                     'level': current_section['level']
                 })
             # Start new section
-            level = int(heading_match.group(1)[1:])
+            level = len(heading_match.group(1))  # Count # symbols (h1 -> 1, h2 -> 2, etc.)
             current_section = {
                 'heading': heading_match.group(2).strip(),
                 'contentlines': [],
@@ -202,15 +203,12 @@ def parse_markdown_file(file_path):
     if result['html']:
         # Track current section from HTML parsing
         soup = BeautifulSoup(result['html'], 'html.parser')
-        current_section_heading = None
-        
-        # Find all headings in the HTML
-        all_headings = soup.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+        current_section_header = None
         
         # Process each element, tracking current section
         for element in soup.find_all():
             if element.name in ['h1', 'h2', 'h3', 'h4', 'h5', 'h6']:
-                current_section_heading = element.get_text().strip()
+                current_section_header = element.get_text().strip()
             elif element.name == 'table':
                 # Parse this table's events
                 rows = element.find_all('tr')
@@ -227,17 +225,18 @@ def parse_markdown_file(file_path):
                             documents = [d.strip() for d in documents_raw.split(',') if d.strip()]
                             
                             section_events.append({
+                                'event': event_title,  # Clean title only, no header prepending
                                 'date': date,
-                                'event': event_title,
                                 'description': description,
                                 'category': category,
-                                'documents': documents
+                                'evidence': documents,
+                                'section_header': current_section_header  # Store section separately
                             })
                     
                     if section_events:
                         # If we're inside a section, use that heading
-                        if current_section_heading:
-                            timelines[current_section_heading].extend(section_events)
+                        if current_section_header:
+                            timelines[current_section_header].extend(section_events)
                         else:
                             # Use first heading or "Main Timeline"
                             first_heading = headings[0]['text'] if headings else 'Main Timeline'
@@ -247,7 +246,7 @@ def parse_markdown_file(file_path):
     if not any(timelines.values()):  # No table events found
         for section in sections:
             section_heading = section.get('heading', '')
-            sec_events = parse_section_events(section)
+            sec_events = parse_section_events(section, section_header=section_heading)
             if sec_events:
                 if section_heading:
                     timelines[section_heading].extend(sec_events)
@@ -292,7 +291,7 @@ def parse_markdown_file(file_path):
     return result
 
 
-def parse_section_events(section):
+def parse_section_events(section, section_header=None):
     """
     Parse timeline events from a section of Markdown content.
     
@@ -302,16 +301,10 @@ def parse_section_events(section):
     **Category:** contract
     **Notes:** Some notes here
     
-    Or with description:
-    ## Event Title
-    Date: 2024-01-15
-    Category: contract
-    Notes: Some notes
-    Description: More details here
-    
     Args:
         section (dict): Section dict with 'heading', 'content', 'level' keys
-        
+        section_header (str, optional): The ## header text for this section
+    
     Returns:
         list: List of event dicts
     """
@@ -322,13 +315,13 @@ def parse_section_events(section):
     # If this is an H2 section, treat heading as event title
     if section.get('level', 0) == 2:
         event = {
-            'title': heading,
+            'event': heading,
             'date': None,
             'category': 'other',
             'notes': '',
             'description': content.strip(),
-            'documents': [],
-            'section_level': section.get('level', 0)
+            'evidence': [],
+            'section_header': section_header or heading  # Store section header
         }
         
         # Parse content for event fields
@@ -357,19 +350,19 @@ def parse_section_events(section):
                 docs_part = line.split(':', 1)[1].strip()
                 if '[' in docs_part and ']' in docs_part:
                     # Try to parse as markdown links
-                    event['documents'] = extract_documents_from_text(docs_part)
+                    event['evidence'] = extract_documents_from_text(docs_part)
                 elif ',' in docs_part:
-                    event['documents'] = [d.strip() for d in docs_part.split(',')]
+                    event['evidence'] = [d.strip() for d in docs_part.split(',')]
                 else:
-                    event['documents'] = [docs_part]
+                    event['evidence'] = [docs_part]
             elif line.lower().startswith('documents:') or line.lower().startswith('supporting docs:'):
                 docs_part = line.split(':', 1)[1].strip()
                 if '[' in docs_part and ']' in docs_part:
-                    event['documents'] = extract_documents_from_text(docs_part)
+                    event['evidence'] = extract_documents_from_text(docs_part)
                 elif ',' in docs_part:
-                    event['documents'] = [d.strip() for d in docs_part.split(',')]
+                    event['evidence'] = [d.strip() for d in docs_part.split(',')]
                 else:
-                    event['documents'] = [docs_part]
+                    event['evidence'] = [docs_part]
         
         events.append(event)
     
@@ -495,7 +488,7 @@ def parse_timeline_events_from_markdown(markdown_content):
     
     Args:
         markdown_content (str): Markdown content with timeline events
-        
+    
     Returns:
         list: List of event dicts
     """
@@ -514,7 +507,7 @@ def parse_timeline_events_from_markdown(markdown_content):
             if current_event:
                 events.append(current_event)
             current_event = {
-                'title': line[3:].strip(),
+                'event': line[3:].strip(),
                 'date': None,
                 'category': 'other',
                 'notes': '',
@@ -526,7 +519,7 @@ def parse_timeline_events_from_markdown(markdown_content):
             if line.lower().startswith('**date:**'):
                 current_event['date'] = line[8:].strip()
             elif line.lower().startswith('**event:**'):
-                current_event['title'] = line[8:].strip()
+                current_event['event'] = line[8:].strip()
             elif line.lower().startswith('**category:**'):
                 current_event['category'] = line[12:].strip().lower()
             elif line.lower().startswith('**notes:**'):

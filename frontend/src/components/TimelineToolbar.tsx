@@ -1,50 +1,64 @@
-import React, { useState } from 'react';
-import { timelineApi } from '../api/timeline';
-import { archiveApi } from '../api/archive';
+import React, { useState } from "react";
+import { timelineApi } from "../api/timeline";
+import { archiveApi } from "../api/archive";
 
 interface TimelineToolbarProps {
   caseId: string;
   onEventAdded: () => void;
 }
 
-export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEventAdded }) => {
+export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
+  caseId,
+  onEventAdded,
+}) => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [uploadError, setUploadError] = useState<string>('');
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "uploading" | "success" | "error"
+  >("idle");
+  const [uploadError, setUploadError] = useState<string>("");
 
   // Event form state
-  const [eventDate, setEventDate] = useState('');
-  const [eventTitle, setEventTitle] = useState('');
-  const [eventCategory, setEventCategory] = useState('verified');
-  const [eventSourceParty, setEventSourceParty] = useState<'CLIENT' | 'OPPOSING' | 'NEUTRAL'>('CLIENT');
-  const [eventNotes, setEventNotes] = useState('');
+  const [eventDate, setEventDate] = useState("");
+  const [eventTitle, setEventTitle] = useState("");
+  const [eventCategory, setEventCategory] = useState("verified");
+  const [eventSourceParty, setEventSourceParty] = useState<
+    "CLIENT" | "OPPOSING" | "NEUTRAL"
+  >("CLIENT");
+  const [eventNotes, setEventNotes] = useState("");
   const [selectedEvidence, setSelectedEvidence] = useState<string[]>([]);
-  const [availableDocuments, setAvailableDocuments] = useState<Array<{uuid: string; title: string}>>([]);
+  const [availableDocuments, setAvailableDocuments] = useState<
+    Array<{ uuid: string; title: string }>
+  >([]);
   const [isLoadingDocuments, setIsLoadingDocuments] = useState(false);
-  const [addEventStatus, setAddEventStatus] = useState<'idle' | 'adding' | 'success' | 'error'>('idle');
-  const [addEventError, setAddEventError] = useState<string>('');
+  const [addEventStatus, setAddEventStatus] = useState<
+    "idle" | "adding" | "success" | "error"
+  >("idle");
+  const [addEventError, setAddEventError] = useState<string>("");
 
   // Load available documents for evidence linking
   const loadDocuments = async () => {
+    if (!caseId || caseId === "") {
+      setAvailableDocuments([]);
+      return;
+    }
     try {
       setIsLoadingDocuments(true);
-      const response = await archiveApi.getDirectoryTree();
+      const response = await archiveApi.getDirectoryTree(caseId);
 
-      // Extract documents from the tree
-      const documents: Array<{uuid: string; title: string}> = [];
+      const documents: Array<{ uuid: string; title: string }> = [];
 
-      // Helper function to traverse tree and extract documents
       const traverseTree = (nodes: any[]) => {
+        if (!Array.isArray(nodes)) return;
         for (const node of nodes) {
           if (!node.is_folder && node.file_details) {
             documents.push({
               uuid: node.file_details.uuid,
-              title: node.file_details.title
+              title: node.file_details.title,
             });
           }
-          if (node.children) {
+          if (node.children && Array.isArray(node.children)) {
             traverseTree(node.children);
           }
         }
@@ -56,7 +70,7 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
 
       setAvailableDocuments(documents);
     } catch (error) {
-      console.error('Failed to load documents:', error);
+      console.error("Failed to load documents:", error);
       setAvailableDocuments([]);
     } finally {
       setIsLoadingDocuments(false);
@@ -67,33 +81,36 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
   const handleFileUpload = async () => {
     if (!uploadFile || !caseId) return;
 
-    setUploadStatus('uploading');
-    setUploadError('');
+    setUploadStatus("uploading");
+    setUploadError("");
 
     try {
       const formData = new FormData();
-      formData.append('file', uploadFile);
-      formData.append('case_uuid', caseId);
+      formData.append("file", uploadFile);
+      formData.append("case_uuid", caseId);
 
-      // Call the timeline upload API
       const response = await timelineApi.uploadTimeline(caseId, formData);
 
-      if (response.data.status === 'success') {
-        setUploadStatus('success');
-        onEventAdded(); // Refresh timeline
+      if (response.status === 200 && response.data.status === "success") {
+        setUploadStatus("success");
+        onEventAdded();
         setTimeout(() => {
           setIsUploadModalOpen(false);
-          setUploadStatus('idle');
+          setUploadStatus("idle");
           setUploadFile(null);
         }, 2000);
       } else {
-        setUploadStatus('error');
-        setUploadError(response.data.error || 'Failed to upload timeline');
+        setUploadStatus("error");
+        setUploadError(
+          response.data?.error ||
+            response.data?.message ||
+            "Failed to upload timeline",
+        );
       }
     } catch (error) {
-      console.error('Upload failed:', error);
-      setUploadStatus('error');
-      setUploadError('Failed to upload timeline. Please try again.');
+      console.error("Upload failed:", error);
+      setUploadStatus("error");
+      setUploadError("Failed to upload timeline. Please try again.");
     }
   };
 
@@ -101,8 +118,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
   const handleAddEvent = async () => {
     if (!caseId) return;
 
-    setAddEventStatus('adding');
-    setAddEventError('');
+    setAddEventStatus("adding");
+    setAddEventError("");
 
     try {
       const eventData = {
@@ -111,35 +128,38 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
         category: eventCategory,
         source_party: eventSourceParty,
         notes: eventNotes,
-        evidence_ids: selectedEvidence
+        evidence_ids: selectedEvidence,
       };
 
       const response = await timelineApi.createEvent(caseId, eventData);
 
-      if (response.data.status === 'success') {
-        setAddEventStatus('success');
-        onEventAdded(); // Refresh timeline
+      if (response.status === 201 || response.data.id) {
+        setAddEventStatus("success");
+        onEventAdded();
 
-        // Reset form
-        setEventDate('');
-        setEventTitle('');
-        setEventCategory('verified');
-        setEventSourceParty('CLIENT');
-        setEventNotes('');
+        setEventDate("");
+        setEventTitle("");
+        setEventCategory("verified");
+        setEventSourceParty("CLIENT");
+        setEventNotes("");
         setSelectedEvidence([]);
 
         setTimeout(() => {
           setIsAddEventModalOpen(false);
-          setAddEventStatus('idle');
+          setAddEventStatus("idle");
         }, 2000);
       } else {
-        setAddEventStatus('error');
-        setAddEventError(response.data.error || 'Failed to add event');
+        setAddEventStatus("error");
+        setAddEventError(
+          response.data?.error ||
+            response.data?.detail ||
+            "Failed to add event",
+        );
       }
     } catch (error) {
-      console.error('Add event failed:', error);
-      setAddEventStatus('error');
-      setAddEventError('Failed to add event. Please try again.');
+      console.error("Add event failed:", error);
+      setAddEventStatus("error");
+      setAddEventError("Failed to add event. Please try again.");
     }
   };
 
@@ -148,69 +168,67 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
     if (!caseId) return;
 
     try {
-      // Call the PDF generation API
       const response = await timelineApi.generatePdf(caseId);
 
-      if (response.data.status === 'success' && response.data.pdf_url) {
-        // Open the PDF in a new tab
-        window.open(response.data.pdf_url, '_blank');
+      if (response.data.status === "success" && response.data.pdf_url) {
+        window.open(response.data.pdf_url, "_blank");
       } else {
-        console.error('PDF generation failed:', response.data.error);
-        alert('Failed to generate PDF. Please try again.');
+        console.error("PDF generation failed:", response.data.error);
+        alert("Failed to generate PDF. Please try again.");
       }
     } catch (error) {
-      console.error('PDF generation failed:', error);
-      alert('Failed to generate PDF. Please try again.');
+      console.error("PDF generation failed:", error);
+      alert("Failed to generate PDF. Please try again.");
     }
   };
 
   // Toggle evidence selection
   const toggleEvidence = (documentUuid: string) => {
-    setSelectedEvidence(prev =>
+    setSelectedEvidence((prev) =>
       prev.includes(documentUuid)
-        ? prev.filter(id => id !== documentUuid)
-        : [...prev, documentUuid]
+        ? prev.filter((id) => id !== documentUuid)
+        : [...prev, documentUuid],
     );
   };
 
   return (
-    <div className="timeline-toolbar bg-white border-b border-gray-200 p-4 shadow-sm">
-      <div className="flex items-center justify-between max-w-7xl mx-auto">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-800">Legal Timeline</h1>
-        </div>
+    <div className="timeline-toolbar bg-white border-b border-gray-200 p-2">
+      <div className="flex items-center gap-1 flex-nowrap overflow-x-auto">
+        {/* Upload Timeline Button - icon only for tight spaces */}
+        <button
+          onClick={() => {
+            setIsUploadModalOpen(true);
+            loadDocuments();
+          }}
+          className="px-2 py-1.5 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+          title="Upload Timeline"
+        >
+          <span>📄</span>
+          <span className="hidden sm:inline">Upload</span>
+        </button>
 
-        <div className="flex items-center gap-2">
-          {/* Upload Timeline Button */}
-          <button
-            onClick={() => {
-              setIsUploadModalOpen(true);
-              loadDocuments();
-            }}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
-          >
-            <span>📄</span> Upload Timeline
-          </button>
+        {/* Add Event Button */}
+        <button
+          onClick={() => {
+            setIsAddEventModalOpen(true);
+            loadDocuments();
+          }}
+          className="px-2 py-1.5 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+          title="Add Event"
+        >
+          <span>➕</span>
+          <span className="hidden sm:inline">Add Event</span>
+        </button>
 
-          {/* Add Event Button */}
-          <button
-            onClick={() => {
-              setIsAddEventModalOpen(true);
-              loadDocuments();
-            }}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
-          >
-            <span>➕</span> Add Event
-          </button>
-
-          {/* Print PDF Button */}
-          <button
-            onClick={handlePrintPDF}
-            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-          >
-            <span>📄</span> Print PDF
-          </button>
-        </div>
+        {/* Print PDF Button */}
+        <button
+          onClick={handlePrintPDF}
+          className="px-2 py-1.5 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition-colors flex items-center gap-1 whitespace-nowrap"
+          title="Print PDF"
+        >
+          <span>📄</span>
+          <span className="hidden sm:inline">PDF</span>
+        </button>
       </div>
 
       {/* Upload Timeline Modal */}
@@ -222,8 +240,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               <button
                 onClick={() => {
                   setIsUploadModalOpen(false);
-                  setUploadStatus('idle');
-                  setUploadError('');
+                  setUploadStatus("idle");
+                  setUploadError("");
                 }}
                 className="text-gray-500 hover:text-gray-700"
               >
@@ -232,7 +250,9 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
             </div>
 
             <div className="mb-4">
-              <p className="text-gray-600 mb-2">Upload a 5-column Markdown timeline file</p>
+              <p className="text-gray-600 mb-2">
+                Upload a 5-column Markdown timeline file
+              </p>
               <input
                 type="file"
                 accept=".md,.markdown"
@@ -241,19 +261,23 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               />
             </div>
 
-            {uploadStatus === 'uploading' && (
+            {uploadStatus === "uploading" && (
               <div className="mb-4 p-3 bg-blue-100 rounded-lg">
-                <p className="text-blue-700">Uploading and processing timeline...</p>
+                <p className="text-blue-700">
+                  Uploading and processing timeline...
+                </p>
               </div>
             )}
 
-            {uploadStatus === 'success' && (
+            {uploadStatus === "success" && (
               <div className="mb-4 p-3 bg-green-100 rounded-lg">
-                <p className="text-green-700">Timeline uploaded successfully!</p>
+                <p className="text-green-700">
+                  Timeline uploaded successfully!
+                </p>
               </div>
             )}
 
-            {uploadStatus === 'error' && uploadError && (
+            {uploadStatus === "error" && uploadError && (
               <div className="mb-4 p-3 bg-red-100 rounded-lg">
                 <p className="text-red-700">Error: {uploadError}</p>
               </div>
@@ -263,8 +287,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               <button
                 onClick={() => {
                   setIsUploadModalOpen(false);
-                  setUploadStatus('idle');
-                  setUploadError('');
+                  setUploadStatus("idle");
+                  setUploadError("");
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
               >
@@ -272,10 +296,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               </button>
               <button
                 onClick={handleFileUpload}
-                disabled={uploadStatus === 'uploading' || !uploadFile}
-                className={`px-4 py-2 ${uploadStatus === 'uploading' || !uploadFile ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg transition-colors`}
+                disabled={uploadStatus === "uploading" || !uploadFile}
+                className={`px-4 py-2 ${uploadStatus === "uploading" || !uploadFile ? "bg-blue-300" : "bg-blue-600 hover:bg-blue-700"} text-white rounded-lg transition-colors`}
               >
-                {uploadStatus === 'uploading' ? 'Uploading...' : 'Upload'}
+                {uploadStatus === "uploading" ? "Uploading..." : "Upload"}
               </button>
             </div>
           </div>
@@ -291,8 +315,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               <button
                 onClick={() => {
                   setIsAddEventModalOpen(false);
-                  setAddEventStatus('idle');
-                  setAddEventError('');
+                  setAddEventStatus("idle");
+                  setAddEventError("");
                 }}
                 className="text-gray-500 hover:text-gray-700"
               >
@@ -301,9 +325,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              {/* Date */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Date *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date *
+                </label>
                 <input
                   type="date"
                   value={eventDate}
@@ -312,10 +337,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
                   required
                 />
               </div>
-
-              {/* Event Title */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Event/Incident *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Event/Incident *
+                </label>
                 <input
                   type="text"
                   value={eventTitle}
@@ -325,10 +350,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
                   required
                 />
               </div>
-
-              {/* Category */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Category
+                </label>
                 <select
                   value={eventCategory}
                   onChange={(e) => setEventCategory(e.target.value)}
@@ -340,13 +365,17 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
                   <option value="other">Other</option>
                 </select>
               </div>
-
-              {/* Source Party */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Source Party</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Source Party
+                </label>
                 <select
                   value={eventSourceParty}
-                  onChange={(e) => setEventSourceParty(e.target.value as 'CLIENT' | 'OPPOSING' | 'NEUTRAL')}
+                  onChange={(e) =>
+                    setEventSourceParty(
+                      e.target.value as "CLIENT" | "OPPOSING" | "NEUTRAL",
+                    )
+                  }
                   className="w-full border border-gray-300 rounded-lg p-2"
                 >
                   <option value="CLIENT">Client</option>
@@ -354,10 +383,10 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
                   <option value="NEUTRAL">Neutral (Court/Judge)</option>
                 </select>
               </div>
-
-              {/* Notes */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
                 <textarea
                   value={eventNotes}
                   onChange={(e) => setEventNotes(e.target.value)}
@@ -365,20 +394,27 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
                   className="w-full border border-gray-300 rounded-lg p-2 h-24"
                 />
               </div>
-
-              {/* Evidence Documents */}
               <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supporting Documents</label>
-                <p className="text-sm text-gray-500 mb-2">Link evidence from your archive</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Supporting Documents
+                </label>
+                <p className="text-sm text-gray-500 mb-2">
+                  Link evidence from your archive
+                </p>
 
                 {isLoadingDocuments ? (
                   <p className="text-gray-500">Loading documents...</p>
                 ) : availableDocuments.length === 0 ? (
-                  <p className="text-gray-500">No documents available in your archive.</p>
+                  <p className="text-gray-500">
+                    No documents available in your archive.
+                  </p>
                 ) : (
                   <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg p-2">
-                    {availableDocuments.map(doc => (
-                      <div key={doc.uuid} className="flex items-center p-2 hover:bg-gray-50">
+                    {availableDocuments.map((doc) => (
+                      <div
+                        key={doc.uuid}
+                        className="flex items-center p-2 hover:bg-gray-50"
+                      >
                         <input
                           type="checkbox"
                           id={`doc-${doc.uuid}`}
@@ -396,19 +432,19 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               </div>
             </div>
 
-            {addEventStatus === 'adding' && (
+            {addEventStatus === "adding" && (
               <div className="mb-4 p-3 bg-blue-100 rounded-lg">
                 <p className="text-blue-700">Adding event...</p>
               </div>
             )}
 
-            {addEventStatus === 'success' && (
+            {addEventStatus === "success" && (
               <div className="mb-4 p-3 bg-green-100 rounded-lg">
                 <p className="text-green-700">Event added successfully!</p>
               </div>
             )}
 
-            {addEventStatus === 'error' && addEventError && (
+            {addEventStatus === "error" && addEventError && (
               <div className="mb-4 p-3 bg-red-100 rounded-lg">
                 <p className="text-red-700">Error: {addEventError}</p>
               </div>
@@ -418,8 +454,8 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               <button
                 onClick={() => {
                   setIsAddEventModalOpen(false);
-                  setAddEventStatus('idle');
-                  setAddEventError('');
+                  setAddEventStatus("idle");
+                  setAddEventError("");
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
               >
@@ -427,10 +463,12 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
               </button>
               <button
                 onClick={handleAddEvent}
-                disabled={addEventStatus === 'adding' || !eventDate || !eventTitle}
-                className={`px-4 py-2 ${addEventStatus === 'adding' || !eventDate || !eventTitle ? 'bg-green-300' : 'bg-green-600 hover:bg-green-700'} text-white rounded-lg transition-colors`}
+                disabled={
+                  addEventStatus === "adding" || !eventDate || !eventTitle
+                }
+                className={`px-4 py-2 ${addEventStatus === "adding" || !eventDate || !eventTitle ? "bg-green-300" : "bg-green-600 hover:bg-green-700"} text-white rounded-lg transition-colors`}
               >
-                {addEventStatus === 'adding' ? 'Adding...' : 'Add Event'}
+                {addEventStatus === "adding" ? "Adding..." : "Add Event"}
               </button>
             </div>
           </div>
@@ -439,3 +477,5 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({ caseId, onEven
     </div>
   );
 };
+
+export default TimelineToolbar;

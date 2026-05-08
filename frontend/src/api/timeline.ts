@@ -1,5 +1,22 @@
 import axios from "axios";
 
+// Function to get CSRF token from cookie
+function getCSRFToken(): string | null {
+  const name = "csrftoken";
+  let cookieValue: string | null = null;
+  if (document.cookie && document.cookie !== "") {
+    const cookies = document.cookie.split(";");
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === name + "=") {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
 // Create axios instance with Django CSRF support
 const api = axios.create({
   baseURL: "/api/timeline",
@@ -7,6 +24,15 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+});
+
+// Add CSRF token to all requests
+api.interceptors.request.use((config) => {
+  const csrfToken = getCSRFToken();
+  if (csrfToken) {
+    config.headers["X-CSRFToken"] = csrfToken;
+  }
+  return config;
 });
 
 // Timeline Events API
@@ -65,6 +91,21 @@ export const timelineApi = {
   generatePdf: (caseId: string) =>
     api.get(`/cases/${caseId}/generate-pdf/`, {
       responseType: "blob", // Important for file downloads
+    }),
+
+  // Export timeline as .hive bundle
+  exportHive: (caseId: string, includePrivate: boolean = false) =>
+    api.get(`/cases/${caseId}/export-hive/`, {
+      params: { include_private: includePrivate },
+      responseType: "blob",
+    }),
+
+  // Import timeline from .hive bundle
+  importHive: (caseId: string, formData: FormData) =>
+    api.post(`/cases/${caseId}/import-hive/`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
     }),
 };
 

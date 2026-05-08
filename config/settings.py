@@ -71,7 +71,7 @@ RUST_DID_LIB_PATH = os.getenv('RUST_DID_LIB_PATH',
 DID_BACKEND = os.getenv('DID_BACKEND', 'rust')
 
 SESSION_COOKIE_AGE = 1209600
-SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_SECURE = False  # Set to False for development (localhost)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 
@@ -120,6 +120,17 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
+
+# Cache control for development - prevent browser caching of assets
+# This ensures the browser always fetches the latest manifest and JS/CSS
+if DEBUG:
+    # Set cache timeout to 0 for development
+    CACHE_MIDDLEWARE_SECONDS = 0
+    # Whitenoise max age (if using whitenoise for static files)
+    WHITENOISE_MAX_AGE = 0
+    # Add security headers to prevent caching in development
+    SECURE_BROWSER_XSS_FILTER = False
+    SECURE_CONTENT_TYPE_NOSNIFF = False
 
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'

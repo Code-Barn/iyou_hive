@@ -1,9 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { diffApi } from '../api/timeline';
-import { DiffViewData, TimelineEvent, SourceParty, ContestedPair } from '../types/timeline';
-import EventCard from './EventCard';
-import ConflictResolverModal from './ConflictResolverModal';
+import React, { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { diffApi } from "../api/timeline";
+import {
+  DiffViewData,
+  TimelineEvent,
+  SourceParty,
+  ContestedPair,
+} from "../types/timeline";
+import EventCard from "./EventCard";
+import ConflictResolverModal from "./ConflictResolverModal";
+import { TimelineToolbar } from "./TimelineToolbar";
 
 interface DiffViewProps {
   caseId: string;
@@ -15,35 +21,44 @@ interface DiffViewProps {
 const DiffView: React.FC<DiffViewProps> = ({
   caseId,
   userParty,
-  leftParty = 'CLIENT',
-  rightParty = 'OPPOSING'
+  leftParty = "CLIENT",
+  rightParty = "OPPOSING",
 }) => {
-  const [selectedConflict, setSelectedConflict] = useState<ContestedPair | null>(null);
-  const [selectedCollection, setSelectedCollection] = useState<string | null>(null);
+  const [selectedConflict, setSelectedConflict] =
+    useState<ContestedPair | null>(null);
+  const [selectedCollection, setSelectedCollection] = useState<string | null>(
+    null,
+  );
 
   const { data, isLoading, error, refetch } = useQuery<DiffViewData>({
-    queryKey: ['diffView', caseId, leftParty, rightParty],
-    queryFn: () => diffApi.getDiffView(caseId, leftParty, rightParty).then(res => res.data),
+    queryKey: ["diffView", caseId, leftParty, rightParty],
+    queryFn: () =>
+      diffApi
+        .getDiffView(caseId, leftParty, rightParty)
+        .then((res) => res.data),
   });
 
   const handleContest = (event: TimelineEvent) => {
     // Create counter-claim
-    console.log('Contesting event:', event.id);
+    console.log("Contesting event:", event.id);
     // API call would go here
   };
 
   const handleSaveToCollection = (event: TimelineEvent) => {
-    console.log('Saving event to collection:', event.id);
+    console.log("Saving event to collection:", event.id);
     // Open collection dropdown or add to selected collection
   };
 
   const handleResolve = (resolution: any) => {
-    console.log('Resolving conflict with resolution:', resolution);
+    console.log("Resolving conflict with resolution:", resolution);
     setSelectedConflict(null);
     refetch();
   };
 
-  const handleOpenCollectionDropdown = (e: React.MouseEvent, event: TimelineEvent) => {
+  const handleOpenCollectionDropdown = (
+    e: React.MouseEvent,
+    event: TimelineEvent,
+  ) => {
     e.stopPropagation();
     // Open dropdown logic would go here
   };
@@ -69,22 +84,36 @@ const DiffView: React.FC<DiffViewProps> = ({
   }
 
   // Count stats
-  const totalEvents = data.shared.length + data.left_only.length + data.right_only.length +
-                     Object.keys(data.contested).length * 2;
+  const totalEvents =
+    data.shared.length +
+    data.left_only.length +
+    data.right_only.length +
+    Object.keys(data.contested).length * 2;
 
   return (
     <div className="flex flex-col h-full">
+      {/* Timeline Toolbar */}
+      <TimelineToolbar caseId={caseId} onEventAdded={refetch} />
+
       {/* Header */}
       <div className="border-b p-4 flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-800">
           Legal Diff: {data.left_party} vs {data.right_party}
         </h2>
         <div className="text-sm text-gray-500">
-          <span className="font-medium text-gray-700">{totalEvents}</span> total events |
-          <span className="text-yellow-600">{Object.keys(data.contested).length} contested</span> |
-          <span className="text-blue-600">{data.shared.length} shared</span> |
-          <span className="text-green-600">{data.left_only.length} {data.left_party}</span> |
-          <span className="text-red-600">{data.right_only.length} {data.right_party}</span>
+          <span className="font-medium text-gray-700">{totalEvents}</span> total
+          events |
+          <span className="text-yellow-600">
+            {Object.keys(data.contested).length} contested
+          </span>{" "}
+          |<span className="text-blue-600">{data.shared.length} shared</span> |
+          <span className="text-green-600">
+            {data.left_only.length} {data.left_party}
+          </span>{" "}
+          |
+          <span className="text-red-600">
+            {data.right_only.length} {data.right_party}
+          </span>
         </div>
       </div>
 
@@ -92,14 +121,16 @@ const DiffView: React.FC<DiffViewProps> = ({
       <div className="flex flex-1 overflow-hidden">
         {/* Left Column: Client */}
         <div className="flex-1 overflow-y-auto p-4 border-r">
-          <h3 className="font-semibold text-lg mb-4 text-blue-600">{data.left_party} Only</h3>
+          <h3 className="font-semibold text-lg mb-4 text-blue-600">
+            {data.left_party} Only
+          </h3>
           <div className="space-y-4">
             {data.left_only.length === 0 && (
               <div className="text-gray-400 text-center py-8">
                 No events unique to {data.left_party}
               </div>
             )}
-            {data.left_only.map(event => (
+            {data.left_only.map((event) => (
               <EventCard
                 key={event.id}
                 event={event}
@@ -113,14 +144,16 @@ const DiffView: React.FC<DiffViewProps> = ({
 
         {/* Center Column: Shared/Undisputed */}
         <div className="flex-1 overflow-y-auto p-4 border-r">
-          <h3 className="font-semibold text-lg mb-4 text-gray-700">Shared / Undisputed</h3>
+          <h3 className="font-semibold text-lg mb-4 text-gray-700">
+            Shared / Undisputed
+          </h3>
           <div className="space-y-4">
             {data.shared.length === 0 && (
               <div className="text-gray-400 text-center py-8">
                 No shared events
               </div>
             )}
-            {data.shared.map(event => (
+            {data.shared.map((event) => (
               <EventCard
                 key={event.id}
                 event={event}
@@ -133,14 +166,16 @@ const DiffView: React.FC<DiffViewProps> = ({
 
         {/* Right Column: Opposing */}
         <div className="flex-1 overflow-y-auto p-4">
-          <h3 className="font-semibold text-lg mb-4 text-red-600">{data.right_party} Only</h3>
+          <h3 className="font-semibold text-lg mb-4 text-red-600">
+            {data.right_party} Only
+          </h3>
           <div className="space-y-4">
             {data.right_only.length === 0 && (
               <div className="text-gray-400 text-center py-8">
                 No events unique to {data.right_party}
               </div>
             )}
-            {data.right_only.map(event => (
+            {data.right_only.map((event) => (
               <EventCard
                 key={event.id}
                 event={event}
@@ -178,7 +213,9 @@ const DiffView: React.FC<DiffViewProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-xs text-gray-500 mb-1">{data.left_party} Version</div>
+                    <div className="text-xs text-gray-500 mb-1">
+                      {data.left_party} Version
+                    </div>
                     <EventCard
                       event={pair.left}
                       userParty={userParty}
@@ -186,7 +223,9 @@ const DiffView: React.FC<DiffViewProps> = ({
                     />
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 mb-1">{data.right_party} Version</div>
+                    <div className="text-xs text-gray-500 mb-1">
+                      {data.right_party} Version
+                    </div>
                     <EventCard
                       event={pair.right}
                       userParty={userParty}
@@ -199,7 +238,7 @@ const DiffView: React.FC<DiffViewProps> = ({
                   {Object.entries(pair.diff)
                     .filter(([_, diff]) => diff)
                     .map(([field]) => field)
-                    .join(', ')}
+                    .join(", ")}
                 </div>
               </div>
             ))}

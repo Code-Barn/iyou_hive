@@ -4,6 +4,7 @@
 
 import sys
 import markdown
+import json
 from weasyprint import HTML, CSS
 
 
@@ -14,14 +15,38 @@ PREPARED_BY = "Prepared by: David Byers"
 # ------------------------------------
 
 def convert_md_to_pdf(input_file, output_file):
+    citation_manifest = {}
+    current_section = None
+    row_index = 0
+    
     try:
         with open(input_file, "r", encoding="utf-8") as f:
             md_text = f.read()
 
         html_content = markdown.markdown(md_text, extensions=['tables'])
-
+        
+        # Parse HTML to build citation manifest
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html_content, 'html.parser')
+        
+        for element in soup.find_all():
+            if element.name in ['h1', 'h2', 'h3']:
+                current_section = element.get_text().strip()
+                row_index = 0
+            elif element.name == 'tr':
+                cells = element.find_all(['td', 'th'])
+                if len(cells) >= 2:
+                    event_text = cells[1].get_text().strip() if len(cells) > 1 else ''
+                    event_key = f"{current_section}:{event_text}"
+                    citation_manifest[event_key] = {
+                        'section': current_section,
+                        'row_index': row_index,
+                        'page_number': None  # Filled later by PDF reader
+                    }
+                    row_index += 1
+        
         custom_css = CSS(string=f"""
-            @page {{ 
+            @page {{
                 size: letter landscape; 
                 margin: 0.8in 0.5in 0.75in 0.5in; /* Increased top margin for header */
                 
@@ -40,7 +65,7 @@ def convert_md_to_pdf(input_file, output_file):
                 }}
 
                 @bottom-right {{
-                    content: "Page " counter(page) " of " counter(pages);
+                    content: "Page " counter(page) " of " counter(pages)";
                     font-family: serif;
                     font-size: 9pt;
                 }}
@@ -70,10 +95,19 @@ def convert_md_to_pdf(input_file, output_file):
         """)
 
         HTML(string=html_content).write_pdf(output_file, stylesheets=[custom_css])
+        
+        # Save citation manifest
+        manifest_file = output_file.replace('.pdf', '_citation_manifest.json')
+        with open(manifest_file, 'w') as f:
+            json.dump(citation_manifest, f, indent=2)
+        
         print(f"✅ Success! Created {output_file}")
+        print(f"✅ Citation manifest saved to {manifest_file}")
+        return manifest_file
 
     except Exception as e:
         print(f"❌ Error: {e}")
+        return None
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:

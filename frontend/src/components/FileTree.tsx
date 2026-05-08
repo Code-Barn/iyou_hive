@@ -1,29 +1,14 @@
-import React, { useState } from 'react';
-import './FileTree.css';
-
-export interface FileNode {
-  uuid: string;
-  name: string;
-  type: string;
-  is_folder: boolean;
-  children?: FileNode[];
-  file_details?: {
-    uuid: string;
-    title: string;
-    file_type: string;
-    path: string;
-    is_promoted: boolean;
-    promoted_at: string | null;
-    timeline_event_uuids: string[];
-    trust_level: string;
-  };
-}
+import React, { useState, useEffect } from "react";
+import "./FileTree.css";
+import { FileNode } from "../types/shared";
 
 interface FileTreeProps {
-  nodes: FileNode[];
+  caseId: string;
+  nodes?: FileNode[];
   onFileSelect: (node: FileNode) => void;
   onFileDrop: (sourceUuid: string, targetUuid: string) => void;
   onPromote: (node: FileNode) => void;
+  onDocumentSelect?: (docUuid: string) => void;
 }
 
 const FileTreeNode: React.FC<{
@@ -32,7 +17,15 @@ const FileTreeNode: React.FC<{
   onFileSelect: (node: FileNode) => void;
   onFileDrop: (sourceUuid: string, targetUuid: string) => void;
   onPromote: (node: FileNode) => void;
-}> = ({ node, level, onFileSelect, onFileDrop, onPromote }) => {
+  onDocumentSelect?: (docUuid: string) => void;
+}> = ({
+  node,
+  level,
+  onFileSelect,
+  onFileDrop,
+  onPromote,
+  onDocumentSelect,
+}) => {
   const [isOpen, setIsOpen] = useState(level === 0); // Root levels open by default
 
   const handleToggle = (e: React.MouseEvent) => {
@@ -40,8 +33,19 @@ const FileTreeNode: React.FC<{
     setIsOpen(!isOpen);
   };
 
+  const handleClick = () => {
+    if (node.is_folder) {
+      setIsOpen(!isOpen);
+    } else {
+      onFileSelect(node);
+      if (onDocumentSelect && node.file_details?.uuid) {
+        onDocumentSelect(node.file_details.uuid);
+      }
+    }
+  };
+
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('sourceUuid', node.uuid);
+    e.dataTransfer.setData("sourceUuid", node.uuid);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -52,71 +56,135 @@ const FileTreeNode: React.FC<{
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    const sourceUuid = e.dataTransfer.getData('sourceUuid');
-    if (sourceUuid && sourceUuid !== node.uuid) {
+    const sourceUuid = e.dataTransfer.getData("sourceUuid");
+    if (sourceUuid && node.is_folder) {
       onFileDrop(sourceUuid, node.uuid);
     }
   };
 
-  const handleContextMenu = (e: React.MouseEvent) => {
-    if (!node.is_folder && !node.file_details?.is_promoted) {
-      e.preventDefault();
-      // Simple context menu logic could go here, or just trigger onPromote
-      if (window.confirm(`Promote "${node.name}" to evidence?`)) {
-        onPromote(node);
-      }
-    }
+  const getIcon = () => {
+    if (node.is_folder) return isOpen ? "📂" : "📁";
+    const ext = node.name.split(".").pop()?.toLowerCase();
+    if (["pdf"].includes(ext || "")) return "📄";
+    if (["jpg", "jpeg", "png", "gif"].includes(ext || "")) return "🖼️";
+    if (["doc", "docx"].includes(ext || "")) return "📝";
+    return "📎";
   };
 
-  const icon = node.is_folder ? (isOpen ? '📂' : '📁') : '📄';
-  const branchClass = node.name.includes('Vault') ? 'vault-branch' : node.name.includes('Workspace') ? 'workspace-branch' : '';
-
   return (
-    <div className={`file-tree-node ${branchClass}`} style={{ paddingLeft: `${level * 16}px` }}>
+    <div
+      className={`file-tree-node ${node.is_folder ? "folder" : "file"} level-${level}`}
+      draggable={!node.is_folder}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <div
-        className={`node-content ${node.is_folder ? 'folder' : 'file'}`}
-        onClick={() => node.is_folder ? handleToggle(null) : onFileSelect(node)}
-        onDragStart={node.is_folder ? undefined : handleDragStart}
-        draggable={!node.is_folder}
-        onDragOver={handleDragOver}
-        onDrop={handleDrop}
-        onContextMenu={handleContextMenu}
+        className="node-content"
+        style={{ paddingLeft: `${level * 20}px` }}
+        onClick={handleClick}
       >
-        <span className="node-icon">{icon}</span>
+        <span className="node-icon">{getIcon()}</span>
         <span className="node-name">{node.name}</span>
-        {node.file_details?.is_promoted && <span className="promoted-badge">⚖️</span>}
+        {node.file_details?.is_promoted && (
+          <span className="promoted-badge">⚖️</span>
+        )}
       </div>
-      {node.is_folder && isOpen && node.children && (
-        <div className="node-children">
-          {node.children.map(child => (
-            <FileTreeNode
-              key={child.uuid}
-              node={child}
-              level={level + 1}
-              onFileSelect={onFileSelect}
-              onFileDrop={onFileDrop}
-              onPromote={onPromote}
-            />
-          ))}
-        </div>
-      )}
+      {node.is_folder &&
+        isOpen &&
+        node.children &&
+        Array.isArray(node.children) &&
+        node.children.length > 0 && (
+          <div className="node-children">
+            {node.children.map((child) => (
+              <FileTreeNode
+                key={child.uuid}
+                node={child}
+                level={level + 1}
+                onFileSelect={onFileSelect}
+                onFileDrop={onFileDrop}
+                onPromote={onPromote}
+                onDocumentSelect={onDocumentSelect}
+              />
+            ))}
+          </div>
+        )}
     </div>
   );
 };
 
-export const FileTree: React.FC<FileTreeProps> = ({ nodes, onFileSelect, onFileDrop, onPromote }) => {
+const FileTree: React.FC<FileTreeProps> = ({
+  caseId,
+  nodes: initialNodes,
+  onFileSelect,
+  onFileDrop,
+  onPromote,
+  onDocumentSelect,
+}) => {
+  const [nodes, setNodes] = useState<FileNode[]>(initialNodes || []);
+  const [loading, setLoading] = useState(!initialNodes);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (initialNodes) {
+      setNodes(initialNodes);
+      return;
+    }
+
+    // Fetch file tree if not provided
+    const fetchFileTree = async () => {
+      if (!caseId) return;
+
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/archive/directory/?case_id=${caseId}`, {
+          credentials: "include",
+        });
+        if (!res.ok) {
+          // Do NOT attempt to parse JSON on non-ok responses
+          setNodes([]);
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        // Defensive guard: ensure data is an array
+        setNodes(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Failed to fetch file tree:", err);
+        setError("Failed to load files");
+        setNodes([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchFileTree();
+  }, [caseId, initialNodes]);
+
+  if (loading) return <div className="p-4 text-gray-500">Loading files...</div>;
+  if (error) return <div className="p-4 text-red-500">{error}</div>;
+  if (nodes.length === 0)
+    return (
+      <div className="p-4 text-gray-500">
+        No files yet. Upload documents to get started.
+      </div>
+    );
+
   return (
     <div className="file-tree">
-      {nodes.map(node => (
-        <FileTreeNode
-          key={node.uuid}
-          node={node}
-          level={0}
-          onFileSelect={onFileSelect}
-          onFileDrop={onFileDrop}
-          onPromote={onPromote}
-        />
-      ))}
+      {Array.isArray(nodes) &&
+        nodes.map((node) => (
+          <FileTreeNode
+            key={node.uuid}
+            node={node}
+            level={0}
+            onFileSelect={onFileSelect}
+            onFileDrop={onFileDrop}
+            onPromote={onPromote}
+            onDocumentSelect={onDocumentSelect}
+          />
+        ))}
     </div>
   );
 };
+
+export default FileTree;

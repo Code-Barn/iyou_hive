@@ -3,8 +3,15 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
 
-ReactDOM.createRoot(document.getElementById('timeline-app')!).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+document.addEventListener('DOMContentLoaded', () => {
+  const rootElement = document.getElementById('timeline-app');
+  if (rootElement) {
+    ReactDOM.createRoot(rootElement).render(
+      <React.StrictMode>
+        <App />
+      </React.StrictMode>
+    );
+  } else {
+    console.error('Root element #timeline-app not found!');
+  }
+});

@@ -2,11 +2,11 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument, Photo
 from apps.core.models import Case, WikiPage, RawDocument
 from apps.ai_assistant.models import AIConversation
-from apps.ai_assistant.services import analyze_photo, match_photos_to_events
 from apps.ai_assistant.api_client import call_ai_api
 from apps.core.prompts import CROSS_EXAMINATION_PROMPT
 from apps.core.utils import validate_adversarial_disclaimers
@@ -58,6 +58,7 @@ def get_ai_response(user_query: str, case_id: str, user=None) -> str:
     return llm_response
 
 
+@csrf_exempt
 @login_required
 def save_api_key(request):
     """Save user's AI API key and provider preference to their profile."""
@@ -173,24 +174,45 @@ def ai_chat_view(request):
     })
 
 
+def _get_case_or_404(request, case_id):
+    """Helper to get case or return 404. Accepts case_id from POST body or session."""
+    if not case_id:
+        case_id = request.session.get('selected_case_id')
+    if not case_id:
+        return None, JsonResponse({'error': 'case_id is required'}, status=400)
+    try:
+        case = Case.objects.get(id=case_id, user=request.user)
+        return case, None
+    except Case.DoesNotExist:
+        return None, JsonResponse({'error': 'Case not found or not accessible'}, status=404)
+
+
+@login_required
 def analyze_document(request):
-    """Analyze a document using AI."""
-    if request.method == 'POST':
-        document_id = request.POST.get('document_id')
-        text = request.POST.get('text', '')
-        
-        if document_id:
-            # Analyze archive document - ensure user owns it
-            document = get_object_or_404(
-                ArchiveDocument,
-                pk=document_id,
-                user=request.user if request.user.is_authenticated else None
-            )
-            # For now, we can't extract text from PDFs without additional libraries
-            # This is a placeholder for future implementation
-            text = f"Document: {document.title}\nCategory: {document.category}\nTags: {document.tags}"
-        
-        prompt = f"""Analyze the following legal document and provide:
+    """Analyze a document using AI. Requires case_id for scoping."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    document_id = request.POST.get('document_id')
+    text = request.POST.get('text', '')
+    case_id = request.POST.get('case_id')
+    
+    case, error_response = _get_case_or_404(request, case_id)
+    if error_response:
+        return error_response
+    
+    if document_id:
+        # Analyze archive document - ensure user owns it and it belongs to case
+        document = get_object_or_404(
+            ArchiveDocument,
+            pk=document_id,
+            user=request.user,
+            case=case
+        )
+        # For now, we can't extract text from PDFs without additional libraries
+        text = f"Document: {document.title}\nCategory: {document.category}\nTags: {document.tags}"
+    
+    prompt = f"""Analyze the following legal document and provide:
 1. A brief summary
 2. Key points or important clauses
 3. Any dates mentioned
@@ -201,36 +223,42 @@ Document content:
 
 Please format your response in markdown with clear sections.
 """
-        
-        response_text = call_ai_api(prompt, user=request.user)
-        
-        return JsonResponse({
-            'status': 'success',
-            'analysis': response_text,
-            'document_id': document_id
-        })
     
-    return JsonResponse({'error': 'POST required'}, status=400)
+    response_text = call_ai_api(prompt, user=request.user)
+    
+    return JsonResponse({
+        'status': 'success',
+        'analysis': response_text,
+        'document_id': document_id
+    })
 
 
 @login_required
 def query_timeline(request):
-    """Query timeline events using AI."""
-    if request.method == 'POST':
-        query = request.POST.get('query', '')
-        event_id = request.POST.get('event_id')
-        
-        if event_id:
-            # Query about specific event - ensure user owns it
-            event = get_object_or_404(
-                TimelineEvent,
-                pk=event_id,
-                created_by=request.user
-            )
-            # Build evidence list from M2M
-            evidence_list = [doc.title for doc in event.evidence.all()]
-            evidence_str = ', '.join(evidence_list) if evidence_list else 'None'
-            context = f"""Timeline Event Context:
+    """Query timeline events using AI. Requires case_id for scoping."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    query = request.POST.get('query', '')
+    event_id = request.POST.get('event_id')
+    case_id = request.POST.get('case_id')
+    
+    case, error_response = _get_case_or_404(request, case_id)
+    if error_response:
+        return error_response
+    
+    if event_id:
+        # Query about specific event - ensure user owns it and it belongs to case
+        event = get_object_or_404(
+            TimelineEvent,
+            pk=event_id,
+            created_by=request.user,
+            case=case
+        )
+        # Build evidence list from M2M
+        evidence_list = [doc.title for doc in event.evidence.all()]
+        evidence_str = ', '.join(evidence_list) if evidence_list else 'None'
+        context = f"""Timeline Event Context (Case: {case_id}):
 Date: {event.date}
 Event: {event.event}
 Category: {event.category}
@@ -241,44 +269,54 @@ User Query: {query}
 
 Please provide a comprehensive answer based on this event and suggest any relevant connections or follow-up actions.
 """
-        else:
-            # Query about all timeline events - ONLY USER'S EVENTS
-            events = TimelineEvent.objects.filter(
-                created_by=request.user
-            ).order_by('date')
-            event_items = []
-            for e in events:
-                event_items.append(f"Date: {e.date}\nEvent: {e.event}\nCategory: {e.category}\nNotes: {e.notes}")
-            context_str = "\n\n".join(event_items)
-            context = f"""Legal Timeline Events:
+    else:
+        # Query about all timeline events for this case - filter by user AND case
+        events = TimelineEvent.objects.filter(
+            created_by=request.user,
+            case=case
+        ).order_by('date')
+        event_items = []
+        for e in events:
+            event_items.append(f"Date: {e.date}\nEvent: {e.event}\nCategory: {e.category}\nNotes: {e.notes}")
+        context_str = "\n\n".join(event_items)
+        context = f"""Legal Timeline Events (Case: {case_id}):
 {context_str}
 
 User Query: {query}
 
 Please analyze the timeline and provide insights, connections, and recommendations.
 """
-        
-        response_text = call_ai_api(context, user=request.user)
-        
-        return JsonResponse({
-            'status': 'success',
-            'response': response_text,
-            'event_id': event_id
-        })
     
-    return JsonResponse({'error': 'POST required'}, status=400)
+    response_text = call_ai_api(context, user=request.user)
+    
+    return JsonResponse({
+        'status': 'success',
+        'response': response_text,
+        'event_id': event_id,
+        'case_id': case_id
+    })
 
 
 @login_required
 def suggest_events(request):
-    """Generate AI suggestions for new timeline events based on existing data."""
+    """Generate AI suggestions for new timeline events based on existing data. Requires case_id for scoping."""
     if request.method == 'POST':
-        # Get last N events for context - ONLY USER'S DATA
+        case_id = request.POST.get('case_id')
+        
+        case, error_response = _get_case_or_404(request, case_id)
+        if error_response:
+            return error_response
+        
+        # Get last N events for context - filter by user AND case
         events = TimelineEvent.objects.filter(
-            created_by=request.user
+            created_by=request.user,
+            case=case
         ).order_by('-date')[:10]
+        
+        # Get documents for context - filter by user AND case
         documents = ArchiveDocument.objects.filter(
-            user=request.user
+            user=request.user,
+            case=case
         ).order_by('-upload_date')[:10]
         
         event_items = []
@@ -292,7 +330,7 @@ def suggest_events(request):
         events_text = "\n\n".join(event_items)
         docs_text = "\n".join(doc_items)
         
-        context = f"""Analyze the following legal timeline events and documents:
+        context = f"""Analyze the following legal timeline events and documents for Case {case_id}:
 
 Timeline Events:
 {events_text}
@@ -321,8 +359,23 @@ Format your suggestions as markdown with clear sections.
 
 @login_required
 def analyze_timeline_event(request, event_id):
-    """Analyze a specific timeline event with AI and return structured data."""
-    event = get_object_or_404(TimelineEvent, pk=event_id)
+    """Analyze a specific timeline event with AI and return structured data. Requires case_id for scoping."""
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST method required'}, status=405)
+    
+    case_id = request.POST.get('case_id')
+    
+    case, error_response = _get_case_or_404(request, case_id)
+    if error_response:
+        return error_response
+    
+    # Get event - ensure user owns it and it belongs to case
+    event = get_object_or_404(
+        TimelineEvent,
+        pk=event_id,
+        created_by=request.user,
+        case=case
+    )
     
     # Get linked documents via evidence M2M
     documents = event.evidence.all()
@@ -331,7 +384,7 @@ def analyze_timeline_event(request, event_id):
         docs_text.append(f"- {d.title}: {d.description}")
     docs_str = "\n".join(docs_text)
     
-    prompt = f"""Analyze this legal timeline event and its supporting documents:
+    prompt = f"""Analyze this legal timeline event and its supporting documents for Case {case_id}:
 
 Event: {event.event}
 Date: {event.date}
@@ -420,6 +473,3 @@ def match_photos_to_events_view(request):
         return JsonResponse({'error': 'Case not found or not accessible'}, status=404)
     except Exception as e:
         return JsonResponse({'error': f'Failed to match photos: {str(e)}'}, status=500)
-
-
-

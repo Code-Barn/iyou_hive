@@ -50,6 +50,11 @@ const EventCard: React.FC<EventCardProps> = ({
     <div
       className={`border rounded-lg p-4 ${statusColor} ${hasReplacesEvent ? "ring-2 ring-yellow-500" : ""}`}
     >
+      {event.section_header && (
+        <div className="text-xs text-gray-500 mb-2 font-medium">
+          {event.section_header}
+        </div>
+      )}
       <div className="flex items-start justify-between mb-2">
         <div className="flex items-center gap-2">
           <span
@@ -60,6 +65,14 @@ const EventCard: React.FC<EventCardProps> = ({
           <span className="font-medium text-gray-800">{event.event}</span>
         </div>
         <div className="flex gap-1">
+          {event.last_printed_citation && (
+            <span
+              className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded"
+              title={`Citation: Page ${event.last_printed_citation.page_number}, Row ${event.last_printed_citation.row_index}`}
+            >
+              📍 Citation
+            </span>
+          )}
           {event.has_gold_seal && (
             <span
               className="text-xs bg-yellow-400 text-black px-2 py-1 rounded-full font-bold"

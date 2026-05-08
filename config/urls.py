@@ -16,21 +16,27 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from apps.timeline.views import timeline_view
+from django.views.generic import TemplateView
+from django.conf import settings
+from django.conf.urls.static import static
+from apps.core.views import react_app_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', timeline_view, name='home'),
+    # API endpoints (must be before catch-all)
+    path('api/timeline/', include('apps.timeline.api_urls')),
+    path('api/archive/', include('apps.archive.api_urls')),
+    # Serve React app for all frontend routes
+    path('', react_app_view, name='home'),
+    path('timeline/', react_app_view, name='timeline'),  # Full-screen timeline view
+    # Include other URL configs
     path('accounts/', include('apps.accounts.urls')),
     path('core/', include('apps.core.urls')),
-    path('timeline/', include('apps.timeline.urls')),
-    path('archive/', include('apps.archive.urls')),
-    path('ai/', include('apps.ai_assistant.urls')),
-    # API endpoints for Competing Timelines
-    path('api/timeline/', include('apps.timeline.api_urls')),
-    # API endpoints for Archive (Gate Logic)
-    path('api/archive/', include('apps.archive.api_urls')),
+    path('timeline/api/', include('apps.timeline.urls')),
+    path('archive/api/', include('apps.archive.urls')),
+    path('ai/api/', include('apps.ai_assistant.urls')),
 ]
 
-# Note: conversation_logs URLs are commented out until templates are created
-# path('conversations/', include('apps.conversation_logs.urls')),
+# Serve static files in development
+if settings.DEBUG:
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

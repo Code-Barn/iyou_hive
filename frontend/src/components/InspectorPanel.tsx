@@ -1,12 +1,14 @@
-import React from 'react';
-import { FileNode } from './FileTree';
-import './InspectorPanel.css';
+import React from "react";
+import { FileNode } from "./FileTree";
+import "./InspectorPanel.css";
 
 interface InspectorPanelProps {
   selectedFile: FileNode | null;
 }
 
-export const InspectorPanel: React.FC<InspectorPanelProps> = ({ selectedFile }) => {
+export const InspectorPanel: React.FC<InspectorPanelProps> = ({
+  selectedFile,
+}) => {
   if (!selectedFile) {
     return (
       <div className="inspector-panel empty">
@@ -32,8 +34,12 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ selectedFile }) 
         <>
           <div className="inspector-field">
             <label>Promoted:</label>
-            <span className={file_details.is_promoted ? 'status-promoted' : 'status-private'}>
-              {file_details.is_promoted ? 'Yes (Vault)' : 'No (Workspace)'}
+            <span
+              className={
+                file_details.is_promoted ? "status-promoted" : "status-private"
+              }
+            >
+              {file_details.is_promoted ? "Yes (Vault)" : "No (Workspace)"}
             </span>
           </div>
           {file_details.promoted_at && (
@@ -44,15 +50,19 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({ selectedFile }) 
           )}
           <div className="inspector-field">
             <label>Trust Level:</label>
-            <span className={`trust-level trust-${file_details.trust_level.toLowerCase().replace(' ', '-')}`}>
+            <span
+              className={`trust-level trust-${file_details.trust_level.toLowerCase().replace(" ", "-")}`}
+            >
               {file_details.trust_level}
             </span>
           </div>
           <div className="inspector-field">
             <label>Linked Events:</label>
             <div className="linked-events">
-              {file_details.timeline_event_uuids.length > 0 ? (
-                file_details.timeline_event_uuids.map(uuid => (
+              {file_details.timeline_event_uuids &&
+              Array.isArray(file_details.timeline_event_uuids) &&
+              file_details.timeline_event_uuids.length > 0 ? (
+                file_details.timeline_event_uuids.map((uuid) => (
                   <div key={uuid} className="event-link">
                     Event: {uuid.substring(0, 8)}...
                   </div>

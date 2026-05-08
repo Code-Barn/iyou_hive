@@ -624,17 +624,11 @@ class HiveImportService:
         if not user_uuid:
             return None
         try:
-            # Try UUID lookup first (for custom User models with UUID)
-            return User.objects.get(uuid=user_uuid)
-        except User.DoesNotExist:
+            # User model uses integer ID - try by id first
+            return User.objects.get(id=user_uuid)
+        except (User.DoesNotExist, ValueError):
+            # ValueError if user_uuid is not a valid integer
             pass
-        except AttributeError:
-            # User model doesn't have uuid field - try by id (integer primary key)
-            try:
-                return User.objects.get(id=user_uuid)
-            except (User.DoesNotExist, ValueError):
-                # ValueError if user_uuid is not a valid integer
-                pass
         
         # Log warning but don't fail - use importing user as fallback
         self.warnings.append(f"User {user_uuid} not found, using importer as fallback")

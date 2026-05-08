@@ -63,6 +63,13 @@ export interface TimelineEvent {
   is_system_source: boolean;
   trust_level: number;
   has_gold_seal: boolean;
+  // Section header from Markdown ## headers
+  section_header?: string | null;
+  // Citation data from last PDF generation
+  last_printed_citation?: {
+    page_number: number | null;
+    row_index: number;
+  } | null;
 }
 
 // Contested Pair

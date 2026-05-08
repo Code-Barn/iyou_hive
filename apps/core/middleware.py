@@ -80,6 +80,12 @@ class RustDIDAuthenticationMiddleware(MiddlewareMixin):
             '/static/',
             '/media/',
             '/favicon.ico',
+            # React app routes - let the app handle auth via API
+            '/',
+            '/timeline/',
+            '/core/',
+            '/archive/',
+            '/ai/',
         ]
         
         path = request.path_info

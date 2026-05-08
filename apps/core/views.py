@@ -6,6 +6,7 @@ This module provides:
 - API endpoints for case management
 - User preferences and settings
 """
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -16,6 +17,44 @@ from .models import Case, TimelineFile
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument
 from django.utils import timezone
+
+# ============================================================================
+# React App View
+# ============================================================================
+
+def react_app_view(request):
+    """
+    Serve the React app with case_id from session.
+    
+    The React app expects data-case-id attribute on the root div.
+    If no case is selected, auto-select the user's first case.
+    If user has NO cases, create a "Default Workspace" case automatically.
+    """
+    # Redirect unauthenticated users to login
+    if not request.user.is_authenticated:
+        return redirect('/accounts/login/')
+    
+    case_id = request.session.get('selected_case_id', '')
+    
+    # If user is authenticated but no case selected, auto-select their first case
+    if not case_id:
+        user_case = Case.objects.filter(user=request.user).first()
+        
+        # AUTO-CREATE: If user has zero cases, create a default one
+        if not user_case:
+            user_case = Case.objects.create(
+                name="Default Workspace",
+                description="Auto-created workspace for new user",
+                user=request.user,
+                color="#3B82F6"
+            )
+            logger.info(f"Auto-created default case for user {request.user.username}")
+        
+        if user_case:
+            case_id = str(user_case.id)
+            request.session['selected_case_id'] = case_id
+    
+    return render(request, 'frontend/index.html', {'case_id': case_id})
 
 
 # ============================================================================
@@ -49,7 +88,7 @@ def case_list(request):
                     request.session['selected_case_id'] = str(case.id)
                     
                     # Redirect to home view instead of case detail
-                    return redirect('core:timeline')
+                    return redirect('/')
             except Exception as e:
                 messages.error(request, f'Failed to create case: {e}')
     
@@ -158,11 +197,11 @@ def create_case(request):
                     return JsonResponse({
                         'status': 'success',
                         'case_id': str(case.id),
-                        'redirect': '/timeline/'
+                        'redirect': '/'
                     })
                 
                 messages.success(request, f'Case "{name}" created and selected!')
-                return redirect('timeline:timeline')
+                return redirect('/')
         except IntegrityError as e:
             error_msg = f'Database error: {e}'
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -231,7 +270,7 @@ def switch_case(request, case_id):
     case.save()
     
     messages.success(request, f'Switched to case: {case.name}')
-    return redirect('timeline:timeline')
+    return redirect('/')
 
 
 @login_required
@@ -300,10 +339,76 @@ def delete_case(request, case_id):
 def api_case_list(request):
     """
     API endpoint to list all cases for the current user.
+    POST: Create a new case
     
     Returns:
-        JsonResponse with list of cases
+        JsonResponse with list of cases or created case
     """
+    if request.method == 'POST':
+        # Create a new case
+        import json
+        try:
+            data = json.loads(request.body)
+            name = data.get('name', '').strip()
+            description = data.get('description', '').strip()[:500]
+            color = data.get('color', '#FF8C00')
+            
+            if not name:
+                return JsonResponse({'error': 'Case name is required'}, status=400)
+            
+            # Gradient color selection options
+            color_options = [
+                '#FF8C00',  # Honey-Orange (default)
+                '#0064AA',  # Byers Blue
+                '#4CAF50',  # Green
+                '#F44336',  # Red
+                '#9C27B0',  # Purple
+                '#FF9800',  # Orange
+                '#2196F3',  # Blue
+                '#E91E63',  # Pink
+            ]
+            
+            if color not in color_options:
+                color = '#FF8C00'
+            
+            with transaction.atomic():
+                # Check if case with this name already exists
+                existing = Case.objects.filter(name=name, user=request.user).first()
+                if existing:
+                    return JsonResponse({'error': f'A case with the name "{name}" already exists.'}, status=400)
+                
+                case = Case.objects.create(
+                    name=name,
+                    description=description,
+                    color=color,
+                    user=request.user,
+                    is_active=True
+                )
+                
+                # Create standard folder structure
+                from apps.archive.models import ArchiveDocument
+                ArchiveDocument.create_standard_folder_structure(case, request.user)
+                
+                request.session['selected_case_id'] = str(case.id)
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'case': {
+                        'id': str(case.id),
+                        'name': case.name,
+                        'description': case.description,
+                        'color': case.color,
+                        'is_active': case.is_active,
+                        'event_count': 0,
+                        'document_count': 0,
+                        'created_at': case.created_at.isoformat() if case.created_at else None,
+                        'updated_at': case.updated_at.isoformat() if case.updated_at else None,
+                    }
+                }, status=201)
+        except Exception as e:
+            return JsonResponse({'error': f'Failed to create case: {e}'}, status=500)
+    
+    # GET: List all cases
     cases = Case.objects.filter(user=request.user).order_by('-updated_at')
     
     case_list = []
