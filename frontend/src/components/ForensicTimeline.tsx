@@ -92,15 +92,23 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
     error: eventsError,
     refetch: refetchEvents,
   } = useQuery<TimelineEvent[]>({
-    queryKey: ["events", caseId, filters, selectedCollection],
+    queryKey: ["events", caseId, viewMode, filters, selectedCollection],
     enabled: !!caseId && caseId !== "",
     queryFn: async () => {
       try {
+        // In Standard mode, show ALL events - no filters, no collection filtering
+        // In Diff mode, apply filters
+        const apiFilters = viewMode === "standard" ? {} : filters;
         let data = await timelineApi
-          .getEvents(caseId, filters)
+          .getEvents(caseId, apiFilters)
           .then((res) => res.data);
         if (!Array.isArray(data)) data = [];
-        if (selectedCollection && Array.isArray(collectionsData)) {
+        // In Standard mode, don't filter by collection - show all events
+        if (
+          viewMode !== "standard" &&
+          selectedCollection &&
+          Array.isArray(collectionsData)
+        ) {
           const selected = collectionsData.find(
             (c) => c.id === selectedCollection,
           );

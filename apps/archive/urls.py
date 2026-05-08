@@ -1,11 +1,14 @@
 from django.urls import path
 from . import views
+from .api_views import DocumentUploadView
 
 app_name = 'archive'
 
 urlpatterns = [
     path('', views.archive_view, name='archive'),
     path('upload/', views.upload_document, name='upload'),
+    # Smart Ingestion endpoint
+    path('api/documents/upload/', DocumentUploadView.as_view(), name='api_document_upload'),
     path('document/<int:pk>/', views.document_detail, name='document_detail'),
     path('document/<int:pk>/file/', views.document_file, name='document_file'),
     path('document/<int:pk>/thumbnail/', views.document_thumbnail, name='document_thumbnail'),

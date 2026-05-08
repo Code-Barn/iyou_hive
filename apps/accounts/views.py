@@ -26,12 +26,12 @@ User = get_user_model()
 
 
 class CustomLoginView(LoginView):
-    """Custom login view that redirects to timeline after login."""
+    """Custom login view that redirects to React root after login."""
     template_name = 'accounts/login.html'
     redirect_authenticated_user = True
     
     def get_success_url(self):
-        return reverse_lazy('timeline:timeline')
+        return '/'
     
     def form_valid(self, form):
         messages.success(self.request, f'Welcome back, {form.get_user().username}!')
@@ -44,8 +44,8 @@ class CustomLoginView(LoginView):
 
 
 class CustomLogoutView(LogoutView):
-    """Custom logout view that redirects to timeline after logout."""
-    next_page = reverse_lazy('timeline:timeline')
+    """Custom logout view that redirects to React root after logout."""
+    next_page = '/'
     
     def dispatch(self, request, *args, **kwargs):
         messages.success(request, 'You have been logged out.')
@@ -57,7 +57,7 @@ class RegisterView(CreateView):
     model = User
     form_class = UserCreationForm
     template_name = 'accounts/register.html'
-    success_url = reverse_lazy('timeline:timeline')
+    success_url = '/'
     
     def get_success_url(self):
         messages.success(self.request, 'Registration successful! You are now logged in.')
@@ -171,7 +171,7 @@ def did_login(request):
                 request.session.pop('did_challenge', None)
                 request.session.pop('did_challenge_nonce', None)
                 
-                return redirect('timeline:timeline')
+                return redirect('/')
             else:
                 messages.error(request, 'Invalid DID signature. Authentication failed.')
                 
@@ -189,7 +189,7 @@ def did_login(request):
             messages.error(request, f'Authentication error: {str(e)}')
         
         # If we get here, authentication failed
-        return redirect('accounts:did_login')
+        return redirect('/accounts/login/')
     
     # GET request - show login form
     challenge = str(uuid.uuid4())
@@ -210,7 +210,7 @@ def did_logout(request):
     """
     logout(request)
     messages.success(request, 'You have been logged out.')
-    return redirect('timeline:timeline')
+    return redirect('/')
 
 
 def auth_status(request):
@@ -242,7 +242,7 @@ def dashboard(request):
     """
     case_id = request.session.get("selected_case_id")
     if case_id:
-        return redirect("core:timeline")
+        return redirect("/")
     
     # Check if this is a first-time user (no cases created)
     from apps.core.models import Case

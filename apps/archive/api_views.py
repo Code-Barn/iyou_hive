@@ -3,6 +3,7 @@ Archive API Views
 
 Provides RESTful API endpoints for archive operations including:
 - Document promotion/demotion (Gate Logic)
+- Smart Ingestion (Formal Vault vs Private Workspace)
 """
 
 from rest_framework import viewsets, status
@@ -11,6 +12,8 @@ from rest_framework.response import Response
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView # Import APIView
+from rest_framework.parsers import MultiPartParser, FormParser
+from django.utils import timezone
 
 from .models import ArchiveDocument
 from apps.core.models import Case
@@ -290,3 +293,130 @@ class ArchiveDirectoryView(APIView):
         tree_data = RecursiveFolderSerializer.build_tree(case_uuid, user_uuid)
         serializer = RecursiveFolderSerializer(tree_data, many=True, context={'request': request, 'case_uuid': case_uuid, 'user_uuid': user_uuid})
         return Response(serializer.data)
+
+
+class DocumentUploadView(APIView):
+    """
+    Smart Ingestion: Upload documents to either Formal Vault or Private Workspace.
+    
+    This endpoint implements the Smart Ingestion feature that asks users:
+    "Where does this evidence belong?"
+    
+    Options:
+    1. Formal Vault (Read-Only Evidence, destined for the Courtroom PDF)
+    2. Private Workspace (Work-in-progress, Drafts, and Wiki)
+    
+    The vault_type parameter determines the routing:
+    - vault_type="formal": Routes to 01_Raw/ or 04_Strategy/ folders
+    - vault_type="private": Routes to 02_Wiki/, 03_Drafts/, or 05_Exports/ folders
+    
+    Request body:
+    - files: Array of files to upload
+    - vault_type: "formal" or "private" (required for smart ingestion)
+    - target_folder: Optional specific folder path (e.g., "01_Raw", "03_Drafts")
+    """
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request, *args, **kwargs):
+        case_id = request.session.get('selected_case_id')
+        if not case_id:
+            raise PermissionDenied("No case selected")
+        
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+        except Case.DoesNotExist:
+            raise PermissionDenied("Case not found or access denied")
+        
+        # Get vault type from POST data (required for smart ingestion)
+        vault_type = request.POST.get('vault_type', None)
+        target_folder = request.POST.get('target_folder', None)
+        
+        # Get uploaded files
+        files = request.FILES.getlist('files')
+        
+        if not files:
+            return Response({
+                'status': 'error',
+                'message': 'No files provided'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if not vault_type:
+            return Response({
+                'status': 'error',
+                'message': 'vault_type is required. Must be "formal" or "private"'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        if vault_type not in ['formal', 'private']:
+            return Response({
+                'status': 'error',
+                'message': 'vault_type must be "formal" or "private"'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Determine the base path based on vault type
+        if vault_type == 'formal':
+            # Formal Vault: 01_Raw/ for raw documents, 04_Strategy/ for strategy
+            base_path = target_folder if target_folder in ['01_Raw', '04_Strategy'] else '01_Raw/'
+            is_promoted = True
+            is_draft = False
+        else:
+            # Private Workspace: 02_Wiki/, 03_Drafts/, 05_Exports/
+            base_path = target_folder if target_folder in ['02_Wiki', '03_Drafts', '05_Exports'] else '03_Drafts/'
+            is_promoted = False
+            is_draft = True
+        
+        uploaded_count = 0
+        uploaded_documents = []
+        
+        try:
+            for uploaded_file in files:
+                # Auto-detect file type
+                file_ext = uploaded_file.name.lower().split('.')[-1] if '.' in uploaded_file.name else ''
+                file_type_map = {
+                    'pdf': 'pdf', 'png': 'image', 'jpg': 'image', 'jpeg': 'image',
+                    'gif': 'image', 'webp': 'image', 'svg': 'image',
+                    'doc': 'word', 'docx': 'word',
+                    'txt': 'text', 'md': 'text',
+                    'eml': 'email', 'msg': 'email',
+                }
+                file_type = file_type_map.get(file_ext, 'other')
+                
+                # Construct the full path
+                full_path = f"{base_path}{uploaded_file.name}"
+                
+                # Create the document in the correct vault
+                doc = ArchiveDocument.objects.create(
+                    title=uploaded_file.name,
+                    file=uploaded_file,
+                    path=full_path,
+                    file_type=file_type,
+                    is_draft=is_draft,
+                    is_immutable=not is_draft,
+                    is_promoted=is_promoted,
+                    promoted_at=timezone.now() if is_promoted else None,
+                    case=case,
+                    user=request.user,
+                    uploader=request.user
+                )
+                uploaded_count += 1
+                uploaded_documents.append({
+                    'uuid': str(doc.uuid),
+                    'title': doc.title,
+                    'path': doc.path,
+                    'is_promoted': doc.is_promoted,
+                    'vault_type': vault_type
+                })
+            
+            return Response({
+                'status': 'success',
+                'message': f'Uploaded {uploaded_count} file(s) to {vault_type} vault',
+                'uploaded': uploaded_count,
+                'vault_type': vault_type,
+                'documents': uploaded_documents
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'message': f'Failed to upload files: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
