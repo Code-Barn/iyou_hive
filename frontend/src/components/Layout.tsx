@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import CaseSelector from "./CaseSelector";
 import FileTree from "./FileTree";
 import AIAssistantChat from "./AIAssistantChat";
@@ -7,6 +7,21 @@ import ForensicTimeline from "./ForensicTimeline";
 import CaseSettingsModal from "./CaseSettingsModal";
 import CaseDetailModal from "./CaseDetailModal";
 import { SourceParty } from "../types/shared";
+
+// Helper to get CSRF token for POST requests
+function getCSRFToken(): string {
+  const name = "csrftoken";
+  if (document.cookie && document.cookie !== "") {
+    const cookies = document.cookie.split(";");
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === name + "=") {
+        return decodeURIComponent(cookie.substring(name.length + 1));
+      }
+    }
+  }
+  return "";
+}
 
 interface LayoutProps {
   caseId: string;
@@ -32,6 +47,7 @@ const Layout: React.FC<LayoutProps> = ({
 }) => {
   const mainRef = useRef<HTMLDivElement>(null);
   const [previewDocUuid, setPreviewDocUuid] = useState<string | null>(null);
+  const [isIngestModalOpen, setIsIngestModalOpen] = useState(false);
 
   // Panel expanded/collapsed state
   const [leftExpanded, setLeftExpanded] = useState(true);
@@ -137,7 +153,7 @@ const Layout: React.FC<LayoutProps> = ({
       // Ensure minimum widths
       if (newLeftPercent < MIN_PANEL_PERCENT) return;
       const remaining = 100 - newLeftPercent;
-      if (remaining < MIN_PANEL_PERCENT * 2) return; // Need room for both center and right
+      if (remaining < MIN_PANEL_PERCENT * 2) return;
 
       // Distribute remaining between center and right proportionally
       const ratio = panelSizes.center / (panelSizes.center + panelSizes.right);
@@ -179,7 +195,7 @@ const Layout: React.FC<LayoutProps> = ({
       // Ensure minimum widths
       if (newRightPercent < MIN_PANEL_PERCENT) return;
       const remaining = 100 - newRightPercent;
-      if (remaining < MIN_PANEL_PERCENT * 2) return; // Need room for both left and center
+      if (remaining < MIN_PANEL_PERCENT * 2) return;
 
       // Distribute remaining between left and center proportionally
       const ratio = panelSizes.left / (panelSizes.left + panelSizes.center);
@@ -233,77 +249,70 @@ const Layout: React.FC<LayoutProps> = ({
     document.addEventListener("mouseup", handleMouseUp);
   };
 
-  // Calculate actual pixel widths based on percentages
-  const getPanelWidths = () => {
-    if (!mainRef.current) {
-      return { left: 0, center: 0, right: 0 };
+  // Toggle panel collapse/expand
+  const toggleLeft = () => setLeftExpanded(!leftExpanded);
+  const toggleCenter = () => setCenterExpanded(!centerExpanded);
+  const toggleRight = () => setRightExpanded(!rightExpanded);
+
+  // Calculate panel styles based on expanded state
+  // When panels are collapsed, use flex-grow for elastic behavior
+  const getPanelStyle = (panel: "left" | "center" | "right") => {
+    const expandedCount =
+      (leftExpanded ? 1 : 0) +
+      (centerExpanded ? 1 : 0) +
+      (rightExpanded ? 1 : 0);
+
+    if (!centerExpanded) {
+      // Center is the anchor - if it's collapsed, show collapsed tab
+      return { width: "12px" };
     }
 
-    const containerWidth = mainRef.current.offsetWidth;
-    return {
-      left: (panelSizes.left / 100) * containerWidth,
-      center: (panelSizes.center / 100) * containerWidth,
-      right: (panelSizes.right / 100) * containerWidth,
-    };
-  };
-
-  const panelWidths = getPanelWidths();
-
-  // Toggle panel collapse/expand with size restoration
-  const toggleLeft = () => {
-    setLeftExpanded(!leftExpanded);
-  };
-
-  const toggleCenter = () => {
-    setCenterExpanded(!centerExpanded);
-  };
-
-  const toggleRight = () => {
-    setRightExpanded(!rightExpanded);
-  };
-
-  // Count expanded panels for elastic layout
-  const expandedCount =
-    (leftExpanded ? 1 : 0) + (centerExpanded ? 1 : 0) + (rightExpanded ? 1 : 0);
-
-  // Calculate elastic widths: if only center is expanded, it takes 100%
-  // Otherwise, use the stored panel percentages
-  const getElasticWidth = (panel: "left" | "center" | "right") => {
-    if (!centerExpanded) return 0;
-
-    if (expandedCount === 1 && centerExpanded) {
-      // Only center is expanded - it takes all space
-      return panel === "center" ? "100%" : "0%";
-    }
-
-    if (expandedCount === 2) {
-      // Two panels expanded - calculate based on which ones
-      if (!leftExpanded && !rightExpanded)
-        return panel === "center" ? "100%" : "0%";
-      if (!leftExpanded) {
-        // Left collapsed, center and right expanded
-        if (panel === "left") return "0%";
-        if (panel === "center")
-          return `${(panelSizes.center / (panelSizes.center + panelSizes.right)) * 100}%`;
-        if (panel === "right")
-          return `${(panelSizes.right / (panelSizes.center + panelSizes.right)) * 100}%`;
-      }
-      if (!rightExpanded) {
-        // Right collapsed, left and center expanded
-        if (panel === "right") return "0%";
-        if (panel === "left")
-          return `${(panelSizes.left / (panelSizes.left + panelSizes.center)) * 100}%`;
-        if (panel === "center")
-          return `${(panelSizes.center / (panelSizes.left + panelSizes.center)) * 100}%`;
+    if (panel === "center") {
+      // Center panel: use flex-grow when side panels are collapsed
+      if (expandedCount === 1) {
+        // Only center is expanded
+        return { flex: "1 1 100%", minWidth: 0 };
+      } else if (expandedCount === 2 && !leftExpanded) {
+        // Center and right expanded
+        const centerPercent =
+          panelSizes.center / (panelSizes.center + panelSizes.right);
+        return { flex: `1 1 ${centerPercent * 100}%`, minWidth: 0 };
+      } else if (expandedCount === 2 && !rightExpanded) {
+        // Left and center expanded
+        const centerPercent =
+          panelSizes.center / (panelSizes.left + panelSizes.center);
+        return { flex: `1 1 ${centerPercent * 100}%`, minWidth: 0 };
+      } else {
+        // All three expanded
+        return { flex: `1 1 ${panelSizes.center}%`, minWidth: 0 };
       }
     }
 
-    // All three expanded - use stored percentages
-    if (panel === "left") return `${panelSizes.left}%`;
-    if (panel === "center") return `${panelSizes.center}%`;
-    if (panel === "right") return `${panelSizes.right}%`;
+    if (panel === "left" && leftExpanded) {
+      if (expandedCount === 1) {
+        return { width: "12px" };
+      } else if (expandedCount === 2 && !rightExpanded) {
+        const leftPercent =
+          panelSizes.left / (panelSizes.left + panelSizes.center);
+        return { width: `${leftPercent * 100}%`, minWidth: 0 };
+      } else {
+        return { width: `${panelSizes.left}%`, minWidth: 0 };
+      }
+    }
 
-    return "0%";
+    if (panel === "right" && rightExpanded) {
+      if (expandedCount === 1) {
+        return { width: "12px" };
+      } else if (expandedCount === 2 && !leftExpanded) {
+        const rightPercent =
+          panelSizes.right / (panelSizes.center + panelSizes.right);
+        return { width: `${rightPercent * 100}%`, minWidth: 0 };
+      } else {
+        return { width: `${panelSizes.right}%`, minWidth: 0 };
+      }
+    }
+
+    return { width: "12px" };
   };
 
   return (
@@ -325,9 +334,17 @@ const Layout: React.FC<LayoutProps> = ({
             >
               Case Info
             </button>
+            {/* Case Cockpit Entry Point - Info Icon */}
+            <button
+              onClick={() => setIsCaseDetailOpen(true)}
+              className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded"
+              title="Case Cockpit"
+            >
+              ⓘ
+            </button>
             <button
               onClick={() => setIsCaseSettingsOpen(true)}
-              className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+              className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded"
               title="Case Settings"
             >
               ⚙️
@@ -338,59 +355,79 @@ const Layout: React.FC<LayoutProps> = ({
               Party:{" "}
               <span className="font-medium text-gray-800">{userParty}</span>
             </span>
-            <a
-              href="/accounts/logout/"
-              className="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
-            >
-              Logout
-            </a>
+            {/* Logout POST form with CSRF token */}
+            <form method="POST" action="/accounts/logout/" className="inline">
+              <input
+                type="hidden"
+                name="csrfmiddlewaretoken"
+                value={getCSRFToken() || ""}
+              />
+              <button
+                type="submit"
+                className="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 cursor-pointer"
+              >
+                Logout
+              </button>
+            </form>
           </div>
         </div>
       </header>
 
-      {/* 3-Panel Content Area - Elastic Layout */}
+      {/* 3-Panel Content Area - Elastic Layout with flex */}
       <main ref={mainRef} className="flex-1 flex overflow-hidden relative">
         {/* Panel 1: Timeline (Left) */}
-        {leftExpanded && (
-          <div
-            className="bg-white flex flex-col border-r border-gray-200 min-w-0"
-            style={{ width: getElasticWidth("left") }}
-          >
-            <div className="p-3 border-b border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-2 truncate">
-                <span>🕰️</span>
-                <h2 className="font-semibold text-gray-800 truncate">
-                  Timeline
-                </h2>
+        <div
+          className="bg-white flex flex-col border-r border-gray-200 min-w-0 transition-all duration-300"
+          style={getPanelStyle("left")}
+        >
+          {leftExpanded ? (
+            <>
+              <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2 truncate">
+                  <span>🕰️</span>
+                  <h2 className="font-semibold text-gray-800 truncate">
+                    Timeline
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setIsFullTimelineOpen(true)}
+                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    title="Full Screen"
+                  >
+                    ⛶
+                  </button>
+                  <button
+                    onClick={toggleLeft}
+                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    title="Collapse"
+                  >
+                    ◀
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsFullTimelineOpen(true)}
-                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
-                  title="Full Screen"
-                >
-                  ⛶
-                </button>
-                <button
-                  onClick={toggleLeft}
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                  title="Collapse"
-                >
-                  ◀
-                </button>
+              <div className="flex-1 flex flex-col overflow-auto">
+                <ForensicTimeline
+                  caseId={caseId}
+                  userParty={userParty}
+                  onEventAdded={onEventAdded}
+                />
               </div>
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <button
+                onClick={toggleLeft}
+                className="w-6 h-12 bg-gray-100 rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
+                title="Expand Timeline"
+              >
+                ▶
+              </button>
             </div>
-            <div className="flex-1 flex flex-col overflow-auto">
-              <ForensicTimeline
-                caseId={caseId}
-                userParty={userParty}
-                onEventAdded={onEventAdded}
-              />
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Left Divider (between Timeline and Archive) */}
+        {/* Left Divider */}
         {leftExpanded && centerExpanded && (
           <div
             className="w-1 bg-gray-200 cursor-col-resize hover:bg-primary transition-colors"
@@ -399,79 +436,96 @@ const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* Panel 2: Archive & Canvas (Center) - ELASTIC ANCHOR */}
-        {centerExpanded && (
-          <div
-            className="center-panel bg-white flex flex-col border-r border-gray-200 min-w-0 relative"
-            style={{ width: getElasticWidth("center") }}
-          >
-            <div className="p-3 border-b border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-2 truncate">
-                <span>📁</span>
-                <h2 className="font-semibold text-gray-800 truncate">
-                  Archive & Canvas
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setIsArchiveFullScreen(true)}
-                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
-                  title="Full Screen"
-                >
-                  ⛶
-                </button>
-                <button
-                  onClick={toggleCenter}
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                  title="Collapse"
-                >
-                  ◀
-                </button>
-              </div>
-            </div>
-            <div className="flex-1 flex flex-col overflow-auto center-panel-inner">
-              {/* Top: File Explorer (Tree) */}
-              <div
-                className="min-h-0 overflow-auto border-b border-gray-200"
-                style={{ height: `${horizontalSplit * 100}%` }}
-              >
-                <FileTree
-                  caseId={caseId}
-                  onDocumentSelect={handleDocumentSelect}
-                />
-              </div>
-
-              {/* Horizontal Divider (between Tree and Canvas) */}
-              <div
-                className="h-1 bg-gray-200 cursor-row-resize hover:bg-primary transition-colors relative"
-                onMouseDown={handleHorizontalDragStart}
-              >
-                <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center">
-                  <div className="w-6 h-1 bg-primary opacity-50" />
+        <div
+          className="center-panel bg-white flex flex-col border-r border-gray-200 min-w-0 relative transition-all duration-300"
+          style={getPanelStyle("center")}
+        >
+          {centerExpanded ? (
+            <>
+              <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2 truncate">
+                  <span>📁</span>
+                  <h2 className="font-semibold text-gray-800 truncate">
+                    Archive & Canvas
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  {/* Archive Ingestion Interface */}
+                  <button
+                    onClick={() => setIsIngestModalOpen(true)}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
+                    title="Ingest Document"
+                  >
+                    Ingest Document
+                  </button>
+                  <button
+                    onClick={() => setIsArchiveFullScreen(true)}
+                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    title="Full Screen"
+                  >
+                    ⛶
+                  </button>
+                  <button
+                    onClick={toggleCenter}
+                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    title="Collapse"
+                  >
+                    ◀
+                  </button>
                 </div>
               </div>
-
-              {/* Bottom: Canvas / Preview */}
-              <div
-                className="flex-1 p-4 min-h-0 overflow-auto"
-                style={{ height: `${(1 - horizontalSplit) * 100}%` }}
-              >
-                {previewDocUuid ? (
-                  <DocumentPreviewModal
+              <div className="flex-1 flex flex-col overflow-auto center-panel-inner">
+                <div
+                  className="min-h-0 overflow-auto border-b border-gray-200"
+                  style={{ height: `${horizontalSplit * 100}%` }}
+                >
+                  <FileTree
                     caseId={caseId}
-                    documentUuid={previewDocUuid}
-                    onClose={handleClosePreview}
+                    onDocumentSelect={handleDocumentSelect}
                   />
-                ) : (
-                  <p className="text-gray-400 text-sm text-center pt-8">
-                    Select a document to preview
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+                </div>
 
-        {/* Right Divider (between Archive and AI) */}
+                <div
+                  className="h-1 bg-gray-200 cursor-row-resize hover:bg-primary transition-colors relative"
+                  onMouseDown={handleHorizontalDragStart}
+                >
+                  <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center">
+                    <div className="w-6 h-1 bg-primary opacity-50" />
+                  </div>
+                </div>
+
+                <div
+                  className="flex-1 p-4 min-h-0 overflow-auto"
+                  style={{ height: `${(1 - horizontalSplit) * 100}%` }}
+                >
+                  {previewDocUuid ? (
+                    <DocumentPreviewModal
+                      caseId={caseId}
+                      documentUuid={previewDocUuid}
+                      onClose={handleClosePreview}
+                    />
+                  ) : (
+                    <p className="text-gray-400 text-sm text-center pt-8">
+                      Select a document to preview
+                    </p>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <button
+                onClick={toggleCenter}
+                className="w-6 h-12 bg-gray-100 rounded-l-lg rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
+                title="Expand Archive"
+              >
+                ▶
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Right Divider */}
         {centerExpanded && rightExpanded && (
           <div
             className="w-1 bg-gray-200 cursor-col-resize hover:bg-primary transition-colors"
@@ -480,90 +534,65 @@ const Layout: React.FC<LayoutProps> = ({
         )}
 
         {/* Panel 3: AI Assistant (Right) */}
-        {rightExpanded && (
-          <div
-            className="bg-white flex flex-col border-l border-gray-200 min-w-0"
-            style={{ width: getElasticWidth("right") }}
-          >
-            <div className="p-3 border-b border-gray-200 flex items-center justify-between">
-              <div className="flex items-center gap-2 truncate">
-                <span>✨</span>
-                <h2 className="font-semibold text-gray-800 truncate">
-                  AI Assistant
-                </h2>
+        <div
+          className="bg-white flex flex-col border-l border-gray-200 min-w-0 transition-all duration-300"
+          style={getPanelStyle("right")}
+        >
+          {rightExpanded ? (
+            <>
+              <div className="p-3 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2 truncate">
+                  <span>✨</span>
+                  <h2 className="font-semibold text-gray-800 truncate">
+                    AI Assistant
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setAiSettingsOpen(!aiSettingsOpen)}
+                    className="text-blue-600 bg-blue-50 border border-blue-100 p-1 rounded-md hover:bg-blue-100"
+                    title="AI Settings"
+                  >
+                    ⚙️
+                  </button>
+                  <button
+                    onClick={() => setIsAIFullScreen(true)}
+                    className="text-blue-600 bg-blue-50 border border-blue-100 p-1 rounded-md hover:bg-blue-100"
+                    title="Full Screen"
+                  >
+                    ⛶
+                  </button>
+                  <button
+                    onClick={toggleRight}
+                    className="text-blue-600 bg-blue-50 border border-blue-100 p-1 rounded-md hover:bg-blue-100"
+                    title="Collapse"
+                  >
+                    ▶
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setAiSettingsOpen(!aiSettingsOpen)}
-                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
-                  title="AI Settings"
-                >
-                  ⚙️
-                </button>
-                <button
-                  onClick={() => setIsAIFullScreen(true)}
-                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
-                  title="Full Screen"
-                >
-                  ⛶
-                </button>
-                <button
-                  onClick={toggleRight}
-                  className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
-                  title="Collapse"
-                >
-                  ▶
-                </button>
+              <div className="flex-1 min-h-0">
+                <AIAssistantChat
+                  caseId={caseId}
+                  showSettings={aiSettingsOpen}
+                  onToggleSettings={() => setAiSettingsOpen(false)}
+                />
               </div>
+            </>
+          ) : (
+            <div className="h-full flex items-center justify-center">
+              <button
+                onClick={toggleRight}
+                className="w-6 h-12 bg-gray-100 rounded-l-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
+                title="Expand AI Assistant"
+              >
+                ◀
+              </button>
             </div>
-            <div className="flex-1 min-h-0">
-              <AIAssistantChat
-                caseId={caseId}
-                showSettings={aiSettingsOpen}
-                onToggleSettings={() => setAiSettingsOpen(false)}
-              />
-            </div>
-          </div>
-        )}
+          )}
+        </div>
 
-        {/* Collapsed Panel Tabs */}
-        {!leftExpanded && (
-          <div className="w-12 border-r border-gray-200 bg-white flex items-center justify-center">
-            <button
-              onClick={toggleLeft}
-              className="w-6 h-12 bg-gray-100 rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
-              title="Expand Timeline"
-            >
-              ▶
-            </button>
-          </div>
-        )}
-
-        {!centerExpanded && (
-          <div className="w-12 border-r border-gray-200 bg-white flex items-center justify-center">
-            <button
-              onClick={toggleCenter}
-              className="w-6 h-12 bg-gray-100 rounded-l-lg rounded-r-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
-              title="Expand Archive"
-            >
-              ▶
-            </button>
-          </div>
-        )}
-
-        {!rightExpanded && (
-          <div className="w-12 border-l border-gray-200 bg-white flex items-center justify-center">
-            <button
-              onClick={toggleRight}
-              className="w-6 h-12 bg-gray-100 rounded-l-lg hover:bg-gray-200 transition-colors flex items-center justify-center text-gray-600 hover:text-gray-800"
-              title="Expand AI Assistant"
-            >
-              ◀
-            </button>
-          </div>
-        )}
-
-        {/* Drag Overlay (visual feedback during drag) */}
+        {/* Drag Overlay */}
         {(isDraggingLeft || isDraggingRight) && (
           <div className="absolute inset-0 pointer-events-none">
             <div className="absolute top-0 left-0 right-0 bottom-0 border-l border-r border-transparent" />
@@ -576,9 +605,9 @@ const Layout: React.FC<LayoutProps> = ({
         )}
       </main>
 
-      {/* Full Timeline Modal */}
+      {/* Full Timeline Modal - WITH SCROLLING */}
       {isFullTimelineOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white">
+        <div className="fixed inset-0 z-50 flex flex-col bg-white overflow-y-auto">
           <div className="bg-gray-800 text-white px-4 py-3 flex items-center justify-between shadow-lg">
             <h2 className="text-lg font-semibold">Full Timeline View</h2>
             <button
@@ -589,7 +618,7 @@ const Layout: React.FC<LayoutProps> = ({
               ×
             </button>
           </div>
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0">
             <ForensicTimeline
               caseId={caseId}
               userParty={userParty}
@@ -688,6 +717,15 @@ const Layout: React.FC<LayoutProps> = ({
         <CaseDetailModal
           caseId={caseId}
           onClose={() => setIsCaseDetailOpen(false)}
+          onEventAdded={onEventAdded}
+        />
+      )}
+
+      {/* Smart Ingestion Modal (triggered from Archive header) */}
+      {isIngestModalOpen && (
+        <CaseDetailModal
+          caseId={caseId}
+          onClose={() => setIsIngestModalOpen(false)}
           onEventAdded={onEventAdded}
         />
       )}

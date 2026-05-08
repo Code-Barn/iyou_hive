@@ -103,6 +103,7 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
           .getEvents(caseId, apiFilters)
           .then((res) => res.data);
         if (!Array.isArray(data)) data = [];
+        console.log("Raw Timeline Data:", data);
         // In Standard mode, don't filter by collection - show all events
         if (
           viewMode !== "standard" &&
