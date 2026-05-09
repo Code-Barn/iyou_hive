@@ -7,6 +7,8 @@ This module provides:
 - User preferences and settings
 """
 
+import logging
+
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -17,6 +19,8 @@ from .models import Case, TimelineFile
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # React App View
