@@ -23,6 +23,20 @@ function getCSRFToken(): string {
   return "";
 }
 
+// POST Logout handler - Fix 405 Error
+const handleLogout = () => {
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = "/accounts/logout/";
+  const csrfInput = document.createElement("input");
+  csrfInput.type = "hidden";
+  csrfInput.name = "csrfmiddlewaretoken";
+  csrfInput.value = getCSRFToken() || "";
+  form.appendChild(csrfInput);
+  document.body.appendChild(form);
+  form.submit();
+};
+
 interface LayoutProps {
   caseId: string;
   userParty: SourceParty;
@@ -355,20 +369,13 @@ const Layout: React.FC<LayoutProps> = ({
               Party:{" "}
               <span className="font-medium text-gray-800">{userParty}</span>
             </span>
-            {/* Logout POST form with CSRF token */}
-            <form method="POST" action="/accounts/logout/" className="inline">
-              <input
-                type="hidden"
-                name="csrfmiddlewaretoken"
-                value={getCSRFToken() || ""}
-              />
-              <button
-                type="submit"
-                className="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 cursor-pointer"
-              >
-                Logout
-              </button>
-            </form>
+            {/* Logout POST handler - Fix 405 Error */}
+            <button
+              onClick={handleLogout}
+              className="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600 cursor-pointer"
+            >
+              Logout
+            </button>
           </div>
         </div>
       </header>

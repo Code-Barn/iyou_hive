@@ -77,4 +77,7 @@ export const archiveApi = {
     }),
 };
 
+export const uploadToVault = (formData: FormData) =>
+  archiveApi.uploadToVault("", formData);
+
 export default archiveApi;
