@@ -271,16 +271,25 @@ const Layout: React.FC<LayoutProps> = ({
   const toggleRight = () => setRightExpanded(!rightExpanded);
 
   // Calculate panel styles based on expanded state
-  // When panels are collapsed, use flex-grow for elastic behavior
+  // Center Panel is the Elastic Anchor
   const getPanelStyle = (panel: "left" | "center" | "right") => {
     const expandedCount =
       (leftExpanded ? 1 : 0) +
       (centerExpanded ? 1 : 0) +
       (rightExpanded ? 1 : 0);
 
+    // If center is collapsed: thin vertical gutter, left/right split 50/50
     if (!centerExpanded) {
-      // Center is the anchor - if it's collapsed, show collapsed tab
-      return { width: "12px" };
+      if (panel === "center") {
+        return { width: "2px" };
+      }
+      if (panel === "left" && leftExpanded) {
+        return { flex: "1 1 50%", minWidth: 0 };
+      }
+      if (panel === "right" && rightExpanded) {
+        return { flex: "1 1 50%", minWidth: 0 };
+      }
+      return { width: "2px" };
     }
 
     if (panel === "center") {
@@ -442,7 +451,10 @@ const Layout: React.FC<LayoutProps> = ({
 
         {/* Panel 2: Archive & Canvas (Center) - ELASTIC ANCHOR */}
         <div
-          className="center-panel bg-white flex flex-col border-r border-gray-200 min-w-0 relative transition-all duration-300"
+          className={
+            "center-panel bg-white flex flex-col border-r border-gray-200 min-w-0 relative transition-all duration-300" +
+            (!centerExpanded ? " w-2 flex-none border-x bg-gray-200" : "")
+          }
           style={getPanelStyle("center")}
         >
           {centerExpanded ? (
@@ -653,14 +665,20 @@ const Layout: React.FC<LayoutProps> = ({
             </button>
           </div>
           <div className="flex-1 flex flex-col overflow-auto">
-            <div className="h-[40%] border-b border-gray-200 p-4 overflow-auto">
+            <div
+              className="min-h-0 overflow-auto border-b border-gray-200 p-4"
+              style={{ height: `${horizontalSplit * 100}%` }}
+            >
               <FileTree
                 caseId={caseId}
                 onDocumentSelect={handleDocumentSelect}
               />
             </div>
             <div className="border-t border-gray-200" />
-            <div className="flex-1 p-4 overflow-auto">
+            <div
+              className="flex-1 p-4 overflow-auto min-h-0"
+              style={{ height: `${(1 - horizontalSplit) * 100}%` }}
+            >
               {previewDocUuid ? (
                 <DocumentPreviewModal
                   caseId={caseId}
