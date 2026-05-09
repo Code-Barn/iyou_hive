@@ -21,6 +21,10 @@ from .models import ArchiveDocument
 from apps.core.models import Case
 from apps.core.services.hive_directory import HiveDirectoryService
 from .serializers import RecursiveFolderSerializer
+from apps.core.document_processing import process_document
+import os
+from pathlib import Path
+from django.conf import settings
 
 class ArchiveDocumentViewSet(viewsets.ModelViewSet):
     """
@@ -357,14 +361,17 @@ class DocumentUploadView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         # Determine the base path based on vault type
+        # TASK 2 FIX: Include vault prefix in path for proper tree building
         if vault_type == 'formal':
-            # Formal Vault: 01_Raw/ for raw documents, 04_Strategy/ for strategy
-            base_path = target_folder if target_folder in ['01_Raw', '04_Strategy'] else '01_Raw/'
+            # Formal Vault: formal/01_Raw/ for raw documents, formal/04_Strategy/ for strategy
+            folder = target_folder if target_folder in ['01_Raw', '04_Strategy'] else '01_Raw'
+            base_path = f'formal/{folder}/'
             is_promoted = True
             is_draft = False
         else:
-            # Private Workspace: 02_Wiki/, 03_Drafts/, 05_Exports/
-            base_path = target_folder if target_folder in ['02_Wiki', '03_Drafts', '05_Exports'] else '03_Drafts/'
+            # Private Workspace: private/[user_uuid]/02_Wiki/, private/[user_uuid]/03_Drafts/, etc.
+            folder = target_folder if target_folder in ['02_Wiki', '03_Drafts', '05_Exports'] else '03_Drafts'
+            base_path = f'private/{str(case.user.uuid)}/{folder}/'
             is_promoted = False
             is_draft = True
         
@@ -401,13 +408,40 @@ class DocumentUploadView(APIView):
                     user=request.user,
                     uploader=request.user
                 )
+                
+                # TASK 1 & 4: DIGITAL TWIN with ROUTER PATTERN
+                # Use router to process based on file type
+                try:
+                    # Get the absolute path of the uploaded file
+                    file_abs_path = os.path.join(settings.MEDIA_ROOT, doc.file.name)
+                    
+                    # TASK 4: Route to appropriate processor based on file extension
+                    processed_path = process_document(file_abs_path)
+                    
+                    # If a twin was created (path differs from original)
+                    if processed_path != file_abs_path:
+                        # Update document to note it has a twin
+                        twin_rel_path = os.path.relpath(processed_path, settings.MEDIA_ROOT)
+                        doc.conversion_status = 'SUCCESS'
+                        doc.markdown_path = twin_rel_path
+                        doc.save()
+                        
+                except Exception as e:
+                    # Log error but don't fail the upload
+                    doc.conversion_status = 'FAILED'
+                    doc.conversion_error = str(e)
+                    doc.save()
+                    print(f"Digital Twin conversion failed for {doc.title}: {str(e)}")
+                
                 uploaded_count += 1
                 uploaded_documents.append({
                     'uuid': str(doc.uuid),
                     'title': doc.title,
                     'path': doc.path,
                     'is_promoted': doc.is_promoted,
-                    'vault_type': vault_type
+                    'vault_type': vault_type,
+                    'conversion_status': doc.conversion_status,
+                    'markdown_path': doc.markdown_path if doc.markdown_path else None
                 })
             
             return Response({

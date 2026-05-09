@@ -148,3 +148,59 @@ def convert_pdf_to_markdown(pdf_path):
         return md_path
     except Exception as e:
         raise e
+
+
+def process_document(file_path: str, output_dir: str = None) -> str:
+    """
+    TASK 4: Router pattern for filetype-based processing.
+    
+    Routes to the appropriate processing script based on file extension.
+    
+    Args:
+        file_path (str): Absolute path to the uploaded file
+        output_dir (str, optional): Output directory. Defaults to same as input.
+    
+    Returns:
+        str: Path to the processed/converted file
+    
+    Supported types:
+        .pdf -> convert_pdf_to_markdown() -> .md
+        .json -> (future: JSON to Markdown for phone records)
+        .html, .eml -> (future: Email/HTML to Markdown)
+        .doc, .docx -> (future: Word to Markdown)
+        * -> Return original path (no conversion)
+    """
+    import os
+    from pathlib import Path
+    
+    file_path = Path(file_path)
+    file_ext = file_path.suffix.lower()
+    
+    # PDF: Convert to Markdown
+    if file_ext == '.pdf':
+        md_path = convert_pdf_to_markdown(str(file_path))
+        return md_path
+    
+    # JSON: Future - Phone records conversion
+    if file_ext == '.json':
+        # Placeholder for JSON processing (phone records, etc.)
+        # from scripts import process_json
+        # return process_json(file_path, output_dir)
+        return str(file_path)
+    
+    # HTML/EML: Future - Email conversion
+    if file_ext in ['.html', '.htm', '.eml']:
+        # Placeholder for email processing
+        # from scripts import process_email
+        # return process_email(file_path, output_dir)
+        return str(file_path)
+    
+    # Word documents: Future
+    if file_ext in ['.doc', '.docx']:
+        # Placeholder for Word processing
+        # from scripts import process_word
+        # return process_word(file_path, output_dir)
+        return str(file_path)
+    
+    # Default: No conversion, return original
+    return str(file_path)

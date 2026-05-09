@@ -13,6 +13,9 @@ export interface FileNode {
     promoted_at: string | null;
     timeline_event_uuids: string[];
     trust_level: string;
+    conversion_status: string;
+    markdown_path: string | null;
+    has_md_twin: boolean;
   };
 }
 

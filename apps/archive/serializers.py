@@ -14,10 +14,11 @@ class TimelineEventUuidSerializer(serializers.ModelSerializer):
 class ArchiveDocumentSerializer(serializers.ModelSerializer):
     timeline_event_uuids = serializers.SerializerMethodField()
     trust_level = serializers.SerializerMethodField()
+    has_md_twin = serializers.SerializerMethodField()
 
     class Meta:
         model = ArchiveDocument
-        fields = ['uuid', 'title', 'file_type', 'path', 'is_promoted', 'promoted_at', 'timeline_event_uuids', 'trust_level']
+        fields = ['uuid', 'title', 'file_type', 'path', 'is_promoted', 'promoted_at', 'timeline_event_uuids', 'trust_level', 'conversion_status', 'markdown_path', 'has_md_twin']
 
     def get_timeline_event_uuids(self, obj):
         if obj.timeline_event:
@@ -30,6 +31,19 @@ class ArchiveDocumentSerializer(serializers.ModelSerializer):
         if obj.timeline_event and obj.timeline_event.trust_level:
             return obj.timeline_event.trust_level
         return "Unverified" # Default trust level
+
+    def get_has_md_twin(self, obj):
+        # TASK 2: Check if document has a markdown twin
+        # Either from conversion_status or by checking if markdown_path exists
+        if obj.conversion_status == 'SUCCESS' and obj.markdown_path:
+            return True
+        # Also check if a corresponding .md file exists on filesystem
+        if obj.file_type == 'pdf' and obj.file:
+            md_path = obj.file.name.replace('.pdf', '.md')
+            full_md_path = os.path.join(settings.MEDIA_ROOT, md_path)
+            if os.path.exists(full_md_path):
+                return True
+        return False
 
 class RecursiveFolderSerializer(serializers.Serializer):
     uuid = serializers.CharField()
@@ -119,32 +133,47 @@ class RecursiveFolderSerializer(serializers.Serializer):
                 insert_node(existing_node['children'], path_parts[1:], node_data, is_file_node)
 
         for doc in documents:
-            case_root_absolute_path = HiveDirectoryService.get_case_root(case_uuid_str)
-            doc_absolute_path = os.path.join(settings.MEDIA_ROOT, doc.file.name)
+            # TASK 2 FIX: Use doc.path (logical path with vault structure) instead of doc.file.name (storage path)
+            # doc.path contains the vault structure like "formal/01_Raw/filename.pdf" or "private/uuid/03_Drafts/filename.pdf"
+            # doc.file.name is the actual storage path like "archive/documents/filename.pdf"
             
-            if not doc_absolute_path.startswith(case_root_absolute_path):
+            if not doc.path:
                 continue
-
-            relative_to_case_root = os.path.relpath(doc_absolute_path, case_root_absolute_path)
-            path_parts = relative_to_case_root.split(os.sep)
-
+            
+            # Parse the logical path to determine vault location
+            path_parts = doc.path.split('/')
+            
             if not path_parts:
                 continue
 
-            doc_serializer_data = ArchiveDocumentSerializer(doc).data
-            
+            # TASK 2 FIX: Store the model instance, not pre-serialized data
+            # This allows the serializer to properly handle the file_details field
             node_data = {
                 'uuid': str(doc.uuid),
                 'name': doc.title if doc.file_type != 'folder' else doc.title.replace('[FOLDER] ', ''),
                 'type': doc.file_type,
                 'is_folder': doc.file_type == 'folder',
-                'file_details': doc_serializer_data
+                'file_details': doc  # Pass the model instance, not serialized data
             }
 
-            if path_parts[0] == 'formal':
-                insert_node(formal_root_node['children'], path_parts[1:], node_data, is_file_node=(doc.file_type != 'folder'))
-            elif path_parts[0] == 'private':
-                if len(path_parts) > 1 and path_parts[1] == user_uuid_str:
-                    insert_node(private_root_node['children'], path_parts[2:], node_data, is_file_node=(doc.file_type != 'folder'))
+            # Route to correct vault based on path
+            if len(path_parts) >= 1:
+                if path_parts[0] == 'formal':
+                    # Path: formal/01_Raw/filename.pdf or formal/04_Strategy/filename.pdf
+                    insert_node(formal_root_node['children'], path_parts[1:], node_data, is_file_node=(doc.file_type != 'folder'))
+                elif path_parts[0] == 'private':
+                    # Path: private/[user_uuid]/03_Drafts/filename.pdf
+                    if len(path_parts) > 1 and path_parts[1] == user_uuid_str:
+                        insert_node(private_root_node['children'], path_parts[2:], node_data, is_file_node=(doc.file_type != 'folder'))
+                    else:
+                        # Fallback for different user_uuid or missing user part
+                        insert_node(private_root_node['children'], path_parts[1:], node_data, is_file_node=(doc.file_type != 'folder'))
+                else:
+                    # Legacy documents without vault prefix
+                    # Try to infer from is_promoted flag
+                    if doc.is_promoted:
+                        insert_node(formal_root_node['children'], path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
+                    else:
+                        insert_node(private_root_node['children'], path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
             
         return tree

@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from "react";
 import CaseSelector from "./CaseSelector";
 import FileTree from "./FileTree";
 import AIAssistantChat from "./AIAssistantChat";
-import DocumentPreviewModal from "./DocumentPreviewModal";
 import ForensicTimeline from "./ForensicTimeline";
 import CaseSettingsModal from "./CaseSettingsModal";
 import CaseDetailModal from "./CaseDetailModal";
@@ -60,7 +59,6 @@ const Layout: React.FC<LayoutProps> = ({
   onEventAdded,
 }) => {
   const mainRef = useRef<HTMLDivElement>(null);
-  const [previewDocUuid, setPreviewDocUuid] = useState<string | null>(null);
 
   // Panel expanded/collapsed state
   const [leftExpanded, setLeftExpanded] = useState(true);
@@ -140,14 +138,24 @@ const Layout: React.FC<LayoutProps> = ({
   }, [caseId]);
 
   // Handle document selection from FileTree
-  const handleDocumentSelect = (docUuid: string) => {
-    setPreviewDocUuid(docUuid);
+  const [previewDoc, setPreviewDoc] = useState<{
+    uuid: string;
+    path: string;
+    title: string;
+  } | null>(null);
+
+  const handleDocumentSelect = (
+    docUuid: string,
+    docPath: string,
+    docTitle: string,
+  ) => {
+    setPreviewDoc({ uuid: docUuid, path: docPath, title: docTitle });
     const newUrl = `/cases/${caseId}/preview/${docUuid}`;
     window.history.pushState({}, "", newUrl);
   };
 
   const handleClosePreview = () => {
-    setPreviewDocUuid(null);
+    setPreviewDoc(null);
     window.history.pushState({}, "", `/cases/${caseId}`);
   };
 
@@ -501,7 +509,9 @@ const Layout: React.FC<LayoutProps> = ({
                 >
                   <FileTree
                     caseId={caseId}
-                    onDocumentSelect={handleDocumentSelect}
+                    onDocumentSelect={(uuid, path, title) =>
+                      handleDocumentSelect(uuid, path, title)
+                    }
                   />
                 </div>
 
@@ -518,12 +528,29 @@ const Layout: React.FC<LayoutProps> = ({
                   className="flex-1 p-4 min-h-0 overflow-auto"
                   style={{ height: `${(1 - horizontalSplit) * 100}%` }}
                 >
-                  {previewDocUuid ? (
-                    <DocumentPreviewModal
-                      caseId={caseId}
-                      documentUuid={previewDocUuid}
-                      onClose={handleClosePreview}
-                    />
+                  {previewDoc ? (
+                    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                      <div className="bg-white rounded-lg w-11/12 h-5/6 flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b">
+                          <h2 className="text-xl font-bold">
+                            {previewDoc.title}
+                          </h2>
+                          <button
+                            onClick={handleClosePreview}
+                            className="text-gray-500 hover:text-gray-700 text-2xl"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-4">
+                          <iframe
+                            src={`/media/${previewDoc.path}`}
+                            className="w-full h-full"
+                            title={previewDoc.title}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <p className="text-gray-400 text-sm text-center pt-8">
                       Select a document to preview
@@ -679,12 +706,27 @@ const Layout: React.FC<LayoutProps> = ({
               className="flex-1 p-4 overflow-auto min-h-0"
               style={{ height: `${(1 - horizontalSplit) * 100}%` }}
             >
-              {previewDocUuid ? (
-                <DocumentPreviewModal
-                  caseId={caseId}
-                  documentUuid={previewDocUuid}
-                  onClose={handleClosePreview}
-                />
+              {previewDoc ? (
+                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-lg w-11/12 h-5/6 flex flex-col">
+                    <div className="flex items-center justify-between p-4 border-b">
+                      <h2 className="text-xl font-bold">{previewDoc.title}</h2>
+                      <button
+                        onClick={handleClosePreview}
+                        className="text-gray-500 hover:text-gray-700 text-2xl"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-auto p-4">
+                      <iframe
+                        src={`/media/${previewDoc.path}`}
+                        className="w-full h-full"
+                        title={previewDoc.title}
+                      />
+                    </div>
+                  </div>
+                </div>
               ) : (
                 <p className="text-gray-400 text-sm text-center pt-8">
                   Select a document to preview

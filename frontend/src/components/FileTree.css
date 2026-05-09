@@ -1,74 +1,86 @@
 .file-tree {
-  font-family: monospace;
-  font-size: 14px;
-  user-select: none;
-  background: var(--bg-primary, #ffffff);
-  color: var(--text-primary, #333333);
-  padding: 10px;
-  border-radius: 4px;
-  overflow-y: auto;
-  max-height: 100%;
+    font-family: monospace;
+    font-size: 14px;
+    user-select: none;
+    background: var(--bg-primary, #ffffff);
+    color: var(--text-primary, #333333);
+    padding: 10px;
+    border-radius: 4px;
+    overflow-y: auto;
+    max-height: 100%;
 }
 
 .file-tree-node {
-  margin: 2px 0;
+    margin: 2px 0;
 }
 
 .node-content {
-  display: flex;
-  align-items: center;
-  padding: 4px 8px;
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.2s;
 }
 
 .node-content:hover {
-  background: var(--bg-hover, #f0f0f0);
+    background: var(--bg-hover, #f0f0f0);
 }
 
 .node-content.file:active {
-  cursor: grabbing;
+    cursor: grabbing;
 }
 
 .node-icon {
-  margin-right: 8px;
-  font-size: 16px;
+    margin-right: 8px;
+    font-size: 16px;
 }
 
 .node-name {
-  flex-grow: 1;
+    flex-grow: 1;
 }
 
 .promoted-badge {
-  margin-left: 8px;
-  font-size: 12px;
-  opacity: 0.8;
+    margin-left: 8px;
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+.twin-badge {
+    margin-left: 8px;
+    font-size: 12px;
+    opacity: 0.8;
+    color: #6366f1;
+}
+
+.twin-badge:hover {
+    opacity: 1;
+    transform: scale(1.1);
 }
 
 /* Branch specific styles */
 .vault-branch > .node-content {
-  font-weight: bold;
-  color: var(--color-vault, #2c3e50);
-  border-left: 3px solid var(--color-vault, #2c3e50);
+    font-weight: bold;
+    color: var(--color-vault, #2c3e50);
+    border-left: 3px solid var(--color-vault, #2c3e50);
 }
 
 .workspace-branch > .node-content {
-  font-weight: bold;
-  color: var(--color-workspace, #27ae60);
-  border-left: 3px solid var(--color-workspace, #27ae60);
+    font-weight: bold;
+    color: var(--color-workspace, #27ae60);
+    border-left: 3px solid var(--color-workspace, #27ae60);
 }
 
 .node-children {
-  border-left: 1px dashed #ccc;
-  margin-left: 8px;
+    border-left: 1px dashed #ccc;
+    margin-left: 8px;
 }
 
 /* CSS Variables for theme support if not already defined */
 :root {
-  --color-vault: #2c3e50;
-  --color-workspace: #27ae60;
-  --bg-primary: #ffffff;
-  --bg-hover: #f0f0f0;
-  --text-primary: #333333;
+    --color-vault: #2c3e50;
+    --color-workspace: #27ae60;
+    --bg-primary: #ffffff;
+    --bg-hover: #f0f0f0;
+    --text-primary: #333333;
 }

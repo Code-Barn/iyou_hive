@@ -8,7 +8,11 @@ interface FileTreeProps {
   onFileSelect: (node: FileNode) => void;
   onFileDrop: (sourceUuid: string, targetUuid: string) => void;
   onPromote: (node: FileNode) => void;
-  onDocumentSelect?: (docUuid: string) => void;
+  onDocumentSelect?: (
+    docUuid: string,
+    docPath: string,
+    docTitle: string,
+  ) => void;
 }
 
 const FileTreeNode: React.FC<{
@@ -39,7 +43,11 @@ const FileTreeNode: React.FC<{
     } else {
       onFileSelect(node);
       if (onDocumentSelect && node.file_details?.uuid) {
-        onDocumentSelect(node.file_details.uuid);
+        onDocumentSelect(
+          node.file_details.uuid,
+          node.file_details.path || node.path,
+          node.file_details.title || node.name,
+        );
       }
     }
   };
@@ -116,6 +124,14 @@ const FileTreeNode: React.FC<{
         <span className="node-name">{node.name}</span>
         {node.file_details?.is_promoted && (
           <span className="promoted-badge">⚖️</span>
+        )}
+        {node.file_details?.has_md_twin && (
+          <span
+            className="twin-badge"
+            title="Machine-Readable Version Available"
+          >
+            🤖
+          </span>
         )}
         {getVaultBadge()}
       </div>
