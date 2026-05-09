@@ -7,19 +7,20 @@ Provides RESTful API endpoints for archive operations including:
 """
 
 from rest_framework import viewsets, status
-from rest_framework.decorators import action, method_decorator
+from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.views import APIView # Import APIView
+from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 
 from .models import ArchiveDocument
 from apps.core.models import Case
 from apps.core.services.hive_directory import HiveDirectoryService
-from .serializers import RecursiveFolderSerializer # Import RecursiveFolderSerializer
+from .serializers import RecursiveFolderSerializer
 
 class ArchiveDocumentViewSet(viewsets.ModelViewSet):
     """
