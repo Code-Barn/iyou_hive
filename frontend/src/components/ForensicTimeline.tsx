@@ -104,8 +104,10 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
         // In Standard mode, show ALL events - no filters, no collection filtering
         // In Diff mode, apply filters
         const apiFilters = viewMode === "standard" ? {} : filters;
+        // Add page_size=1000 to always display the entire dataset
+        const fetchFilters = { ...apiFilters, page_size: 1000 };
         let data = await timelineApi
-          .getEvents(caseId, apiFilters)
+          .getEvents(caseId, fetchFilters)
           .then((res) => res.data);
         // Handle paginated response from DRF
         if (data && data.results && Array.isArray(data.results)) {

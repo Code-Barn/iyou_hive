@@ -7,13 +7,14 @@ Provides RESTful API endpoints for archive operations including:
 """
 
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, method_decorator
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView # Import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import ArchiveDocument
 from apps.core.models import Case
@@ -295,6 +296,7 @@ class ArchiveDirectoryView(APIView):
         return Response(serializer.data)
 
 
+@method_decorator(csrf_exempt, name='dispatch')
 class DocumentUploadView(APIView):
     """
     Smart Ingestion: Upload documents to either Formal Vault or Private Workspace.

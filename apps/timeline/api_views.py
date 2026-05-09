@@ -447,17 +447,17 @@ class DiffViewAPI(viewsets.ViewSet):
                 # They'll be displayed in the contested section
                 continue
             
-            # Smart Attribution Logic
-            # CLIENT Column: source_party === left_party AND status !== UNDISPUTED
-            # OPPOSING Column: source_party === right_party AND status !== UNDISPUTED
-            # SHARED Column: status === UNDISPUTED OR party in [NEUTRAL, COURT, WITNESS]
+            # Shared Magnet Logic:
+            # SHARED Column: status is UNDISPUTED or STIPULATED (regardless of party) OR party is Neutral/Witness/Court
+            # CLIENT Column: source_party is CLIENT and status is CONTESTED, REFUTED, or PENDING
+            # OPPOSING Column: source_party is OPPOSING and status is CONTESTED, REFUTED, or PENDING
             if event.source_party == left_party:
-                if event.status == 'UNDISPUTED':
+                if event.status in ['UNDISPUTED', 'STIPULATED']:
                     shared_events.append(event)
                 else:
                     left_only.append(event)
             elif event.source_party == right_party:
-                if event.status == 'UNDISPUTED':
+                if event.status in ['UNDISPUTED', 'STIPULATED']:
                     shared_events.append(event)
                 else:
                     right_only.append(event)
