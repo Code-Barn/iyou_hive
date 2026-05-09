@@ -349,7 +349,7 @@ const Layout: React.FC<LayoutProps> = ({
             <img
               src="/static/core/images/logos/light_mode_LOGO.png"
               alt="Hiver Logo"
-              className="h-8 w-auto"
+              className="h-24 w-auto"
             />
             <CaseSelector currentCaseId={caseId} onCaseSelect={onCaseSelect} />
             {/* Case Cockpit Entry Point - Info Icon */}

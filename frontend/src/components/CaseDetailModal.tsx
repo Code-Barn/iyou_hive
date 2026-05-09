@@ -46,7 +46,7 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
         formData.append("files", file);
       });
       formData.append("case_id", caseId);
-      formData.append("vault_type", vaultType);
+      formData.append("vault_type", vaultType.toLowerCase());
 
       const response = await uploadToVault(formData);
       setUploadStatus(

@@ -1,16 +1,21 @@
-import React, { useState, useRef } from 'react';
-import { archiveApi } from '../api/archive';
+import React, { useState, useRef } from "react";
+import { archiveApi } from "../api/archive";
 
 interface FileActionsProps {
   caseId: string;
   onFileUploaded: () => void;
 }
 
-export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded }) => {
+export const FileActions: React.FC<FileActionsProps> = ({
+  caseId,
+  onFileUploaded,
+}) => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
-  const [uploadError, setUploadError] = useState<string>('');
+  const [uploadStatus, setUploadStatus] = useState<
+    "idle" | "uploading" | "success" | "error"
+  >("idle");
+  const [uploadError, setUploadError] = useState<string>("");
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -23,50 +28,53 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
   const handleFileUpload = async () => {
     if (uploadFiles.length === 0 || !caseId) return;
 
-    setUploadStatus('uploading');
-    setUploadError('');
+    setUploadStatus("uploading");
+    setUploadError("");
     setUploadProgress(0);
 
     try {
       const formData = new FormData();
-      uploadFiles.forEach(file => {
-        formData.append('files', file);
+      uploadFiles.forEach((file) => {
+        formData.append("files", file);
       });
-      formData.append('case_uuid', caseId);
+      formData.append("case_uuid", caseId);
+      formData.append("vault_type", "private");
 
       // Call the archive upload API
       const response = await archiveApi.uploadDocuments(caseId, formData, {
         onUploadProgress: (progressEvent) => {
           if (progressEvent.total) {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            const percentCompleted = Math.round(
+              (progressEvent.loaded * 100) / progressEvent.total,
+            );
             setUploadProgress(percentCompleted);
           }
-        }
+        },
       });
 
-      if (response.data.status === 'success') {
-        setUploadStatus('success');
+      if (response.data.status === "success") {
+        setUploadStatus("success");
         setUploadProgress(100);
         onFileUploaded(); // Refresh file tree
 
         // Reset state after delay
         setTimeout(() => {
           setIsUploadModalOpen(false);
-          setUploadStatus('idle');
+          setUploadStatus("idle");
           setUploadFiles([]);
           setUploadProgress(0);
           if (fileInputRef.current) {
-            fileInputRef.current.value = '';
+            fileInputRef.current.value = "";
           }
         }, 2000);
       } else {
-        setUploadStatus('error');
-        setUploadError(response.data.error || 'Failed to upload files');
+        setUploadStatus("error");
+        setUploadError(response.data.error || "Failed to upload files");
       }
     } catch (error) {
-      console.error('Upload failed:', error);
-      setUploadStatus('error');
-      setUploadError('Failed to upload files. Please try again.');
+      console.error("Upload failed:", error);
+      setUploadStatus("error");
+      setUploadError("Failed to upload files. Please try again.");
     }
   };
 
@@ -74,15 +82,18 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
     try {
       const response = await archiveApi.promoteDocument(fileUuid);
 
-      if (response.data.status === 'success') {
-        alert('Document promoted to formal evidence!');
+      if (response.data.status === "success") {
+        alert("Document promoted to formal evidence!");
         onFileUploaded(); // Refresh file tree
       } else {
-        alert('Failed to promote document: ' + (response.data.error || 'Unknown error'));
+        alert(
+          "Failed to promote document: " +
+            (response.data.error || "Unknown error"),
+        );
       }
     } catch (error) {
-      console.error('Promote failed:', error);
-      alert('Failed to promote document. Please try again.');
+      console.error("Promote failed:", error);
+      alert("Failed to promote document. Please try again.");
     }
   };
 
@@ -105,12 +116,12 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
               <button
                 onClick={() => {
                   setIsUploadModalOpen(false);
-                  setUploadStatus('idle');
-                  setUploadError('');
+                  setUploadStatus("idle");
+                  setUploadError("");
                   setUploadFiles([]);
                   setUploadProgress(0);
                   if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
+                    fileInputRef.current.value = "";
                   }
                 }}
                 className="text-gray-500 hover:text-gray-700"
@@ -120,7 +131,9 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
             </div>
 
             <div className="mb-4">
-              <p className="text-gray-600 mb-2">Upload documents to your private workspace</p>
+              <p className="text-gray-600 mb-2">
+                Upload documents to your private workspace
+              </p>
               <input
                 type="file"
                 ref={fileInputRef}
@@ -132,7 +145,9 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
 
               {uploadFiles.length > 0 && (
                 <div className="mt-2 p-2 bg-gray-50 rounded-lg">
-                  <p className="text-sm font-medium">Selected files ({uploadFiles.length}):</p>
+                  <p className="text-sm font-medium">
+                    Selected files ({uploadFiles.length}):
+                  </p>
                   <ul className="text-sm text-gray-600 mt-1">
                     {uploadFiles.map((file, index) => (
                       <li key={index} className="truncate">
@@ -145,7 +160,7 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
             </div>
 
             {/* Upload Progress */}
-            {uploadStatus === 'uploading' && (
+            {uploadStatus === "uploading" && (
               <div className="mb-4">
                 <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
                   <div
@@ -160,14 +175,16 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
             )}
 
             {/* Status Messages */}
-            {uploadStatus === 'success' && (
+            {uploadStatus === "success" && (
               <div className="mb-4 p-3 bg-green-100 rounded-lg">
                 <p className="text-green-700">Files uploaded successfully!</p>
-                <p className="text-green-600 text-sm">Documents are now in your private workspace.</p>
+                <p className="text-green-600 text-sm">
+                  Documents are now in your private workspace.
+                </p>
               </div>
             )}
 
-            {uploadStatus === 'error' && uploadError && (
+            {uploadStatus === "error" && uploadError && (
               <div className="mb-4 p-3 bg-red-100 rounded-lg">
                 <p className="text-red-700">Error: {uploadError}</p>
               </div>
@@ -177,12 +194,12 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
               <button
                 onClick={() => {
                   setIsUploadModalOpen(false);
-                  setUploadStatus('idle');
-                  setUploadError('');
+                  setUploadStatus("idle");
+                  setUploadError("");
                   setUploadFiles([]);
                   setUploadProgress(0);
                   if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
+                    fileInputRef.current.value = "";
                   }
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
@@ -191,10 +208,14 @@ export const FileActions: React.FC<FileActionsProps> = ({ caseId, onFileUploaded
               </button>
               <button
                 onClick={handleFileUpload}
-                disabled={uploadStatus === 'uploading' || uploadFiles.length === 0}
-                className={`px-4 py-2 ${uploadStatus === 'uploading' || uploadFiles.length === 0 ? 'bg-blue-300' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg transition-colors`}
+                disabled={
+                  uploadStatus === "uploading" || uploadFiles.length === 0
+                }
+                className={`px-4 py-2 ${uploadStatus === "uploading" || uploadFiles.length === 0 ? "bg-blue-300" : "bg-blue-600 hover:bg-blue-700"} text-white rounded-lg transition-colors`}
               >
-                {uploadStatus === 'uploading' ? 'Uploading...' : `Upload ${uploadFiles.length} File${uploadFiles.length !== 1 ? 's' : ''}`}
+                {uploadStatus === "uploading"
+                  ? "Uploading..."
+                  : `Upload ${uploadFiles.length} File${uploadFiles.length !== 1 ? "s" : ""}`}
               </button>
             </div>
           </div>
