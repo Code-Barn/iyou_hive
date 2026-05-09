@@ -18,7 +18,7 @@ function getCSRFToken(): string | null {
 }
 
 const api = axios.create({
-  baseURL: "/ai",
+  baseURL: "/ai/api",
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",

@@ -102,7 +102,12 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
         let data = await timelineApi
           .getEvents(caseId, apiFilters)
           .then((res) => res.data);
-        if (!Array.isArray(data)) data = [];
+        // Handle paginated response from DRF
+        if (data && data.results && Array.isArray(data.results)) {
+          data = data.results;
+        } else if (!Array.isArray(data)) {
+          data = [];
+        }
         console.log("Raw Timeline Data:", data);
         // In Standard mode, don't filter by collection - show all events
         if (

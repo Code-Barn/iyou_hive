@@ -68,13 +68,19 @@ export const archiveApi = {
     }),
 
   // Smart Ingestion: Upload to Formal Vault or Private Workspace
-  uploadToVault: (caseId: string, formData: FormData, config?: any) =>
-    api.post("/documents/upload/", formData, {
+  uploadToVault: (caseId: string, formData: FormData, config?: any) => {
+    // Add CSRF token to FormData for Django
+    const csrfToken = getCSRFToken();
+    if (csrfToken) {
+      formData.append("csrfmiddlewaretoken", csrfToken);
+    }
+    return api.post("/documents/upload/", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
       ...config,
-    }),
+    });
+  },
 };
 
 export const uploadToVault = (formData: FormData) =>

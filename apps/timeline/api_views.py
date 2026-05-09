@@ -447,7 +447,10 @@ class DiffViewAPI(viewsets.ViewSet):
                 # They'll be displayed in the contested section
                 continue
             
-            # Categorize by source_party
+            # Smart Attribution Logic
+            # CLIENT Column: source_party === left_party AND status !== UNDISPUTED
+            # OPPOSING Column: source_party === right_party AND status !== UNDISPUTED
+            # SHARED Column: status === UNDISPUTED OR party in [NEUTRAL, COURT, WITNESS]
             if event.source_party == left_party:
                 if event.status == 'UNDISPUTED':
                     shared_events.append(event)
@@ -459,7 +462,7 @@ class DiffViewAPI(viewsets.ViewSet):
                 else:
                     right_only.append(event)
             else:
-                # NEUTRAL, COURT, WITNESS - treat as shared
+                # NEUTRAL, COURT, WITNESS - always shared
                 shared_events.append(event)
         
         data = {
