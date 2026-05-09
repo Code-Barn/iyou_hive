@@ -58,6 +58,7 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
         error.response?.data?.error ||
         error.response?.data?.message ||
         "Failed to upload files";
+      console.error("Upload failed:", error.response?.data || error);
       setUploadStatus(message);
     } finally {
       setUploading(false);

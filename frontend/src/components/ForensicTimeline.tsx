@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { timelineApi, collectionApi, diffApi } from "../api/timeline";
 import {
   TimelineEvent,
@@ -13,6 +13,7 @@ import {
 } from "../types/timeline";
 import EventCard from "./EventCard";
 import ConflictResolverModal from "./ConflictResolverModal";
+import TimelineEventModal from "./TimelineEventModal";
 import { TimelineToolbar } from "./TimelineToolbar";
 
 interface ForensicTimelineProps {
@@ -64,8 +65,12 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
   const [collections, setCollections] = useState<TimelineCollection[]>([]);
   const [selectedConflict, setSelectedConflict] =
     useState<ContestedPair | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<TimelineEvent | null>(
+    null,
+  );
   const [leftParty, setLeftParty] = useState<SourceParty>("CLIENT");
   const [rightParty, setRightParty] = useState<SourceParty>("OPPOSING");
+  const queryClient = useQueryClient();
 
   // Fetch collections
   const { data: collectionsData } = useQuery<TimelineCollection[]>({
@@ -359,7 +364,8 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
                     {(eventsData || []).map((event) => (
                       <tr
                         key={event.id}
-                        className="border-b border-gray-100 hover:bg-gray-50"
+                        className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+                        onClick={() => setSelectedEvent(event)}
                       >
                         <td className="p-2 whitespace-nowrap">
                           {event.date
@@ -439,6 +445,7 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
                       key={event.id}
                       event={event}
                       userParty={userParty}
+                      onClick={() => setSelectedEvent(event)}
                     />
                   ))
                 )}
@@ -459,6 +466,7 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
                       key={event.id}
                       event={event}
                       userParty={userParty}
+                      onClick={() => setSelectedEvent(event)}
                     />
                   ))
                 )}
@@ -479,6 +487,7 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
                       key={event.id}
                       event={event}
                       userParty={userParty}
+                      onClick={() => setSelectedEvent(event)}
                     />
                   ))
                 )}
@@ -517,6 +526,7 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
                           event={pair.left}
                           userParty={userParty}
                           isContested={true}
+                          onClick={() => setSelectedEvent(pair.left)}
                         />
                       </div>
                       <div>
@@ -527,6 +537,7 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
                           event={pair.right}
                           userParty={userParty}
                           isContested={true}
+                          onClick={() => setSelectedEvent(pair.right)}
                         />
                       </div>
                     </div>
@@ -543,6 +554,23 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Event Inspector Modal */}
+      {selectedEvent && (
+        <TimelineEventModal
+          event={selectedEvent}
+          caseId={caseId}
+          onClose={() => setSelectedEvent(null)}
+          onEventUpdated={(updated) => {
+            setSelectedEvent(null);
+            refetchEvents();
+            if (viewMode === "diff") refetchDiff();
+            queryClient.invalidateQueries({ queryKey: ["events"] });
+            queryClient.invalidateQueries({ queryKey: ["directory"] });
+            onEventAdded?.();
+          }}
+        />
       )}
 
       {/* Conflict Resolver Modal */}

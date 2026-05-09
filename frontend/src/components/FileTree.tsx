@@ -71,6 +71,34 @@ const FileTreeNode: React.FC<{
     return "📎";
   };
 
+  const getVaultBadge = () => {
+    const path = (node.path || "").toLowerCase();
+    if (
+      path.includes("/formal/") ||
+      path.includes("01_raw") ||
+      path.includes("04_strategy")
+    ) {
+      return (
+        <span className="vault-badge vault-formal" title="Formal Vault">
+          🔒
+        </span>
+      );
+    }
+    if (
+      path.includes("/private/") ||
+      path.includes("02_wiki") ||
+      path.includes("03_drafts") ||
+      path.includes("05_exports")
+    ) {
+      return (
+        <span className="vault-badge vault-private" title="Private Workspace">
+          ✏️
+        </span>
+      );
+    }
+    return null;
+  };
+
   return (
     <div
       className={`file-tree-node ${node.is_folder ? "folder" : "file"} level-${level}`}
@@ -89,6 +117,7 @@ const FileTreeNode: React.FC<{
         {node.file_details?.is_promoted && (
           <span className="promoted-badge">⚖️</span>
         )}
+        {getVaultBadge()}
       </div>
       {node.is_folder &&
         isOpen &&

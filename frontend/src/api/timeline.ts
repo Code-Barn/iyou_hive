@@ -49,9 +49,9 @@ export const timelineApi = {
   createEvent: (caseId: string, data: Record<string, any>) =>
     api.post(`/cases/${caseId}/events/`, data),
 
-  // Update event
+  // Update event (PATCH for partial updates)
   updateEvent: (caseId: string, eventId: string, data: Record<string, any>) =>
-    api.put(`/cases/${caseId}/events/${eventId}/`, data),
+    api.patch(`/cases/${caseId}/events/${eventId}/`, data),
 
   // Delete event
   deleteEvent: (caseId: string, eventId: string) =>

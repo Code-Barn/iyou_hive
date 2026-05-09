@@ -7,6 +7,7 @@ interface EventCardProps {
   onContest?: () => void;
   onSaveToCollection?: () => void;
   isContested?: boolean;
+  onClick?: () => void;
 }
 
 const statusColors: Record<string, string> = {
@@ -31,6 +32,7 @@ const EventCard: React.FC<EventCardProps> = ({
   onContest,
   onSaveToCollection,
   isContested = false,
+  onClick,
 }) => {
   const statusColor = statusColors[event.status] || "bg-gray-100";
   const partyColor = partyColors[event.source_party] || "bg-gray-500";
@@ -48,7 +50,8 @@ const EventCard: React.FC<EventCardProps> = ({
 
   return (
     <div
-      className={`border rounded-lg p-4 ${statusColor} ${hasReplacesEvent ? "ring-2 ring-yellow-500" : ""}`}
+      className={`border rounded-lg p-4 ${statusColor} ${hasReplacesEvent ? "ring-2 ring-yellow-500" : ""} ${onClick ? "cursor-pointer hover:bg-gray-50" : ""}`}
+      onClick={onClick}
     >
       {event.section_header && (
         <div className="text-xs text-gray-500 mb-2 font-medium">
