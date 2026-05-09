@@ -6,6 +6,7 @@ interface CaseDetailModalProps {
   caseId: string;
   onClose: () => void;
   onEventAdded?: () => void;
+  initialTab?: "overview" | "vault" | "bulk" | "ingestion";
 }
 
 type VaultType = "FORMAL" | "PRIVATE";
@@ -14,8 +15,11 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
   caseId,
   onClose,
   onEventAdded,
+  initialTab = "overview",
 }) => {
-  const [activeTab, setActiveTab] = useState<"overview" | "vault" | "bulk" | "ingestion">("overview");
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "vault" | "bulk" | "ingestion"
+  >(initialTab);
   const [vaultType, setVaultType] = useState<VaultType>("FORMAL");
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -45,10 +49,15 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
       formData.append("vault_type", vaultType);
 
       const response = await uploadToVault(formData);
-      setUploadStatus(`Upload successful: ${response.data.message || selectedFiles.length + " files uploaded"}`);
+      setUploadStatus(
+        `Upload successful: ${response.data.message || selectedFiles.length + " files uploaded"}`,
+      );
       onEventAdded?.();
     } catch (error: any) {
-      const message = error.response?.data?.error || error.response?.data?.message || "Failed to upload files";
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        "Failed to upload files";
       setUploadStatus(message);
     } finally {
       setUploading(false);
@@ -60,7 +69,9 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
       <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-auto">
         <div className="bg-gray-800 text-white px-6 py-4 flex items-center justify-between rounded-t-lg">
-          <h2 className="text-xl font-semibold">Forensic Cockpit - Case Details</h2>
+          <h2 className="text-xl font-semibold">
+            Forensic Cockpit - Case Details
+          </h2>
           <button onClick={onClose} className="text-2xl hover:text-gray-300">
             ×
           </button>
@@ -99,8 +110,12 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
           <div className="min-h-[300px]">
             {activeTab === "overview" && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-800">Case Overview</h3>
-                <p className="text-gray-600">Comprehensive case information and status.</p>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Case Overview
+                </h3>
+                <p className="text-gray-600">
+                  Comprehensive case information and status.
+                </p>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="font-medium text-gray-700">Case ID:</span>
@@ -112,25 +127,39 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
 
             {activeTab === "vault" && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-800">Vault Administration</h3>
-                <p className="text-gray-600">Manage formal and private vaults.</p>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Vault Administration
+                </h3>
+                <p className="text-gray-600">
+                  Manage formal and private vaults.
+                </p>
               </div>
             )}
 
             {activeTab === "bulk" && (
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-800">Bulk Actions</h3>
-                <p className="text-gray-600">Perform operations on multiple items.</p>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Bulk Actions
+                </h3>
+                <p className="text-gray-600">
+                  Perform operations on multiple items.
+                </p>
               </div>
             )}
 
             {activeTab === "ingestion" && (
               <div className="space-y-6">
-                <h3 className="text-lg font-semibold text-gray-800">Smart Ingestion</h3>
-                <p className="text-gray-600">Upload documents to Formal or Private workspace.</p>
+                <h3 className="text-lg font-semibold text-gray-800">
+                  Smart Ingestion
+                </h3>
+                <p className="text-gray-600">
+                  Upload documents to Formal or Private workspace.
+                </p>
 
                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                  <h4 className="font-medium text-gray-800 mb-3">Select Vault Type</h4>
+                  <h4 className="font-medium text-gray-800 mb-3">
+                    Select Vault Type
+                  </h4>
                   <div className="flex gap-4 mb-4">
                     <label className="flex items-center cursor-pointer">
                       <input
@@ -157,7 +186,9 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
                   </div>
 
                   <div className="border-t border-gray-200 pt-4">
-                    <h4 className="font-medium text-gray-800 mb-3">Select Files</h4>
+                    <h4 className="font-medium text-gray-800 mb-3">
+                      Select Files
+                    </h4>
                     <input
                       type="file"
                       multiple
@@ -180,7 +211,9 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
                       {uploading ? "Uploading..." : "Upload to Vault"}
                     </button>
                     {uploadStatus && (
-                      <p className={`text-sm mt-2 ${uploadStatus.includes("successful") ? "text-green-600" : "text-red-500"}`}>
+                      <p
+                        className={`text-sm mt-2 ${uploadStatus.includes("successful") ? "text-green-600" : "text-red-500"}`}
+                      >
                         {uploadStatus}
                       </p>
                     )}

@@ -61,7 +61,6 @@ const Layout: React.FC<LayoutProps> = ({
 }) => {
   const mainRef = useRef<HTMLDivElement>(null);
   const [previewDocUuid, setPreviewDocUuid] = useState<string | null>(null);
-  const [isIngestModalOpen, setIsIngestModalOpen] = useState(false);
 
   // Panel expanded/collapsed state
   const [leftExpanded, setLeftExpanded] = useState(true);
@@ -92,6 +91,9 @@ const Layout: React.FC<LayoutProps> = ({
   const [isCaseSettingsOpen, setIsCaseSettingsOpen] = useState(false);
   const [aiSettingsOpen, setAiSettingsOpen] = useState(false);
   const [isCaseDetailOpen, setIsCaseDetailOpen] = useState(false);
+  const [caseDetailInitialTab, setCaseDetailInitialTab] = useState<
+    "overview" | "vault" | "bulk" | "ingestion"
+  >("overview");
 
   // Load saved panel sizes from localStorage
   useEffect(() => {
@@ -341,24 +343,20 @@ const Layout: React.FC<LayoutProps> = ({
               className="h-8 w-auto"
             />
             <CaseSelector currentCaseId={caseId} onCaseSelect={onCaseSelect} />
-            <button
-              onClick={() => setIsCaseDetailOpen(true)}
-              className="px-3 py-1.5 bg-primary text-white rounded text-sm font-medium hover:bg-orange-600"
-              title="Case Info - Forensic Cockpit"
-            >
-              Case Info
-            </button>
             {/* Case Cockpit Entry Point - Info Icon */}
             <button
-              onClick={() => setIsCaseDetailOpen(true)}
-              className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded"
+              onClick={() => {
+                setCaseDetailInitialTab("overview");
+                setIsCaseDetailOpen(true);
+              }}
+              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
               title="Case Cockpit"
             >
               ⓘ
             </button>
             <button
               onClick={() => setIsCaseSettingsOpen(true)}
-              className="p-1.5 text-gray-600 hover:text-blue-600 hover:bg-gray-100 rounded"
+              className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
               title="Case Settings"
             >
               ⚙️
@@ -399,14 +397,14 @@ const Layout: React.FC<LayoutProps> = ({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setIsFullTimelineOpen(true)}
-                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                     title="Full Screen"
                   >
                     ⛶
                   </button>
                   <button
                     onClick={toggleLeft}
-                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                     title="Collapse"
                   >
                     ◀
@@ -459,7 +457,10 @@ const Layout: React.FC<LayoutProps> = ({
                 <div className="flex items-center gap-2">
                   {/* Archive Ingestion Interface */}
                   <button
-                    onClick={() => setIsIngestModalOpen(true)}
+                    onClick={() => {
+                      setCaseDetailInitialTab("ingestion");
+                      setIsCaseDetailOpen(true);
+                    }}
                     className="px-3 py-1.5 bg-blue-600 text-white rounded text-sm font-medium hover:bg-blue-700"
                     title="Ingest Document"
                   >
@@ -467,14 +468,14 @@ const Layout: React.FC<LayoutProps> = ({
                   </button>
                   <button
                     onClick={() => setIsArchiveFullScreen(true)}
-                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                     title="Full Screen"
                   >
                     ⛶
                   </button>
                   <button
                     onClick={toggleCenter}
-                    className="text-gray-600 hover:text-blue-600 p-1 rounded-md hover:bg-gray-100"
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                     title="Collapse"
                   >
                     ◀
@@ -557,21 +558,21 @@ const Layout: React.FC<LayoutProps> = ({
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setAiSettingsOpen(!aiSettingsOpen)}
-                    className="text-blue-600 bg-blue-50 border border-blue-100 p-1 rounded-md hover:bg-blue-100"
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                     title="AI Settings"
                   >
                     ⚙️
                   </button>
                   <button
                     onClick={() => setIsAIFullScreen(true)}
-                    className="text-blue-600 bg-blue-50 border border-blue-100 p-1 rounded-md hover:bg-blue-100"
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                     title="Full Screen"
                   >
                     ⛶
                   </button>
                   <button
                     onClick={toggleRight}
-                    className="text-blue-600 bg-blue-50 border border-blue-100 p-1 rounded-md hover:bg-blue-100"
+                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
                     title="Collapse"
                   >
                     ▶
@@ -725,15 +726,7 @@ const Layout: React.FC<LayoutProps> = ({
           caseId={caseId}
           onClose={() => setIsCaseDetailOpen(false)}
           onEventAdded={onEventAdded}
-        />
-      )}
-
-      {/* Smart Ingestion Modal (triggered from Archive header) */}
-      {isIngestModalOpen && (
-        <CaseDetailModal
-          caseId={caseId}
-          onClose={() => setIsIngestModalOpen(false)}
-          onEventAdded={onEventAdded}
+          initialTab={caseDetailInitialTab}
         />
       )}
     </div>

@@ -69,7 +69,7 @@ export const archiveApi = {
 
   // Smart Ingestion: Upload to Formal Vault or Private Workspace
   uploadToVault: (caseId: string, formData: FormData, config?: any) =>
-    api.post("/api/documents/upload/", formData, {
+    api.post("/documents/upload/", formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
