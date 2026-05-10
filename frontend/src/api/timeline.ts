@@ -36,6 +36,21 @@ api.interceptors.request.use((config) => {
 });
 
 // Timeline Events API
+export interface MaterializePayload {
+  date: string;
+  event: string;
+  category?: string;
+  notes?: string;
+  source_party?: string;
+  source_type?: string;
+  status?: string;
+  trust_level?: number;
+  citation?: string;
+  evidence_ids?: string[];
+  section_header?: string;
+  is_system_source?: boolean;
+}
+
 export const timelineApi = {
   // Get all events for a case
   getEvents: (caseId: string, filters?: Record<string, string | boolean>) =>
@@ -86,6 +101,10 @@ export const timelineApi = {
         "Content-Type": "multipart/form-data",
       },
     }),
+
+  // Materialize an AI-suggested event into a real TimelineEvent
+  materializeEvent: (caseId: string, payload: MaterializePayload) =>
+    api.post(`/cases/${caseId}/materialize/`, payload),
 
   // Generate PDF of timeline
   generatePdf: (caseId: string) =>

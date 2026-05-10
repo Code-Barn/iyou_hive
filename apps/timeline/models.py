@@ -157,6 +157,21 @@ class TimelineEvent(models.Model):
         ],
         help_text="Trust level from 1 (low) to 5 (maximum)"
     )
+    is_trivial = models.BooleanField(
+        default=False,
+        help_text="If True, this event is considered noise and can be filtered out"
+    )
+    significance = models.PositiveSmallIntegerField(
+        default=3,
+        choices=[
+            (1, 'Minimal'),
+            (2, 'Low'),
+            (3, 'Normal'),
+            (4, 'Important'),
+            (5, 'Critical'),
+        ],
+        help_text="Significance level from 1 (minimal) to 5 (critical)"
+    )
     citation = models.CharField(
         max_length=500,
         blank=True,

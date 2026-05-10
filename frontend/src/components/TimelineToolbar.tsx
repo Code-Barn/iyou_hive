@@ -5,11 +5,15 @@ import { archiveApi } from "../api/archive";
 interface TimelineToolbarProps {
   caseId: string;
   onEventAdded: () => void;
+  filterNoise?: boolean;
+  onFilterNoiseChange?: (value: boolean) => void;
 }
 
 export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
   caseId,
   onEventAdded,
+  filterNoise = false,
+  onFilterNoiseChange,
 }) => {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isAddEventModalOpen, setIsAddEventModalOpen] = useState(false);
@@ -229,6 +233,24 @@ export const TimelineToolbar: React.FC<TimelineToolbarProps> = ({
           <span>📄</span>
           <span className="hidden sm:inline">PDF</span>
         </button>
+
+        {/* Filter Noise Toggle */}
+        {onFilterNoiseChange && (
+          <button
+            onClick={() => onFilterNoiseChange(!filterNoise)}
+            className={`px-2 py-1.5 rounded text-sm transition-colors flex items-center gap-1 whitespace-nowrap ${
+              filterNoise
+                ? "bg-yellow-500 text-white hover:bg-yellow-600"
+                : "bg-gray-200 text-gray-600 hover:bg-gray-300"
+            }`}
+            title={filterNoise ? "Showing significant events only" : "Show all events including noise"}
+          >
+            <span>{filterNoise ? "🔇" : "🔊"}</span>
+            <span className="hidden sm:inline">
+              {filterNoise ? "Noise Filtered" : "Filter Noise"}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Upload Timeline Modal */}

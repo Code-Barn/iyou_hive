@@ -35,6 +35,13 @@ api.interceptors.request.use((config) => {
 });
 
 export const archiveApi = {
+  // Create a new case via core API
+  createCase: (name: string, description: string) =>
+    axios.post("/core/api/cases/", { name, description }, {
+      withCredentials: true,
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCSRFToken() || "" },
+    }),
+
   // Get recursive directory tree
   getDirectoryTree: (caseId?: string) =>
     api.get("/directory/", { params: caseId ? { case_id: caseId } : {} }),

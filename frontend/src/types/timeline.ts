@@ -127,6 +127,8 @@ export interface TimelineFilters {
   end_date?: string;
   has_evidence?: boolean;
   contested?: boolean;
+  filter_noise?: boolean;
+  min_significance?: number;
 }
 
 // User Party Context

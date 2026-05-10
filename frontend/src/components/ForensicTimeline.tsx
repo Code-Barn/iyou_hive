@@ -198,7 +198,14 @@ const ForensicTimeline: React.FC<ForensicTimelineProps> = ({
   return (
     <div className="flex flex-col h-full">
       {/* Timeline Toolbar - always visible at top */}
-      <TimelineToolbar caseId={caseId} onEventAdded={handleEventAdded} />
+      <TimelineToolbar
+        caseId={caseId}
+        onEventAdded={handleEventAdded}
+        filterNoise={filters.filter_noise === true}
+        onFilterNoiseChange={(value) =>
+          setFilters((prev) => ({ ...prev, filter_noise: value || undefined }))
+        }
+      />
 
       {/* View Toggle */}
       <div className="px-4 pb-2 flex items-center gap-2 border-b border-gray-200 bg-white">

@@ -31,6 +31,7 @@ from apps.archive.models import ArchiveDocument
 from .services import MarkdownIngestionService
 from .services.hive_export import HiveExportService
 from .services.hive_import import HiveImportService
+from rest_framework.views import APIView
 # from apps.core.services.legal_formatter import LegalFormatterService
 
 
@@ -87,6 +88,19 @@ class TimelineEventViewSet(viewsets.ModelViewSet):
                 Q(status__in=['CONTESTED', 'REFUTED']) |
                 Q(counter_claims__isnull=False)
             ).distinct()
+        
+        # Filter noise: hide trivial events
+        filter_noise = self.request.query_params.get('filter_noise')
+        if filter_noise == 'true':
+            queryset = queryset.filter(is_trivial=False)
+        
+        # Minimum significance filter
+        min_significance = self.request.query_params.get('min_significance')
+        if min_significance:
+            try:
+                queryset = queryset.filter(significance__gte=int(min_significance))
+            except (ValueError, TypeError):
+                pass
         
         return queryset.select_related('case', 'created_by', 'replaces_event')\
                        .prefetch_related('evidence', 'counter_claims')\
@@ -394,6 +408,99 @@ class TimelineCollectionViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("Case not found or access denied")
         
         serializer.save(case=case, created_by=self.request.user)
+
+
+class MaterializeEventView(APIView):
+    """
+    Bridge from AI suggestion to Timeline reality.
+    Accepts a JSON payload matching TimelineEvent creation schema
+    and materializes it as a persistent record.
+
+    POST /api/timeline/cases/{case_id}/materialize/
+
+    Payload:
+    {
+        "date": "2024-01-15",
+        "event": "Contract Signed",
+        "category": "contract",
+        "notes": "AI-suggested event from document analysis",
+        "source_party": "CLIENT",
+        "source_type": "AI_GENERATED",
+        "status": "PENDING",
+        "trust_level": 2,
+        "citation": "AI-generated from document analysis",
+        "evidence_ids": ["<uuid>", ...],
+        "section_header": "2024 Events"
+    }
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [JSONParser]
+
+    def post(self, request, case_id=None):
+        if not case_id:
+            return Response({
+                'status': 'error',
+                'error': 'case_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+        except Case.DoesNotExist:
+            return Response({
+                'status': 'error',
+                'error': 'Case not found or access denied'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        data = request.data
+
+        required_fields = ['date', 'event']
+        missing = [f for f in required_fields if f not in data]
+        if missing:
+            return Response({
+                'status': 'error',
+                'error': f'Missing required fields: {", ".join(missing)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        event = TimelineEvent(
+            case=case,
+            created_by=request.user,
+            date=data['date'],
+            event=data['event'],
+            category=data.get('category', 'other'),
+            notes=data.get('notes', ''),
+            source_party=data.get('source_party', 'CLIENT'),
+            source_type=data.get('source_type', 'AI_GENERATED'),
+            status=data.get('status', 'PENDING'),
+            trust_level=data.get('trust_level', 2),
+            citation=data.get('citation', ''),
+            section_header=data.get('section_header', ''),
+            is_system_source=data.get('is_system_source', False),
+            is_trivial=data.get('is_trivial', False),
+            significance=data.get('significance', 3),
+        )
+
+        try:
+            event.save()
+
+            evidence_ids = data.get('evidence_ids', [])
+            if evidence_ids:
+                docs = ArchiveDocument.objects.filter(
+                    id__in=evidence_ids, case=case
+                )
+                event.evidence.set(docs)
+
+            serializer = TimelineEventSerializer(event)
+            return Response({
+                'status': 'success',
+                'event': serializer.data,
+                'message': f'Event "{event.event}" materialized from AI suggestion'
+            }, status=status.HTTP_201_CREATED)
+
+        except Exception as e:
+            return Response({
+                'status': 'error',
+                'error': f'Failed to materialize event: {str(e)}'
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class DiffViewAPI(viewsets.ViewSet):

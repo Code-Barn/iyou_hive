@@ -5,7 +5,8 @@ import AIAssistantChat from "./AIAssistantChat";
 import ForensicTimeline from "./ForensicTimeline";
 import CaseSettingsModal from "./CaseSettingsModal";
 import CaseDetailModal from "./CaseDetailModal";
-import { SourceParty } from "../types/shared";
+import CanvasEditor from "./CanvasEditor";
+import { SourceParty, FileNode } from "../types/shared";
 
 // Helper to get CSRF token for POST requests
 function getCSRFToken(): string {
@@ -133,7 +134,7 @@ const Layout: React.FC<LayoutProps> = ({
       /\/cases\/([^\/]+)\/preview\/([^\/]+)/,
     );
     if (match && match[1] === caseId) {
-      setPreviewDocUuid(match[2]);
+      handleDocumentSelect(match[2], "", "Document");
     }
   }, [caseId]);
 
@@ -143,6 +144,7 @@ const Layout: React.FC<LayoutProps> = ({
     path: string;
     title: string;
   } | null>(null);
+  const [activeFileNode, setActiveFileNode] = useState<FileNode | null>(null);
 
   const handleDocumentSelect = (
     docUuid: string,
@@ -154,8 +156,20 @@ const Layout: React.FC<LayoutProps> = ({
     window.history.pushState({}, "", newUrl);
   };
 
+  const handleFileSelect = (node: FileNode) => {
+    setActiveFileNode(node);
+    if (node.file_details) {
+      setPreviewDoc({
+        uuid: node.file_details.uuid,
+        path: node.file_details.path,
+        title: node.file_details.title,
+      });
+    }
+  };
+
   const handleClosePreview = () => {
     setPreviewDoc(null);
+    setActiveFileNode(null);
     window.history.pushState({}, "", `/cases/${caseId}`);
   };
 
@@ -509,6 +523,7 @@ const Layout: React.FC<LayoutProps> = ({
                 >
                   <FileTree
                     caseId={caseId}
+                    onFileSelect={handleFileSelect}
                     onDocumentSelect={(uuid, path, title) =>
                       handleDocumentSelect(uuid, path, title)
                     }
@@ -525,37 +540,13 @@ const Layout: React.FC<LayoutProps> = ({
                 </div>
 
                 <div
-                  className="flex-1 p-4 min-h-0 overflow-auto"
+                  className="flex-1 min-h-0 overflow-auto border-t border-gray-200"
                   style={{ height: `${(1 - horizontalSplit) * 100}%` }}
                 >
-                  {previewDoc ? (
-                    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-                      <div className="bg-white rounded-lg w-11/12 h-5/6 flex flex-col">
-                        <div className="flex items-center justify-between p-4 border-b">
-                          <h2 className="text-xl font-bold">
-                            {previewDoc.title}
-                          </h2>
-                          <button
-                            onClick={handleClosePreview}
-                            className="text-gray-500 hover:text-gray-700 text-2xl"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-auto p-4">
-                          <iframe
-                            src={`/media/${previewDoc.path}`}
-                            className="w-full h-full"
-                            title={previewDoc.title}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-gray-400 text-sm text-center pt-8">
-                      Select a document to preview
-                    </p>
-                  )}
+                  <CanvasEditor
+                    caseId={caseId}
+                    activeDocument={activeFileNode}
+                  />
                 </div>
               </div>
             </>
@@ -623,6 +614,8 @@ const Layout: React.FC<LayoutProps> = ({
                   caseId={caseId}
                   showSettings={aiSettingsOpen}
                   onToggleSettings={() => setAiSettingsOpen(false)}
+                  activeDocument={activeFileNode}
+                  onEventAdded={onEventAdded}
                 />
               </div>
             </>
@@ -698,40 +691,19 @@ const Layout: React.FC<LayoutProps> = ({
             >
               <FileTree
                 caseId={caseId}
+                onFileSelect={handleFileSelect}
                 onDocumentSelect={handleDocumentSelect}
               />
             </div>
             <div className="border-t border-gray-200" />
             <div
-              className="flex-1 p-4 overflow-auto min-h-0"
+              className="flex-1 overflow-auto min-h-0"
               style={{ height: `${(1 - horizontalSplit) * 100}%` }}
             >
-              {previewDoc ? (
-                <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-                  <div className="bg-white rounded-lg w-11/12 h-5/6 flex flex-col">
-                    <div className="flex items-center justify-between p-4 border-b">
-                      <h2 className="text-xl font-bold">{previewDoc.title}</h2>
-                      <button
-                        onClick={handleClosePreview}
-                        className="text-gray-500 hover:text-gray-700 text-2xl"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    <div className="flex-1 overflow-auto p-4">
-                      <iframe
-                        src={`/media/${previewDoc.path}`}
-                        className="w-full h-full"
-                        title={previewDoc.title}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-gray-400 text-sm text-center pt-8">
-                  Select a document to preview
-                </p>
-              )}
+              <CanvasEditor
+                caseId={caseId}
+                activeDocument={activeFileNode}
+              />
             </div>
           </div>
         </div>
@@ -766,6 +738,8 @@ const Layout: React.FC<LayoutProps> = ({
               caseId={caseId}
               showSettings={aiSettingsOpen}
               onToggleSettings={() => setAiSettingsOpen(false)}
+              activeDocument={activeFileNode}
+              onEventAdded={onEventAdded}
             />
           </div>
         </div>

@@ -12,6 +12,9 @@ urlpatterns = [
     # Diff view endpoint
     path('cases/<uuid:case_id>/diff/', api_views.DiffViewAPI.as_view({'get': 'retrieve'}), name='timeline-diff'),
     
+    # AI Materialize endpoint: bridge from AI suggestion to Timeline reality
+    path('cases/<uuid:case_id>/materialize/', api_views.MaterializeEventView.as_view(), name='timeline-materialize'),
+
     # Action endpoints for events
     path('cases/<uuid:case_id>/upload-markdown/', api_views.TimelineEventViewSet.as_view({'post': 'upload_markdown'}), name='timeline-upload-markdown'),
     path('cases/<uuid:case_id>/events/<uuid:pk>/contest/', api_views.TimelineEventViewSet.as_view({'post': 'contest'}), name='timeline-event-contest'),

@@ -239,9 +239,22 @@ def query_timeline(request):
     if request.method != 'POST':
         return JsonResponse({'error': 'POST method required'}, status=405)
     
-    query = request.POST.get('query', '')
-    event_id = request.POST.get('event_id')
-    case_id = request.POST.get('case_id')
+    # Support both JSON and form-encoded POST bodies
+    if request.content_type and 'application/json' in request.content_type:
+        import json
+        try:
+            body = json.loads(request.body)
+        except json.JSONDecodeError:
+            body = {}
+        query = body.get('query', '')
+        event_id = body.get('event_id', '')
+        case_id = body.get('case_id', '')
+        document_content = body.get('document_content', '')
+    else:
+        query = request.POST.get('query', '')
+        event_id = request.POST.get('event_id', '')
+        case_id = request.POST.get('case_id', '')
+        document_content = request.POST.get('document_content', '')
     
     case, error_response = _get_case_or_404(request, case_id)
     if error_response:
@@ -279,9 +292,18 @@ Please provide a comprehensive answer based on this event and suggest any releva
         for e in events:
             event_items.append(f"Date: {e.date}\nEvent: {e.event}\nCategory: {e.category}\nNotes: {e.notes}")
         context_str = "\n\n".join(event_items)
+
+        doc_sight = ""
+        if document_content:
+            doc_sight = f"""
+--- Current Document Context ---
+You are currently looking at the following document:
+{document_content}
+--- End Document Context ---
+"""
         context = f"""Legal Timeline Events (Case: {case_id}):
 {context_str}
-
+{doc_sight}
 User Query: {query}
 
 Please analyze the timeline and provide insights, connections, and recommendations.

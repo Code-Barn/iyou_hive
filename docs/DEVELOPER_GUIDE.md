@@ -2,7 +2,7 @@
 
 **Architectural Source of Truth - React + Vite + Tailwind + Django API**
 
-*Last Updated: 2026-05-08* | *Build: index-BfomkJw1.js / index-JNzbSqsV.css*
+*Last Updated: 2026-05-09* | *Build: index-DXy8JJal.js / index-BkNbuUxR.css*
 
 ---
 
@@ -47,8 +47,8 @@ Hiver implements a **React + Vite + Tailwind frontend** with a **Django REST API
 │    │   └── types/               - TypeScript type definitions    │
 │    ├── static/frontend/          - Built assets                    │
 │    │   └── assets/              - JS/CSS with hash suffixes       │
-│    │       ├── index-BfomkJw1.js  ✅ Current Build              │
-│    │       └── index-JNzbSqsV.css  ✅ Current Build              │
+│   │       ├── index-DXy8JJal.js  ✅ Current Build              │
+│   │       └── index-BkNbuUxR.css  ✅ Current Build              │
 └─────────────────────────────────────────────────────────────────┘
                             ↓ REST API
 ┌─────────────────────────────────────────────────────────────────┐
@@ -712,9 +712,9 @@ See `ROADMAP_2026.md` for detailed 2026 goals.
 ---
 
 **Build Hashes (Current):**
-- Frontend JS: `index-BfomkJw1.js`
-- Frontend CSS: `index-JNzbSqsV.css`
+- Frontend JS: `index-DXy8JJal.js`
+- Frontend CSS: `index-BkNbuUxR.css`
 - Vite Manifest: `static/frontend/.vite/manifest.json`
 
-**Last Updated**: 2026-05-08
+**Last Updated**: 2026-05-09
 **Version**: 2.0 (React Migration Complete)
