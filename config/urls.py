@@ -23,6 +23,7 @@ from apps.core.views import react_app_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('oidc/', include('mozilla_django_oidc.urls')),
     # API endpoints (must be before catch-all)
     path('api/timeline/', include('apps.timeline.api_urls')),
     path('api/archive/', include('apps.archive.api_urls')),

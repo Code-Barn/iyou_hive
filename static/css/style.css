@@ -102,3 +102,84 @@
         padding: 0.75rem 1rem;
     }
 }
+
+/* Mesh Navigation (_nav.html) */
+.mesh-nav {
+    background: #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+}
+
+.mesh-nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 100%;
+    margin: 0 auto;
+    padding: 0.375rem 1rem;
+}
+
+.mesh-nav-brand {
+    font-weight: 600;
+    color: #4338ca;
+}
+
+.mesh-nav-links {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.mesh-nav-link {
+    color: #4b5563;
+    text-decoration: none;
+}
+
+.mesh-nav-link:hover {
+    color: #4f46e5;
+}
+
+.mesh-badge {
+    font-size: 0.75rem;
+    background: #d1fae5;
+    color: #065f46;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-weight: 500;
+}
+
+.mesh-badge.hidden {
+    display: none;
+}
+
+.mesh-user {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.mesh-logout-form {
+    display: inline;
+}
+
+.mesh-logout-btn {
+    font-size: 0.875rem;
+    color: #ef4444;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+
+.mesh-logout-btn:hover {
+    color: #b91c1c;
+}
+
+.mesh-login-link {
+    font-size: 0.875rem;
+    color: #2563eb;
+    text-decoration: none;
+}
+
+.mesh-login-link:hover {
+    color: #1d4ed8;
+}

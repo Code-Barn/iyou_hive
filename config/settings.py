@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework.authtoken",
+    "mozilla_django_oidc",
     "apps.core",
     "apps.accounts",
     "apps.timeline",
@@ -47,6 +48,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "mozilla_django_oidc.middleware.SessionRefresh",
     "apps.core.middleware.RustDIDAuthenticationMiddleware",
     "apps.core.middleware.CaseSelectionMiddleware",
     "apps.core.middleware.SessionSecurityMiddleware",
@@ -54,9 +56,9 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "config.urls"
 
-LOGIN_URL = "/accounts/login/"
-LOGIN_REDIRECT_URL = "/timeline/"
-LOGOUT_REDIRECT_URL = "/timeline/"
+LOGIN_URL = "oidc_authentication_init"
+LOGIN_REDIRECT_URL = "/"
+LOGOUT_REDIRECT_URL = "/"
 
 RUST_DID_LIB_EXTENSION = {"Linux": "so", "Darwin": "dylib", "Windows": "dll"}.get(
     platform.system(), "so"
@@ -73,10 +75,15 @@ RUST_DID_LIB_PATH = os.getenv(
 
 DID_BACKEND = os.getenv("DID_BACKEND", "rust")
 
+SESSION_COOKIE_NAME = "hiver_sessionid"
 SESSION_COOKIE_AGE = 1209600
 SESSION_COOKIE_SECURE = False  # Set to False for development (localhost)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_COOKIE_DOMAIN = None
+SESSION_SAVE_EVERY_REQUEST = True
+CSRF_COOKIE_NAME = "hiver_csrftoken"
+CSRF_COOKIE_SECURE = False
 
 TEMPLATES = [
     {
@@ -105,13 +112,32 @@ DATABASES = {
 }
 
 
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"
-    },
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+AUTH_PASSWORD_VALIDATORS = []
+
+AUTHENTICATION_BACKENDS = [
+    "apps.accounts.backends.MyOIDCAuthenticationBackend",
+]
+
+OIDC_RP_CLIENT_ID = os.getenv("OIDC_RP_CLIENT_ID", "hiver-client")
+OIDC_RP_CLIENT_SECRET = os.getenv("OIDC_RP_CLIENT_SECRET", "")
+OIDC_RP_SIGN_ALGO = "RS256"
+OIDC_RP_VERIFY_KID = False
+
+OIDC_OP_AUTHORIZATION_ENDPOINT = os.getenv("OIDC_OP_AUTHORIZATION_ENDPOINT", "http://127.0.0.1:8000/openid/authorize/")
+OIDC_OP_TOKEN_ENDPOINT = os.getenv("OIDC_OP_TOKEN_ENDPOINT", "http://127.0.0.1:8000/openid/token/")
+OIDC_OP_USER_ENDPOINT = os.getenv("OIDC_OP_USER_ENDPOINT", "http://127.0.0.1:8000/openid/userinfo/")
+OIDC_OP_JWKS_ENDPOINT = os.getenv("OIDC_OP_JWKS_ENDPOINT", "http://127.0.0.1:8000/openid/jwks/")
+
+OIDC_RP_CALLBACK_URL = os.getenv("OIDC_RP_CALLBACK_URL", "http://127.0.0.1:8003/oidc/callback/")
+
+OIDC_USERNAME_ALGO = lambda claims: claims.get("sub")
+OIDC_RP_REQUIRED_CLAIMS = []
+OIDC_VERIFY_SSL = False
+OIDC_STORE_ID_TOKEN = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://127.0.0.1:8000",
+    "http://127.0.0.1:8003",
 ]
 
 

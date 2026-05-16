@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { aiApi, ChatMessage } from "../api/ai";
 import { timelineApi, MaterializePayload } from "../api/timeline";
 import { FileNode } from "../types/shared";
+import { PerspectiveMode } from "../types/timeline";
 import { InspectorPanel } from "./InspectorPanel";
 
 interface AIAssistantChatProps {
@@ -65,6 +66,16 @@ const AIAssistantChat: React.FC<AIAssistantChatProps> = ({
     source_party: "CLIENT",
     isSubmitting: false,
   });
+
+  const [perspectiveMode, setPerspectiveMode] = useState<PerspectiveMode>(() => {
+    const saved = localStorage.getItem("hiver_ai_perspective");
+    if (saved === "CLIENT" || saved === "NEUTRAL" || saved === "OPPOSING") return saved;
+    return "NEUTRAL";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("hiver_ai_perspective", perspectiveMode);
+  }, [perspectiveMode]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -230,6 +241,7 @@ const AIAssistantChat: React.FC<AIAssistantChatProps> = ({
         inputValue.trim(),
         caseId,
         documentContent || undefined,
+        perspectiveMode,
       );
 
       if (response.data && response.data.status === "success") {
@@ -388,6 +400,36 @@ const AIAssistantChat: React.FC<AIAssistantChatProps> = ({
           </button>
         </div>
       )}
+
+      {/* Perspective Toggle — fixed at top of AI panel */}
+      <div className="flex-none px-3 py-1.5 border-b border-gray-200 bg-white">
+        <div className="flex items-center justify-center gap-0">
+          {(["CLIENT", "NEUTRAL", "OPPOSING"] as PerspectiveMode[]).map((mode) => {
+            const isActive = perspectiveMode === mode;
+            const activeStyles: Record<PerspectiveMode, string> = {
+              CLIENT:
+                "bg-indigo-100 text-indigo-700 border-indigo-300 shadow-sm",
+              NEUTRAL:
+                "bg-gray-100 text-gray-700 border-gray-300 shadow-sm",
+              OPPOSING:
+                "bg-amber-100 text-amber-700 border-amber-300 shadow-sm",
+            };
+            return (
+              <button
+                key={mode}
+                onClick={() => setPerspectiveMode(mode)}
+                className={`text-xs font-medium tracking-wide px-3 py-1 border transition-all duration-150 first:rounded-l-md last:rounded-r-md -ml-px first:ml-0 focus:outline-none ${
+                  isActive
+                    ? activeStyles[mode]
+                    : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                }`}
+              >
+                {mode}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <div className="flex flex-1 min-h-0">
         {/* Main Chat Area */}

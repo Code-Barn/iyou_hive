@@ -250,16 +250,40 @@ def query_timeline(request):
         event_id = body.get('event_id', '')
         case_id = body.get('case_id', '')
         document_content = body.get('document_content', '')
+        perspective_mode = body.get('perspective_mode', 'NEUTRAL')
     else:
         query = request.POST.get('query', '')
         event_id = request.POST.get('event_id', '')
         case_id = request.POST.get('case_id', '')
         document_content = request.POST.get('document_content', '')
+        perspective_mode = request.POST.get('perspective_mode', 'NEUTRAL')
     
     case, error_response = _get_case_or_404(request, case_id)
     if error_response:
         return error_response
-    
+
+    perspective_instructions = {
+        'CLIENT': (
+            "You are operating in CLIENT PERSPECTIVE — proactively align your analysis "
+            "with the client's case strategy. Highlight favorable evidence, identify "
+            "supporting precedents, and frame timelines to strengthen the client's position."
+        ),
+        'OPPOSING': (
+            "You are operating in OPPOSING PERSPECTIVE — apply a critical adversarial lens. "
+            "Proactively identify weaknesses, inconsistencies, and gaps in the presented "
+            "timeline. Flag potential counter-arguments and challenge assumptions."
+        ),
+        'NEUTRAL': (
+            "You are operating in NEUTRAL PERSPECTIVE — maintain strict objectivity. "
+            "Present balanced analysis without favoring any party. Note factual findings, "
+            "flag uncertainties, and avoid advocacy language."
+        ),
+    }
+    perspective_prompt = perspective_instructions.get(
+        perspective_mode,
+        perspective_instructions['NEUTRAL'],
+    )
+
     if event_id:
         # Query about specific event - ensure user owns it and it belongs to case
         event = get_object_or_404(
@@ -271,7 +295,9 @@ def query_timeline(request):
         # Build evidence list from M2M
         evidence_list = [doc.title for doc in event.evidence.all()]
         evidence_str = ', '.join(evidence_list) if evidence_list else 'None'
-        context = f"""Timeline Event Context (Case: {case_id}):
+        context = f"""{perspective_prompt}
+
+Timeline Event Context (Case: {case_id}):
 Date: {event.date}
 Event: {event.event}
 Category: {event.category}
@@ -301,7 +327,9 @@ You are currently looking at the following document:
 {document_content}
 --- End Document Context ---
 """
-        context = f"""Legal Timeline Events (Case: {case_id}):
+        context = f"""{perspective_prompt}
+
+Legal Timeline Events (Case: {case_id}):
 {context_str}
 {doc_sight}
 User Query: {query}

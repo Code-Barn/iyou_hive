@@ -1,0 +1,90 @@
+import React, { useEffect, useState } from "react";
+
+function getCSRFToken(): string {
+  const name = "hiver_csrftoken";
+  if (document.cookie && document.cookie !== "") {
+    const cookies = document.cookie.split(";");
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === name + "=") {
+        return decodeURIComponent(cookie.substring(name.length + 1));
+      }
+    }
+  }
+  return "";
+}
+
+const SovereignHeader: React.FC = () => {
+  const [meshActive, setMeshActive] = useState(false);
+
+  useEffect(() => {
+    fetch("http://127.0.0.1:9001/", { signal: AbortSignal.timeout(300) })
+      .then((r) => { if (r.ok) setMeshActive(true); })
+      .catch(() => {});
+  }, []);
+
+  const handleLogout = () => {
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/oidc/logout/";
+    const csrf = document.createElement("input");
+    csrf.type = "hidden";
+    csrf.name = "csrfmiddlewaretoken";
+    csrf.value = getCSRFToken();
+    form.appendChild(csrf);
+    document.body.appendChild(form);
+    form.submit();
+  };
+
+  const root = document.getElementById("timeline-app");
+  const username = root?.dataset?.username || "";
+
+  return (
+    <nav className="bg-white shadow-sm border-b dark:bg-gray-800 text-sm">
+      <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-9">
+        <span className="font-bold text-lg text-indigo-600 dark:text-indigo-400">
+          Hiver
+        </span>
+        <div className="flex items-center gap-4">
+          <a
+            href="http://127.0.0.1:8001"
+            className="text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400"
+          >
+            Social Feed
+          </a>
+          <a
+            href="http://127.0.0.1:8002"
+            className="text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400"
+          >
+            Poly
+          </a>
+          {username && (
+            <span
+              className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium dark:bg-purple-900 dark:text-purple-200"
+              title={username}
+            >
+              {username.length > 24 ? username.slice(0, 24) + "…" : username}
+            </span>
+          )}
+          <span
+            id="meshBadge"
+            className={
+              "text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-medium dark:bg-green-900 dark:text-green-200" +
+              (meshActive ? "" : " hidden")
+            }
+          >
+            Sovereign Mesh Active
+          </span>
+          <button
+            onClick={handleLogout}
+            className="text-sm text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer dark:text-red-400 dark:hover:text-red-300"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+};
+
+export default SovereignHeader;

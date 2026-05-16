@@ -451,6 +451,46 @@ class WikiPage(models.Model):
         super().save(*args, **kwargs)
 
 
+class EvidenceSignature(models.Model):
+    """
+    Cryptographic proof record anchored to evidence documents.
+
+    Stores signatures received from the Desktop Vault (Tauri bridge :9001)
+    via the sign_evidence message type. Supports multi-sig: multiple DIDs
+    can sign a single RawDocument (e.g. Joint Agreements).
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+    )
+    document = models.ForeignKey(
+        'RawDocument',
+        on_delete=models.CASCADE,
+        related_name='signatures',
+        help_text="The signed evidence document",
+    )
+    signer_did = models.CharField(
+        max_length=512,
+        help_text="DID of the signer (from OIDC sub claim)",
+    )
+    signature = models.TextField(
+        help_text="Cryptographic signature returned by the Tauri bridge",
+    )
+    timestamp = models.DateTimeField(
+        default=timezone.now,
+        help_text="When the signature was created",
+    )
+
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = 'Evidence Signature'
+        verbose_name_plural = 'Evidence Signatures'
+
+    def __str__(self):
+        return f"Signature by {self.signer_did} on {self.document} at {self.timestamp}"
+
+
 class SchemaRule(models.Model):
     """
     Layer 3: Schema Rules for LLM formatting.

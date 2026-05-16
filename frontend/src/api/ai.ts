@@ -55,8 +55,8 @@ export const aiApi = {
   }) => api.post("/save-api-key/", settings),
 
   // Query timeline with AI - POST /ai/query-timeline/
-  queryTimeline: (query: string, caseId?: string, documentContent?: string) =>
-    api.post("/query-timeline/", { query, case_id: caseId, document_content: documentContent }),
+  queryTimeline: (query: string, caseId?: string, documentContent?: string, perspectiveMode?: string) =>
+    api.post("/query-timeline/", { query, case_id: caseId, document_content: documentContent, perspective_mode: perspectiveMode }),
 
   // Analyze a document - POST /ai/analyze/
   analyzeDocument: (documentId: string, text?: string) =>

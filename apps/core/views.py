@@ -28,37 +28,28 @@ logger = logging.getLogger(__name__)
 
 def react_app_view(request):
     """
-    Serve the React app with case_id from session.
+    Sovereign Entrance Gate: Serve the React SPA with OIDC session context.
     
-    The React app expects data-case-id attribute on the root div.
-    If no case is selected, auto-select the user's first case.
-    If user has NO cases, create a "Default Workspace" case automatically.
+    Redirects unauthenticated requests to the OIDC provider.
+    For authenticated users, resolves active case session state from
+    the existing session or the user's first available Case.
     """
-    # Redirect unauthenticated users to login
     if not request.user.is_authenticated:
-        return redirect('/accounts/login/')
-    
-    case_id = request.session.get('selected_case_id', '')
-    
-    # If user is authenticated but no case selected, auto-select their first case
-    if not case_id:
+        return redirect('oidc_authentication_init')
+
+    active_case_id = request.session.get('selected_case_id', '')
+    if not active_case_id:
         user_case = Case.objects.filter(user=request.user).first()
-        
-        # AUTO-CREATE: If user has zero cases, create a default one
-        if not user_case:
-            user_case = Case.objects.create(
-                name="Default Workspace",
-                description="Auto-created workspace for new user",
-                user=request.user,
-                color="#3B82F6"
-            )
-            logger.info(f"Auto-created default case for user {request.user.username}")
-        
         if user_case:
-            case_id = str(user_case.id)
-            request.session['selected_case_id'] = case_id
-    
-    return render(request, 'frontend/index.html', {'case_id': case_id})
+            active_case_id = str(user_case.id)
+            request.session['selected_case_id'] = active_case_id
+
+    context = {
+        'username': request.user.username,
+        'active_case_id': active_case_id if active_case_id else None,
+    }
+
+    return render(request, 'frontend/index.html', context)
 
 
 # ============================================================================

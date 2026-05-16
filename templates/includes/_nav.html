@@ -1,0 +1,31 @@
+<nav class="mesh-nav">
+    <div class="mesh-nav-inner">
+        <span class="mesh-nav-brand">Hiver</span>
+        <div class="mesh-nav-links">
+            <a href="http://127.0.0.1:8001" class="mesh-nav-link">Social Feed</a>
+            <a href="http://127.0.0.1:8002" class="mesh-nav-link">Poly</a>
+            <span id="meshBadge" class="mesh-badge hidden">Sovereign Mesh Active</span>
+            {% if user.is_authenticated %}
+                <span class="mesh-user" title="{{ user.username }}">
+                    {% if "did:" in user.username %}{{ user.username|truncatechars:24 }}{% else %}{{ user.username }}{% endif %}
+                </span>
+                <form action="{% url 'oidc_logout' %}" method="post" class="mesh-logout-form">
+                    {% csrf_token %}
+                    <button type="submit" class="mesh-logout-btn">Logout</button>
+                </form>
+            {% else %}
+                <a href="{% url 'oidc_authentication_init' %}" class="mesh-login-link">Login</a>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var badge = document.getElementById("meshBadge");
+    if (!badge) return;
+    fetch("http://127.0.0.1:9001/", { signal: AbortSignal.timeout(300) })
+        .then(function (r) { if (r.ok) badge.classList.remove("hidden"); })
+        .catch(function () {});
+});
+</script>

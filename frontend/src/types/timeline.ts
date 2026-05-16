@@ -136,3 +136,6 @@ export interface UserContext {
   party: SourceParty;
   canContest: (event: TimelineEvent) => boolean;
 }
+
+// AI Research Perspective
+export type PerspectiveMode = 'CLIENT' | 'NEUTRAL' | 'OPPOSING';

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import SovereignHeader from "./SovereignHeader";
 import CaseSelector from "./CaseSelector";
 import FileTree from "./FileTree";
 import AIAssistantChat from "./AIAssistantChat";
@@ -364,6 +365,8 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="h-screen flex flex-col bg-white text-gray-900">
+      {/* Sovereign Mesh Nav */}
+      <SovereignHeader />
       {/* Top Navigation Bar - Hiver Light Theme */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="flex items-center justify-between max-w-full">

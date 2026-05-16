@@ -1,18 +1,26 @@
+{% load static %}
+{% load assets %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-gray-50">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hiver Frontend</title>
-    {% load assets %}
-    {% get_vite_assets as vite_assets %}
-    <script type="module" crossorigin src="{{ vite_assets.js }}"></script>
-    <link rel="stylesheet" crossorigin href="{{ vite_assets.css }}">
+    <title>iyou_hiver // Sovereign Archive Vault</title>
+    {% render_vite_assets %}
 </head>
-<body class="bg-white">
-    <div id="timeline-app" 
-         data-case-id="{{ case_id }}"
-         data-user-party="{{ user_party }}">
+<body class="h-full text-gray-900 font-sans antialiased">
+
+    <div id="timeline-app"
+         data-username="{{ username }}"
+         data-case-id="{{ active_case_id }}"
+         class="min-h-screen">
+        <div class="flex items-center justify-center min-h-screen">
+            <div class="text-center">
+                <div class="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent mx-auto"></div>
+                <p class="mt-4 text-sm text-gray-500 font-mono">Initializing Hiver Secure Context...</p>
+            </div>
+        </div>
     </div>
+
 </body>
 </html>
