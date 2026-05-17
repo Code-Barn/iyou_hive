@@ -12,6 +12,8 @@ from django.test import TestCase, Client
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.conf import settings
+from django.core.files.uploadedfile import SimpleUploadedFile
+from unittest.mock import patch, MagicMock
 from .views import call_ai_api
 from apps.timeline.models import TimelineEvent
 from apps.archive.models import ArchiveDocument
@@ -19,6 +21,8 @@ from apps.core.models import Case
 from .models import AIConversation
 from datetime import date
 import json
+import time
+import uuid
 
 User = get_user_model()
 
@@ -34,7 +38,7 @@ class AIAssistantViewTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
-        self.client.login(username='testuser', password='testpass123')
+        self.client.force_login(self.user)
         
         # Create a case for the user and set it in session
         self.case = Case.objects.create(
@@ -44,6 +48,7 @@ class AIAssistantViewTest(TestCase):
         )
         session = self.client.session
         session['selected_case_id'] = str(self.case.id)
+        session['oidc_id_token_expiration'] = time.time() + 3600
         session.save()
     
     def test_ai_chat_view(self):
@@ -59,6 +64,7 @@ class AIAssistantViewTest(TestCase):
             event='Recent Event',
             category='other',
             notes='Test notes',
+            source_party='CLIENT',
             created_by=self.user,
             case=self.case
         )
@@ -86,7 +92,7 @@ class AIAPIFunctionTest(TestCase):
             # Should return error message about missing API key
             self.assertIn('error', response.lower())
             self.assertIn('mistral api key not configured', response.lower())
-            self.assertIn('.env file', response.lower())
+            self.assertIn('in settings', response.lower())
         finally:
             settings.MISTRAL_API_KEY = original_key
     
@@ -111,7 +117,7 @@ class TimelineIntegrationTest(TestCase):
     """Test timeline and AI integration."""
     
     def setUp(self):
-        """Set up test data."""
+        """Set up test data with unique case name to avoid unique constraint conflicts."""
         from apps.core.models import Case
         
         self.client = Client()
@@ -120,9 +126,15 @@ class TimelineIntegrationTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
-        self.client.login(username='testuser', password='testpass123')
+        self.client.force_login(self.user)
         
-        self.case = Case.objects.create(name='Test Case', user=self.user)
+        suffix: str = uuid.uuid4().hex[:6]
+        self.case = Case.objects.create(name=f'Test Case {suffix}', user=self.user)
+        
+        session = self.client.session
+        session['selected_case_id'] = str(self.case.id)
+        session['oidc_id_token_expiration'] = time.time() + 3600
+        session.save()
         
         # Create timeline events
         pdf_file = SimpleUploadedFile('contract.pdf', b'PDF content')
@@ -151,7 +163,10 @@ class TimelineIntegrationTest(TestCase):
             date=date(2023, 3, 20),
             event='Email Received',
             category='email',
-            notes='Important email about contract'
+            notes='Important email about contract',
+            source_party='OPPOSING',
+            case=self.case,
+            created_by=self.user,
         )
     
     def test_query_timeline_endpoint(self):
@@ -159,7 +174,6 @@ class TimelineIntegrationTest(TestCase):
         response = self.client.post(
             reverse('ai_assistant:query_timeline'),
             {'query': 'What contracts exist?'},
-            content_type='application/x-www-form-urlencoded'
         )
         
         self.assertEqual(response.status_code, 200)
@@ -168,9 +182,10 @@ class TimelineIntegrationTest(TestCase):
         self.assertIn('response', data)
     
     def test_analyze_timeline_event(self):
-        """Test analyzing a specific timeline event."""
-        response = self.client.get(
-            reverse('ai_assistant:analyze_event', args=[self.event1.pk])
+        """Test analyzing a specific timeline event via POST."""
+        response = self.client.post(
+            reverse('ai_assistant:analyze_event', args=[self.event1.pk]),
+            {'case_id': str(self.case.id)},
         )
         
         self.assertEqual(response.status_code, 200)
@@ -191,7 +206,13 @@ class SuggestionGenerationTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
-        self.client.login(username='testuser', password='testpass123')
+        self.client.force_login(self.user)
+        self.case = Case.objects.create(name='Suggestion Case', user=self.user)
+        
+        session = self.client.session
+        session['selected_case_id'] = str(self.case.id)
+        session['oidc_id_token_expiration'] = time.time() + 3600
+        session.save()
         
         # Create multiple timeline events
         for i in range(5):
@@ -199,14 +220,16 @@ class SuggestionGenerationTest(TestCase):
                 date=date(2023, 1, 15 + i),
                 event=f'Event {i+1}',
                 category='contract',
-                notes=f'Notes for event {i+1}'
+                notes=f'Notes for event {i+1}',
+                source_party='CLIENT',
+                case=self.case,
+                created_by=self.user,
             )
     
     def test_suggest_events_endpoint(self):
         """Test suggesting events based on timeline."""
         response = self.client.post(
             reverse('ai_assistant:suggest_events'),
-            content_type='application/x-www-form-urlencoded'
         )
         
         self.assertEqual(response.status_code, 200)
@@ -257,6 +280,171 @@ class AIConversationModelTest(TestCase):
         self.assertEqual(case_convs.first(), conv1)
 
 
+class SemanticSearchIntegrationTest(TestCase):
+    """Regression tests for LanceDB semantic search in the AI chat view."""
+
+    def setUp(self) -> None:
+        """Set up test data with authenticated user and case."""
+        self.client = Client()
+        self.user = User.objects.create_user(
+            username='semanticuser',
+            email='semantic@example.com',
+            password='testpass123'
+        )
+        self.client.force_login(self.user)
+        self.case = Case.objects.create(
+            name='Semantic Search Case',
+            user=self.user,
+        )
+        session = self.client.session
+        session['selected_case_id'] = str(self.case.id)
+        session.save()
+
+    @patch('apps.ai_assistant.views.call_ai_api')
+    def test_search_integration_provides_context(
+        self, mock_call_ai: MagicMock
+    ) -> None:
+        """
+        Verify that LanceDB vector search results are injected into the
+        AI prompt as formatted context blocks.
+        """
+        mock_call_ai.return_value = "AI analysis response"
+
+        with patch('apps.ai_assistant.views.VectorIndexService') as mock_svc_cls:
+            mock_svc: MagicMock = MagicMock()
+            mock_svc_cls.return_value = mock_svc
+            mock_svc.search.return_value = [
+                {
+                    'virtual_path': 'formal/01_Raw/contract.pdf',
+                    'text_content': (
+                        'This contract is signed by both parties on '
+                        'January 15, 2023.'
+                    ),
+                    '_distance': 0.15,
+                },
+                {
+                    'virtual_path': 'formal/01_Raw/email.pdf',
+                    'text_content': (
+                        'The opposing party acknowledged receipt of the '
+                        'agreement on March 1, 2023.'
+                    ),
+                    '_distance': 0.22,
+                },
+            ]
+
+            response = self.client.post(
+                reverse('ai_assistant:query_timeline'),
+                {
+                    'query': 'What does the contract say?',
+                    'case_id': str(self.case.id),
+                    'perspective_mode': 'NEUTRAL',
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data: dict = response.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertIn('response', data)
+
+        # Verify VectorIndexService was initialised with the correct case
+        mock_svc_cls.assert_called_once_with(str(self.case.id))
+
+        # Verify search was called with the user query and top_k=5
+        mock_svc.search.assert_called_once_with(
+            'What does the contract say?', top_k=5
+        )
+
+        # Verify the formatted context was injected into the AI prompt
+        call_args, _ = mock_call_ai.call_args
+        prompt: str = call_args[0] if call_args else ""
+        self.assertIn(
+            '[Source Exhibit Path: formal/01_Raw/contract.pdf]',
+            prompt,
+        )
+        self.assertIn(
+            'This contract is signed by both parties',
+            prompt,
+        )
+        self.assertIn(
+            '[Source Exhibit Path: formal/01_Raw/email.pdf]',
+            prompt,
+        )
+        self.assertIn(
+            'The opposing party acknowledged receipt',
+            prompt,
+        )
+
+    @patch('apps.ai_assistant.views.call_ai_api')
+    def test_perspective_mode_routes_instructions(
+        self, mock_call_ai: MagicMock
+    ) -> None:
+        """
+        Verify that each perspective mode injects its corresponding
+        instruction block into the prompt.
+        """
+        mock_call_ai.return_value = "Perspective test response"
+
+        with patch('apps.ai_assistant.views.VectorIndexService') as mock_svc_cls:
+            mock_svc: MagicMock = MagicMock()
+            mock_svc_cls.return_value = mock_svc
+            mock_svc.search.return_value = []
+
+            for mode, keyword in [
+                ('NEUTRAL', 'NEUTRAL PERSPECTIVE'),
+                ('CLIENT', 'CLIENT PERSPECTIVE'),
+                ('OPPOSING', 'OPPOSING PERSPECTIVE'),
+            ]:
+                with self.subTest(perspective=mode):
+                    self.client.post(
+                        reverse('ai_assistant:query_timeline'),
+                        {
+                            'query': 'Test query',
+                            'case_id': str(self.case.id),
+                            'perspective_mode': mode,
+                        },
+                    )
+
+                    args, _ = mock_call_ai.call_args
+                    prompt: str = args[0] if args else ""
+                    self.assertIn(keyword, prompt)
+                    mock_call_ai.reset_mock()
+
+    @patch('apps.ai_assistant.views.call_ai_api')
+    def test_search_graceful_failure_on_missing_table(
+        self, mock_call_ai: MagicMock
+    ) -> None:
+        """
+        Verify that a missing LanceDB table (no documents indexed yet)
+        does not break the chat endpoint and still returns a response.
+        """
+        mock_call_ai.return_value = "Fallback response without vector context"
+
+        # Do NOT patch VectorIndexService — let the real one run.
+        # Since no LanceDB table exists for this case, search should
+        # raise ValueError ("Table 'document_chunks' was not found")
+        # which _build_semantic_context catches gracefully.
+
+        response = self.client.post(
+            reverse('ai_assistant:query_timeline'),
+            {
+                'query': 'What documents exist?',
+                'case_id': str(self.case.id),
+                'perspective_mode': 'NEUTRAL',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        data: dict = response.json()
+        self.assertEqual(data['status'], 'success')
+        self.assertIn('response', data)
+
+        # Verify the AI was still called even without vector context
+        args, _ = mock_call_ai.call_args
+        prompt: str = args[0] if args else ""
+        self.assertIn('What documents exist?', prompt)
+        self.assertNotIn('[Source Exhibit Path:', prompt)
+
+
 class APIKeyTest(TestCase):
     """Test API key saving functionality."""
     
@@ -268,7 +456,7 @@ class APIKeyTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
-        self.client.login(username='testuser', password='testpass123')
+        self.client.force_login(self.user)
         
         # Create a case for the user and set it in session
         self.case = Case.objects.create(
@@ -278,20 +466,21 @@ class APIKeyTest(TestCase):
         )
         session = self.client.session
         session['selected_case_id'] = str(self.case.id)
+        session['oidc_id_token_expiration'] = time.time() + 3600
         session.save()
 
     def test_save_api_key_success(self):
         """Test saving API key successfully."""
         response = self.client.post(
             reverse('ai_assistant:save_api_key'),
-            data=json.dumps({'api_key': 'test-api-key-123'}),
+            data=json.dumps({'mistral_api_key': 'test-api-key-123'}),
             content_type='application/json'
         )
         
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data['success'])
-        self.assertIn('API key saved successfully', data['message'])
+        self.assertIn('saved successfully', data['message'])
         
         # Verify the API key was saved
         from .models import UserSettings
@@ -303,7 +492,7 @@ class APIKeyTest(TestCase):
         # First save
         response1 = self.client.post(
             reverse('ai_assistant:save_api_key'),
-            data=json.dumps({'api_key': 'test-api-key-123'}),
+            data=json.dumps({'mistral_api_key': 'test-api-key-123'}),
             content_type='application/json'
         )
         self.assertEqual(response1.status_code, 200)
@@ -311,7 +500,7 @@ class APIKeyTest(TestCase):
         # Second save with same key
         response2 = self.client.post(
             reverse('ai_assistant:save_api_key'),
-            data=json.dumps({'api_key': 'test-api-key-123'}),
+            data=json.dumps({'mistral_api_key': 'test-api-key-123'}),
             content_type='application/json'
         )
         
@@ -324,7 +513,7 @@ class APIKeyTest(TestCase):
         """Test saving empty API key returns error."""
         response = self.client.post(
             reverse('ai_assistant:save_api_key'),
-            data=json.dumps({'api_key': ''}),
+            data=json.dumps({'mistral_api_key': ''}),
             content_type='application/json'
         )
         

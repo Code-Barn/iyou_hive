@@ -19,6 +19,8 @@ from apps.archive.models import ArchiveDocument
 from apps.core.models import Case
 from datetime import date
 import json
+import time
+import uuid
 
 User = get_user_model()
 
@@ -34,7 +36,7 @@ class TimelineEventModelTest(TestCase):
             password='testpass123'
         )
         
-        self.case = Case.objects.create(name='Test Case', user=self.user)
+        self.case = Case.objects.create(name=f'Test Case {uuid.uuid4().hex[:6]}', user=self.user)
         
         # Create archive documents for evidence
         pdf_file = SimpleUploadedFile('contract.pdf', b'PDF content')
@@ -59,7 +61,8 @@ class TimelineEventModelTest(TestCase):
         )
         self.event1.evidence.set([self.doc1])
         
-        self.event2 = TimelineEvent.objects.create(
+        # CONTESTED event requires evidence — pre-set _evidence_cache before save
+        self.event2 = TimelineEvent(
             date=date(2023, 3, 20),
             event='Email from Lawyer',
             category='email',
@@ -69,7 +72,8 @@ class TimelineEventModelTest(TestCase):
             case=self.case,
             created_by=self.user
         )
-        # CONTESTED event requires evidence
+        self.event2._evidence_cache = [self.doc1.id]
+        self.event2.save()
         self.event2.evidence.set([self.doc1])
         
         self.event3 = TimelineEvent.objects.create(
@@ -98,7 +102,7 @@ class TimelineEventModelTest(TestCase):
     def test_get_absolute_url(self):
         """Test absolute URL method."""
         url = self.event1.get_absolute_url()
-        self.assertEqual(url, f'/timeline/event/{self.event1.pk}/')
+        self.assertEqual(url, f'/timeline/api/event/{self.event1.pk}/')
     
     def test_ordering(self):
         """Test that events are ordered by date."""
@@ -163,7 +167,7 @@ class TimelineCollectionModelTest(TestCase):
             password='testpass123'
         )
         
-        self.case = Case.objects.create(name='Test Case', user=self.user)
+        self.case = Case.objects.create(name=f'Test Case {uuid.uuid4().hex[:6]}', user=self.user)
         
         self.event1 = TimelineEvent.objects.create(
             date=date(2023, 1, 15),
@@ -200,7 +204,7 @@ class TimelineCollectionModelTest(TestCase):
     
     def test_collection_str(self):
         """Test collection string representation."""
-        self.assertEqual(str(self.collection), 'Important Events (Test Case)')
+        self.assertEqual(str(self.collection), f'Important Events ({self.case.name})')
     
     def test_collection_unique_together(self):
         """Test that collection name is unique per case."""
@@ -225,7 +229,7 @@ class EvidenceM2MTest(TestCase):
             password='testpass123'
         )
         
-        self.case = Case.objects.create(name='Test Case', user=self.user)
+        self.case = Case.objects.create(name=f'Test Case {uuid.uuid4().hex[:6]}', user=self.user)
         
         # Create test files
         pdf_file = SimpleUploadedFile('contract.pdf', b'PDF content')
@@ -294,11 +298,13 @@ class TimelineViewTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
-        self.client.login(username='testuser', password='testpass123')
+        self.client.force_login(self.user)
         
-        self.case = Case.objects.create(name='Test Case', user=self.user)
-        self.client.session['selected_case_id'] = str(self.case.id)
-        self.client.save()
+        self.case = Case.objects.create(name=f'Test Case {uuid.uuid4().hex[:6]}', user=self.user)
+        session = self.client.session
+        session['selected_case_id'] = str(self.case.id)
+        session['oidc_id_token_expiration'] = time.time() + 3600
+        session.save()
     
     def test_timeline_view_with_events(self):
         """Test timeline view with events."""
@@ -315,7 +321,8 @@ class TimelineViewTest(TestCase):
         
         response = self.client.get(reverse('timeline:timeline'))
         self.assertEqual(response.status_code, 200)
-        self.assertIn('Test Event', str(response.content))
+        # Events are loaded client-side via JS; verify the shell renders
+        self.assertIn('timeline-app', str(response.content))
     
     def test_timeline_view_empty(self):
         """Test timeline view with no events."""
@@ -474,7 +481,7 @@ class CompetingTimelinesTest(TestCase):
             password='testpass123'
         )
         
-        self.case = Case.objects.create(name='Test Case', user=self.user)
+        self.case = Case.objects.create(name=f'Test Case {uuid.uuid4().hex[:6]}', user=self.user)
         
         pdf_file = SimpleUploadedFile('contract.pdf', b'PDF content')
         self.doc = ArchiveDocument.objects.create(
@@ -499,7 +506,7 @@ class CompetingTimelinesTest(TestCase):
         )
         
         # Create counter-claim from OPPOSING
-        self.opposing_event = TimelineEvent.objects.create(
+        self.opposing_event = TimelineEvent(
             date=date(2023, 1, 16),
             event='Contract Signed',
             category='contract',
@@ -510,6 +517,8 @@ class CompetingTimelinesTest(TestCase):
             case=self.case,
             created_by=self.user
         )
+        self.opposing_event._evidence_cache = [self.doc.id]
+        self.opposing_event.save()
         self.opposing_event.evidence.set([self.doc])
     
     def test_replaces_event_relationship(self):

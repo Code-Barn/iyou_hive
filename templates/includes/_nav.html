@@ -9,9 +9,9 @@
                 <span class="mesh-user" title="{{ user.username }}">
                     {% if "did:" in user.username %}{{ user.username|truncatechars:24 }}{% else %}{{ user.username }}{% endif %}
                 </span>
-                <form action="{% url 'oidc_logout' %}" method="post" class="mesh-logout-form">
+                <form action="{% url 'accounts:logout' %}" method="post" class="inline">
                     {% csrf_token %}
-                    <button type="submit" class="mesh-logout-btn">Logout</button>
+                    <button type="submit" class="text-sm font-mono text-gray-500 hover:text-gray-900 focus:outline-none">Logout</button>
                 </form>
             {% else %}
                 <a href="{% url 'oidc_authentication_init' %}" class="mesh-login-link">Login</a>

@@ -11,10 +11,14 @@ This module tests:
 """
 
 from django.test import TestCase, Client
+from django.test.utils import override_settings
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from unittest.mock import patch, MagicMock
+import numpy as np
 from .models import ArchiveDocument
+from .vector_service import VectorIndexService
 from apps.timeline.models import TimelineEvent
 from apps.core.models import Case
 from datetime import date
@@ -23,6 +27,7 @@ import json
 import os
 import tempfile
 import shutil
+import uuid
 
 User = get_user_model()
 
@@ -158,7 +163,7 @@ class PDFConversionTest(TestCase):
         from django.core.files.uploadedfile import SimpleUploadedFile
         
         client = Client()
-        client.login(username='testuser', password='testpass123')
+        client.force_login(self.user)
         
         # Create a case and set it in session
         case = Case.objects.create(
@@ -254,7 +259,7 @@ class DocumentUploadTest(TestCase):
             email='test@example.com',
             password='testpass123'
         )
-        self.client.login(username='testuser', password='testpass123')
+        self.client.force_login(self.user)
     
     def test_upload_view_requires_login(self):
         """Test that upload view requires login."""
@@ -347,8 +352,8 @@ class DocumentLinkingTest(TestCase):
     
     def test_document_to_event_linking(self):
         """Test linking documents to timeline events."""
-        # Documents are linked in setUp
-        docs = ArchiveDocument.objects.filter(timeline_event=self.event)
+        # Documents are linked in setUp via M2M related_name 'timeline_events'
+        docs = ArchiveDocument.objects.filter(timeline_events=self.event)
         self.assertEqual(docs.count(), 2)
         
         # Verify event can access documents via evidence M2M
@@ -450,3 +455,231 @@ class ArchiveDocumentCompartmentalizationTest(TestCase):
         self.assertEqual(case2_docs.count(), 1)
         self.assertEqual(case1_docs.first().title, 'Doc 1')
         self.assertEqual(case2_docs.first().title, 'Doc 2')
+
+
+class VectorIndexServiceTest(TestCase):
+    """Regression suite for the LanceDB vector indexing engine."""
+
+    def setUp(self):
+        """Set up test data with isolated temporary storage."""
+        self.user = User.objects.create_user(
+            username='vecuser',
+            email='vec@example.com',
+            password='testpass123'
+        )
+        self.case_a = Case.objects.create(name='Case A', user=self.user)
+        self.case_b = Case.objects.create(name='Case B', user=self.user)
+        self.temp_media = tempfile.mkdtemp()
+        self.temp_twins = tempfile.mkdtemp()
+
+    def tearDown(self):
+        """Clean up temporary directories."""
+        shutil.rmtree(self.temp_media, ignore_errors=True)
+        shutil.rmtree(self.temp_twins, ignore_errors=True)
+
+    def _make_twin(
+        self, virtual_path: str, body: str = "", folder: str = ""
+    ) -> str:
+        """Create a fake digital twin ``.md`` file and return its path."""
+        content = body or "Test content for vector indexing verification."
+        folder = folder or self.temp_twins
+        path = os.path.join(folder, f"twin_{uuid.uuid4().hex}.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(f"---\noriginal_name: test.pdf\nvirtual_path: {virtual_path}\n---\n\n{content}")
+        return path
+
+    # --- Frontmatter parsing unit tests --------------------------------
+
+    def test_parse_frontmatter_extracts_virtual_path(self):
+        """Verify ``_parse_frontmatter`` extracts ``virtual_path`` correctly."""
+        text = "---\noriginal_name: doc.pdf\nvirtual_path: case/evidence/doc.pdf\n---\n\nBody"
+        result = VectorIndexService._parse_frontmatter(text)
+        self.assertEqual(result.get("virtual_path"), "case/evidence/doc.pdf")
+
+    def test_parse_frontmatter_empty_when_no_frontmatter(self):
+        """Verify empty dict is returned when no frontmatter exists."""
+        result = VectorIndexService._parse_frontmatter("Just body text\nno frontmatter")
+        self.assertEqual(result, {})
+
+    def test_strip_frontmatter_removes_header(self):
+        """Verify frontmatter block is stripped from content."""
+        text = "---\nkey: val\n---\n\nBody text here"
+        stripped = VectorIndexService._strip_frontmatter(text)
+        self.assertNotIn("key: val", stripped)
+        self.assertIn("Body text here", stripped)
+
+    def test_strip_frontmatter_passthrough_when_none(self):
+        """Verify text passes through unchanged when no frontmatter exists."""
+        text = "Just body text"
+        self.assertEqual(VectorIndexService._strip_frontmatter(text), text)
+
+    # --- Chunking unit tests ------------------------------------------
+
+    def test_chunk_text_single_chunk(self):
+        """Verify text shorter than chunk size produces one chunk."""
+        text = "Short text"
+        chunks = VectorIndexService._chunk_text(text)
+        self.assertEqual(len(chunks), 1)
+        self.assertEqual(chunks[0], text)
+
+    def test_chunk_text_multiple_chunks(self):
+        """Verify text longer than chunk size is split correctly."""
+        text = "Word " * 200
+        chunks = VectorIndexService._chunk_text(text)
+        self.assertGreater(len(chunks), 1)
+        for c in chunks:
+            self.assertLessEqual(len(c), VectorIndexService.CHUNK_SIZE)
+
+    def test_chunk_text_overlap(self):
+        """Verify consecutive chunks share overlap content."""
+        text = "Hello World\n" * 30
+        chunks = VectorIndexService._chunk_text(text)
+        if len(chunks) >= 2:
+            prev_end = chunks[0][-VectorIndexService.CHUNK_OVERLAP:]
+            next_start = chunks[1][:VectorIndexService.CHUNK_OVERLAP]
+            self.assertTrue(
+                prev_end in chunks[1] or next_start in chunks[0],
+                "Expected overlap content between consecutive chunks"
+            )
+
+    def test_chunk_text_empty(self):
+        """Verify empty input returns empty list."""
+        self.assertEqual(VectorIndexService._chunk_text(""), [])
+        self.assertEqual(VectorIndexService._chunk_text("   "), [])
+
+    # --- Integration tests (mocked embeddings) -------------------------
+
+    @override_settings(MEDIA_ROOT=None)
+    def test_index_digital_twin_stores_rows(self):
+        """Verify indexing a twin produces at least one row in LanceDB."""
+        with override_settings(MEDIA_ROOT=self.temp_media):
+            mock_model = MagicMock()
+            mock_model.encode.return_value = np.zeros(384, dtype=np.float32)
+
+            doc = ArchiveDocument.objects.create(
+                title="Test Doc",
+                file_type="pdf",
+                case=self.case_a,
+                user=self.user,
+                uploader=self.user,
+            )
+            twin_path = self._make_twin(
+                virtual_path="test/sample.pdf",
+                body="Indexed content. " * 100,
+            )
+            svc = VectorIndexService(str(self.case_a.id))
+            with patch.object(svc, "_get_embedding_model", return_value=mock_model):
+                count = svc.index_digital_twin(twin_path, doc)
+
+        self.assertGreater(count, 0)
+        tbl = svc._get_db().open_table(VectorIndexService.TABLE_NAME)
+        stored = tbl.search([0.0] * 384).limit(count * 2).to_list()
+        self.assertEqual(len(stored), count)
+
+    @override_settings(MEDIA_ROOT=None)
+    def test_case_vector_isolation(self):
+        """
+        Verify that querying Case A's LanceDB returns zero fragments
+        belonging to Case B.
+        """
+        with override_settings(MEDIA_ROOT=self.temp_media):
+            mock_model = MagicMock()
+            mock_model.encode.return_value = np.zeros(384, dtype=np.float32)
+
+            doc_a = ArchiveDocument.objects.create(
+                title="Doc A", file_type="pdf",
+                case=self.case_a, user=self.user, uploader=self.user,
+            )
+            doc_b = ArchiveDocument.objects.create(
+                title="Doc B", file_type="pdf",
+                case=self.case_b, user=self.user, uploader=self.user,
+            )
+            path_a = self._make_twin(
+                virtual_path="case_a/doc.pdf",
+                body="Exclusive content for Case A. " * 200,
+            )
+            path_b = self._make_twin(
+                virtual_path="case_b/doc.pdf",
+                body="Exclusive content for Case B. " * 200,
+            )
+
+            svc_a = VectorIndexService(str(self.case_a.id))
+            svc_b = VectorIndexService(str(self.case_b.id))
+
+            with patch.object(svc_a, "_get_embedding_model", return_value=mock_model):
+                count_a = svc_a.index_digital_twin(path_a, doc_a)
+            with patch.object(svc_b, "_get_embedding_model", return_value=mock_model):
+                count_b = svc_b.index_digital_twin(path_b, doc_b)
+
+            self.assertGreater(count_a, 0)
+            self.assertGreater(count_b, 0)
+
+            tbl_a = svc_a._get_db().open_table(VectorIndexService.TABLE_NAME)
+            all_a = tbl_a.search([0.0] * 384).limit(count_a * 2).to_list()
+
+            doc_b_uuids = [r for r in all_a if r["document_uuid"] == str(doc_b.uuid)]
+            self.assertEqual(
+                len(doc_b_uuids), 0,
+                "Case A's vector store must not contain any chunks from Case B"
+            )
+
+    @override_settings(MEDIA_ROOT=None)
+    def test_metadata_path_retention(self):
+        """
+        Verify that pulled vector chunks maintain their original folder
+        trail string inside the returned payload schema.
+        """
+        with override_settings(MEDIA_ROOT=self.temp_media):
+            mock_model = MagicMock()
+            mock_model.encode.return_value = np.zeros(384, dtype=np.float32)
+
+            doc = ArchiveDocument.objects.create(
+                title="Path Doc", file_type="pdf",
+                case=self.case_a, user=self.user, uploader=self.user,
+            )
+            expected_path = "formal/01_Raw/contracts/signed/agreement.pdf"
+            twin_path = self._make_twin(
+                virtual_path=expected_path,
+                body="Path retention test content. " * 100,
+            )
+
+            svc = VectorIndexService(str(self.case_a.id))
+            with patch.object(svc, "_get_embedding_model", return_value=mock_model):
+                svc.index_digital_twin(twin_path, doc)
+
+            tbl = svc._get_db().open_table(VectorIndexService.TABLE_NAME)
+            results = tbl.search([0.0] * 384).limit(100).to_list()
+
+            self.assertGreater(len(results), 0)
+            for row in results:
+                self.assertEqual(
+                    row["virtual_path"], expected_path,
+                    "Each chunk must retain the original virtual_path"
+                )
+
+    @override_settings(MEDIA_ROOT=None)
+    def test_search_returns_results(self):
+        """Verify ``search()`` returns semantically similar chunks."""
+        with override_settings(MEDIA_ROOT=self.temp_media):
+            mock_model = MagicMock()
+            mock_model.encode.return_value = np.zeros(384, dtype=np.float32)
+
+            doc = ArchiveDocument.objects.create(
+                title="Search Doc", file_type="pdf",
+                case=self.case_a, user=self.user, uploader=self.user,
+            )
+            twin_path = self._make_twin(
+                virtual_path="search/test.pdf",
+                body="Semantic search target content for testing. " * 100,
+            )
+
+            svc = VectorIndexService(str(self.case_a.id))
+            with patch.object(svc, "_get_embedding_model", return_value=mock_model):
+                svc.index_digital_twin(twin_path, doc)
+                results = svc.search("test query", top_k=3)
+
+            self.assertGreater(len(results), 0)
+            self.assertIn("_distance", results[0])
+            self.assertIn("text_content", results[0])
+            self.assertIn("virtual_path", results[0])
+            self.assertIn("document_uuid", results[0])

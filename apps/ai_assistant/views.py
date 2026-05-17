@@ -10,7 +10,48 @@ from apps.ai_assistant.models import AIConversation
 from apps.ai_assistant.api_client import call_ai_api
 from apps.core.prompts import CROSS_EXAMINATION_PROMPT
 from apps.core.utils import validate_adversarial_disclaimers
+from apps.archive.vector_service import VectorIndexService
+from typing import Any, Optional
 import json
+
+
+def _build_semantic_context(case_id: str, query: str) -> str:
+    """
+    Retrieve semantically relevant document chunks from the case-isolated
+    LanceDB vector store and format them for LLM context injection.
+
+    Queries the case's ``document_chunks`` table with the raw user message
+    and formats the top-5 results into a clean markdown block that maps each
+    fragment back to its original folder path via the ``virtual_path``
+    column.
+
+    Args:
+        case_id: The UUID string of the active case.
+        query: The raw user message used as the vector search query.
+
+    Returns:
+        A formatted string of evidence blocks prefixed with
+        ``[Source Exhibit Path: ...]`` markers, or an empty string if the
+        vector store is unreachable or contains no matching chunks.
+    """
+    try:
+        svc: VectorIndexService = VectorIndexService(case_id)
+        results: list[dict[str, Any]] = svc.search(query, top_k=5)
+    except (ValueError, FileNotFoundError, Exception):
+        return ""
+
+    if not results:
+        return ""
+
+    blocks: list[str] = [
+        "--- Case Document Evidence (Semantic Search) ---"
+    ]
+    for row in results:
+        vpath: str = row.get("virtual_path", "unknown")
+        text: str = row.get("text_content", "")
+        blocks.append(f"[Source Exhibit Path: {vpath}]\nText: {text}")
+
+    return "\n\n".join(blocks)
 
 
 def get_ai_response(user_query: str, case_id: str, user=None) -> str:
@@ -70,6 +111,13 @@ def save_api_key(request):
         mistral_api_key = data.get('mistral_api_key', '').strip()
         gemini_api_key = data.get('gemini_api_key', '').strip()
         preferred_provider = data.get('preferred_provider', 'mistral').strip()
+        
+        # Require at least one API key
+        if not mistral_api_key and not gemini_api_key:
+            return JsonResponse(
+                {'error': 'API key is required'},
+                status=400,
+            )
         
         # Save the API key to user settings
         from .models import UserSettings
@@ -262,27 +310,41 @@ def query_timeline(request):
     if error_response:
         return error_response
 
-    perspective_instructions = {
+    perspective_instructions: dict[str, str] = {
+        'NEUTRAL': (
+            "You are an absolute objective legal analyst operating in "
+            "NEUTRAL PERSPECTIVE. Your sole duty is to strictly evaluate "
+            "the retrieved LanceDB evidence blocks. Outline undisputed facts "
+            "with clarity, flag evidential contradictions across directory "
+            "paths, and identify gaps in the documentary record. You must "
+            "not take a side or advocate for any party. Maintain clinical "
+            "impartiality at all times."
+        ),
         'CLIENT': (
-            "You are operating in CLIENT PERSPECTIVE — proactively align your analysis "
-            "with the client's case strategy. Highlight favorable evidence, identify "
-            "supporting precedents, and frame timelines to strengthen the client's position."
+            "You are a defensive legal advocate operating in CLIENT "
+            "PERSPECTIVE. Your task is to synthesise the LanceDB evidence "
+            "blocks to build core corroborating factual elements that "
+            "protect the client's position. Proactively identify supporting "
+            "evidence, frame timelines favourably, and construct a coherent "
+            "narrative aligned with the client's case strategy."
         ),
         'OPPOSING': (
-            "You are operating in OPPOSING PERSPECTIVE — apply a critical adversarial lens. "
-            "Proactively identify weaknesses, inconsistencies, and gaps in the presented "
-            "timeline. Flag potential counter-arguments and challenge assumptions."
-        ),
-        'NEUTRAL': (
-            "You are operating in NEUTRAL PERSPECTIVE — maintain strict objectivity. "
-            "Present balanced analysis without favoring any party. Note factual findings, "
-            "flag uncertainties, and avoid advocacy language."
+            "You are a hostile cross-examiner operating in OPPOSING "
+            "PERSPECTIVE. Your mandate is to scrutinise the extracted "
+            "snippets for notice violations, chronological holes, or "
+            "failures to meet evidentiary baselines. Apply the strictest "
+            "adversarial lens: challenge assumptions, flag inconsistencies, "
+            "identify missing corroboration, and probe for weaknesses in "
+            "the documentary chain of custody."
         ),
     }
-    perspective_prompt = perspective_instructions.get(
+    perspective_prompt: str = perspective_instructions.get(
         perspective_mode,
         perspective_instructions['NEUTRAL'],
     )
+
+    # --- Semantic retrieval from case-isolated LanceDB ---
+    semantic_context: str = _build_semantic_context(str(case.id), query)
 
     if event_id:
         # Query about specific event - ensure user owns it and it belongs to case
@@ -296,6 +358,8 @@ def query_timeline(request):
         evidence_list = [doc.title for doc in event.evidence.all()]
         evidence_str = ', '.join(evidence_list) if evidence_list else 'None'
         context = f"""{perspective_prompt}
+
+{semantic_context}
 
 Timeline Event Context (Case: {case_id}):
 Date: {event.date}
@@ -328,6 +392,8 @@ You are currently looking at the following document:
 --- End Document Context ---
 """
         context = f"""{perspective_prompt}
+
+{semantic_context}
 
 Legal Timeline Events (Case: {case_id}):
 {context_str}

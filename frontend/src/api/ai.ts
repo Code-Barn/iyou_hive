@@ -1,8 +1,12 @@
 import axios from "axios";
 
+axios.defaults.withCredentials = true;
+axios.defaults.xsrfCookieName = 'hiver_csrftoken';
+axios.defaults.xsrfHeaderName = 'X-CSRFToken';
+
 // Function to get CSRF token from cookie
 function getCSRFToken(): string | null {
-  const name = "csrftoken";
+  const name = "hiver_csrftoken";
   let cookieValue: string | null = null;
   if (document.cookie && document.cookie !== "") {
     const cookies = document.cookie.split(";");

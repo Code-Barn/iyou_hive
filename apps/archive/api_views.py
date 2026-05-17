@@ -426,6 +426,14 @@ class DocumentUploadView(APIView):
                         doc.conversion_status = 'SUCCESS'
                         doc.markdown_path = twin_rel_path
                         doc.save()
+
+                        try:
+                            from .vector_service import VectorIndexService
+                            VectorIndexService(str(case.id)).index_digital_twin(
+                                str(processed_path), doc
+                            )
+                        except Exception as ve:
+                            print(f"Vector indexing failed for {doc.title}: {ve}")
                         
                 except Exception as e:
                     doc.conversion_status = 'FAILED'
