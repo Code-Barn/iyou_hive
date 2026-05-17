@@ -28,14 +28,11 @@ logger = logging.getLogger(__name__)
 
 def react_app_view(request):
     """
-    Sovereign Entrance Gate: Serve the React SPA with OIDC session context.
-    
-    Redirects unauthenticated requests to the OIDC provider.
-    For authenticated users, resolves active case session state from
-    the existing session or the user's first available Case.
+    Sovereign Entrance Gate: Route to the legacy Django workspace for
+    anonymous traffic, or the React SPA for authenticated sessions.
     """
     if not request.user.is_authenticated:
-        return redirect('oidc_authentication_init')
+        return render(request, 'core/case_list.html')
 
     active_case_id = request.session.get('selected_case_id', '')
     if not active_case_id:
@@ -46,7 +43,7 @@ def react_app_view(request):
 
     context = {
         'username': request.user.username,
-        'active_case_id': active_case_id if active_case_id else None,
+        'active_case_id': active_case_id if active_case_id else '',
     }
 
     return render(request, 'frontend/index.html', context)

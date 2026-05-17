@@ -35,7 +35,7 @@ except ImportError:
         return None
 
 from legal_utils import (
-    is_readable, extract_form_fields, extract_text_from_pdf
+    is_readable, extract_form_fields, extract_text_from_pdf, extract_checkboxes
 )
 
 def ocr_pdf_images(pdf_path):
@@ -62,14 +62,40 @@ def ocr_pdf_images(pdf_path):
         print(f"  -> Local OCR error: {e}")
     return "\n".join(text_parts)
 
-def build_markdown_with_form(text, form_data):
+def build_markdown_with_form(text, form_data, checkboxes, original_name="", virtual_path=""):
     lines = []
+    
+    name = original_name or Path(virtual_path).name if virtual_path else original_name
+    vpath = virtual_path or original_name
+    
+    lines.append("---")
+    lines.append(f"original_name: {name}")
+    lines.append(f"virtual_path: {vpath}")
+    lines.append("---")
+    lines.append("")
+    
+    if vpath and "/" in vpath:
+        parts = vpath.split("/")
+        path_chain = " -> ".join(
+            f"📁 {p}" if i < len(parts) - 1 else f"📄 {p}"
+            for i, p in enumerate(parts)
+        )
+        lines.append("# Structural Path Context")
+        lines.append(path_chain)
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+    
     if text:
         lines.append(text.strip())
     if form_data:
         lines.append("\n## Form Fields\n")
         for key, value in form_data.items():
             lines.append(f"- **{key}**: {value}")
+    if checkboxes:
+        lines.append("\n## Checkboxes Checked\n")
+        for key, info in checkboxes.items():
+            lines.append(f"- [{info.get('mark', '')}] {info.get('label', '')}")
     return "\n".join(lines)
 
 def get_llm_converter():
@@ -84,16 +110,16 @@ def get_llm_converter():
         print(f"Warning: Could not initialize Gemini client: {e}")
         return None
 
-def convert_pdf_to_markdown(pdf_path):
+def convert_pdf_to_markdown(pdf_path, original_name="", virtual_path=""):
     pdf_path = Path(pdf_path)
     md_path = pdf_path.with_suffix(".md")
 
     form_data = {}
+    checkboxes = {}
     text = ""
     llm_client = get_llm_converter()
 
     try:
-        # Use pdftotext - best text extraction
         try:
             result = subprocess.run(
                 ['pdftotext', '-layout', str(pdf_path), '-'],
@@ -104,7 +130,6 @@ def convert_pdf_to_markdown(pdf_path):
         except Exception:
             pass
 
-        # Fallback to pdfplumber
         if not text:
             try:
                 with pdfplumber.open(str(pdf_path)) as pdf:
@@ -113,13 +138,16 @@ def convert_pdf_to_markdown(pdf_path):
             except Exception:
                 pass
 
-        # Try form extraction
         try:
             form_data = extract_form_fields(str(pdf_path))
         except Exception:
             pass
 
-        # Try OCR for empty or short text
+        try:
+            checkboxes = extract_checkboxes(str(pdf_path))
+        except Exception:
+            pass
+
         if len(text.strip()) < 300:
             if llm_client:
                 try:
@@ -140,7 +168,7 @@ def convert_pdf_to_markdown(pdf_path):
         if len(text.strip()) < 300:
             text = text + "\n\n[Note: This PDF may contain images. OCR processing may be incomplete.]"
 
-        combined = build_markdown_with_form(text, form_data)
+        combined = build_markdown_with_form(text, form_data, checkboxes, original_name, virtual_path)
 
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(combined)
@@ -150,15 +178,17 @@ def convert_pdf_to_markdown(pdf_path):
         raise e
 
 
-def process_document(file_path: str, output_dir: str = None) -> str:
+def process_document(file_path: str, output_dir: str = None, original_name: str = "", virtual_path: str = "") -> str:
     """
-    TASK 4: Router pattern for filetype-based processing.
+    Router pattern for filetype-based processing.
     
     Routes to the appropriate processing script based on file extension.
     
     Args:
         file_path (str): Absolute path to the uploaded file
         output_dir (str, optional): Output directory. Defaults to same as input.
+        original_name (str): Original filename from the upload
+        virtual_path (str): Relative directory path from webkitRelativePath
     
     Returns:
         str: Path to the processed/converted file
@@ -176,31 +206,17 @@ def process_document(file_path: str, output_dir: str = None) -> str:
     file_path = Path(file_path)
     file_ext = file_path.suffix.lower()
     
-    # PDF: Convert to Markdown
     if file_ext == '.pdf':
-        md_path = convert_pdf_to_markdown(str(file_path))
+        md_path = convert_pdf_to_markdown(str(file_path), original_name, virtual_path)
         return md_path
     
-    # JSON: Future - Phone records conversion
     if file_ext == '.json':
-        # Placeholder for JSON processing (phone records, etc.)
-        # from scripts import process_json
-        # return process_json(file_path, output_dir)
         return str(file_path)
     
-    # HTML/EML: Future - Email conversion
     if file_ext in ['.html', '.htm', '.eml']:
-        # Placeholder for email processing
-        # from scripts import process_email
-        # return process_email(file_path, output_dir)
         return str(file_path)
     
-    # Word documents: Future
     if file_ext in ['.doc', '.docx']:
-        # Placeholder for Word processing
-        # from scripts import process_word
-        # return process_word(file_path, output_dir)
         return str(file_path)
     
-    # Default: No conversion, return original
     return str(file_path)

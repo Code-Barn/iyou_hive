@@ -13,10 +13,10 @@
 </head>
 <body>
     {% include 'includes/_nav.html' %}
-    <div class="workspace">
+    <div class="workspace{% if not user.is_authenticated %} workspace-anon{% endif %}">
         <header class="workspace-header">
             <div class="case-selector">
-                <select id="case-selector" aria-label="Select case" onchange="switchCase(this.value)">
+                <select id="case-selector" aria-label="Select case" onchange="switchCase(this.value)"{% if not user.is_authenticated %} disabled{% endif %}>
                     <option value="">-- Select Case --</option>
                     {% for case in case_list %}
                     <option value="{{ case.id }}" {% if current_case.id == case.id %}selected{% endif %}>
@@ -47,6 +47,12 @@
                 </button>
             </div>
         </header>
+
+        {% if not user.is_authenticated %}
+        <div class="anon-notice">
+            <p>🔒 You are viewing a preview. <a href="{% url 'oidc_authentication_init' %}">Log in with iyou_idp</a> to access your cases.</p>
+        </div>
+        {% endif %}
         
         <div class="workspace-body">
             <div id="timeline-pane" class="workspace-pane" data-pane="timeline">
@@ -85,6 +91,40 @@
             </div>
         </div>
     </div>
+
+    <style>
+    .workspace-anon {
+        filter: grayscale(0.4);
+        pointer-events: none;
+        user-select: none;
+    }
+    .workspace-anon .mesh-nav {
+        filter: none;
+        pointer-events: auto;
+    }
+    .workspace-anon .logo-and-toggle {
+        filter: none;
+        pointer-events: auto;
+    }
+    .workspace-anon select:disabled {
+        opacity: 0.5;
+    }
+    .anon-notice {
+        text-align: center;
+        padding: 0.75rem 1rem;
+        background: #fff3cd;
+        border-bottom: 1px solid #ffc107;
+        color: #856404;
+        font-size: 0.9rem;
+        pointer-events: auto;
+    }
+    .anon-notice a {
+        color: #0056b3;
+        font-weight: 600;
+        text-decoration: underline;
+        pointer-events: auto;
+    }
+    </style>
 
     {% if show_create_modal and user.is_authenticated %}
     {% include 'includes/case_creation_modal.html' %}

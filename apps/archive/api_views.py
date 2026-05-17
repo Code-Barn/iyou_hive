@@ -21,7 +21,7 @@ from .models import ArchiveDocument
 from apps.core.models import Case
 from apps.core.services.hive_directory import HiveDirectoryService
 from .serializers import RecursiveFolderSerializer
-from apps.core.document_processing import process_document
+from apps.core.document_processing import convert_pdf_to_markdown
 import os
 from pathlib import Path
 from django.conf import settings
@@ -341,6 +341,7 @@ class DocumentUploadView(APIView):
         
         # Get uploaded files
         files = request.FILES.getlist('files')
+        paths = request.POST.getlist('relative_paths')
         
         if not files:
             return Response({
@@ -379,8 +380,9 @@ class DocumentUploadView(APIView):
         uploaded_documents = []
         
         try:
-            for uploaded_file in files:
-                # Auto-detect file type
+            for i, uploaded_file in enumerate(files):
+                rel_path = paths[i] if i < len(paths) else uploaded_file.name
+                
                 file_ext = uploaded_file.name.lower().split('.')[-1] if '.' in uploaded_file.name else ''
                 file_type_map = {
                     'pdf': 'pdf', 'png': 'image', 'jpg': 'image', 'jpeg': 'image',
@@ -391,10 +393,8 @@ class DocumentUploadView(APIView):
                 }
                 file_type = file_type_map.get(file_ext, 'other')
                 
-                # Construct the full path
                 full_path = f"{base_path}{uploaded_file.name}"
                 
-                # Create the document in the correct vault
                 doc = ArchiveDocument.objects.create(
                     title=uploaded_file.name,
                     file=uploaded_file,
@@ -406,28 +406,28 @@ class DocumentUploadView(APIView):
                     promoted_at=timezone.now() if is_promoted else None,
                     case=case,
                     user=request.user,
-                    uploader=request.user
+                    uploader=request.user,
+                    metadata={'virtual_path': rel_path}
                 )
                 
-                # TASK 1 & 4: DIGITAL TWIN with ROUTER PATTERN
-                # Use router to process based on file type
                 try:
-                    # Get the absolute path of the uploaded file
                     file_abs_path = os.path.join(settings.MEDIA_ROOT, doc.file.name)
+                    original_name = uploaded_file.name
+                    virtual_path = rel_path
                     
-                    # TASK 4: Route to appropriate processor based on file extension
-                    processed_path = process_document(file_abs_path)
+                    processed_path = convert_pdf_to_markdown(
+                        file_abs_path,
+                        original_name=original_name,
+                        virtual_path=virtual_path
+                    )
                     
-                    # If a twin was created (path differs from original)
                     if processed_path != file_abs_path:
-                        # Update document to note it has a twin
                         twin_rel_path = os.path.relpath(processed_path, settings.MEDIA_ROOT)
                         doc.conversion_status = 'SUCCESS'
                         doc.markdown_path = twin_rel_path
                         doc.save()
                         
                 except Exception as e:
-                    # Log error but don't fail the upload
                     doc.conversion_status = 'FAILED'
                     doc.conversion_error = str(e)
                     doc.save()

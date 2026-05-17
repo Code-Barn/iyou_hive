@@ -56,7 +56,7 @@ def load_document_text(raw_doc):
                 sys.path.insert(0, scripts_dir)
             
             # Import and use the PDF extraction function
-            from pdf_to_md_conversion import extract_text_from_pdf
+            from legal_utils import extract_text_from_pdf
             return extract_text_from_pdf(file_path)
             
         elif raw_doc.file_type == 'md':

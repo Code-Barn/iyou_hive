@@ -1,15 +1,18 @@
 import React, { useState } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Layout from "./components/Layout";
 import CaseInitializationModal from "./components/CaseInitializationModal";
 import { SourceParty } from "./types/timeline";
 import { archiveApi } from "./api/archive";
-import { useMutation } from "@tanstack/react-query";
 
-const queryClient = new QueryClient();
+const root = document.getElementById("timeline-app");
+const rawCaseId = root?.dataset?.caseId || "";
+const bootCaseId =
+  rawCaseId && rawCaseId !== "None" && rawCaseId !== "null" ? rawCaseId : "";
 
 const App: React.FC = () => {
-  const [caseId, setCaseId] = useState<string>("");
+  const queryClient = useQueryClient();
+  const [caseId, setCaseId] = useState<string>(bootCaseId);
   const [userParty, setUserParty] = useState<SourceParty>("CLIENT");
   const [showInitModal, setShowInitModal] = useState(true);
 
@@ -45,7 +48,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <QueryClientProvider client={queryClient}>
+    <>
       {showInitModal && !caseId && (
         <CaseInitializationModal
           onCreateCase={async (name, description) => {
@@ -61,7 +64,7 @@ const App: React.FC = () => {
           onEventAdded={handleEventAdded}
         />
       )}
-    </QueryClientProvider>
+    </>
   );
 };
 

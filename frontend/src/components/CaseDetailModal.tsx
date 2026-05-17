@@ -1,6 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { uploadToVault } from "../api/archive";
-import { SourceParty } from "../types/shared";
+
+interface FileEntry {
+  file: File;
+  relativePath: string;
+}
 
 interface CaseDetailModalProps {
   caseId: string;
@@ -21,18 +25,23 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
     "overview" | "vault" | "bulk" | "ingestion"
   >(initialTab);
   const [vaultType, setVaultType] = useState<VaultType>("FORMAL");
-  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<FileEntry[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setSelectedFiles(e.target.files);
+      const entries: FileEntry[] = Array.from(e.target.files).map((file) => ({
+        file,
+        relativePath: file.webkitRelativePath || file.name,
+      }));
+      setSelectedFiles(entries);
     }
   };
 
   const handleUpload = async () => {
-    if (!selectedFiles || selectedFiles.length === 0) {
+    if (selectedFiles.length === 0) {
       setUploadStatus("No files selected");
       return;
     }
@@ -42,8 +51,9 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
 
     try {
       const formData = new FormData();
-      Array.from(selectedFiles).forEach((file) => {
+      selectedFiles.forEach(({ file, relativePath }) => {
         formData.append("files", file);
+        formData.append("relative_paths", relativePath);
       });
       formData.append("case_id", caseId);
       formData.append("vault_type", vaultType.toLowerCase());
@@ -62,7 +72,7 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
       setUploadStatus(message);
     } finally {
       setUploading(false);
-      setSelectedFiles(null);
+      setSelectedFiles([]);
     }
   };
 
@@ -188,26 +198,38 @@ const CaseDetailModal: React.FC<CaseDetailModalProps> = ({
 
                   <div className="border-t border-gray-200 pt-4">
                     <h4 className="font-medium text-gray-800 mb-3">
-                      Select Files
+                      Select Directory
                     </h4>
                     <input
                       type="file"
+                      ref={fileInputRef}
+                      webkitdirectory=""
+                      directory=""
                       multiple
                       onChange={handleFileChange}
                       className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                     />
-                    {selectedFiles && selectedFiles.length > 0 && (
-                      <p className="text-sm text-gray-600 mt-2">
-                        Selected: {selectedFiles.length} file(s)
-                      </p>
+                    {selectedFiles.length > 0 && (
+                      <div className="mt-2 p-2 bg-gray-50 rounded-lg max-h-32 overflow-y-auto">
+                        <p className="text-sm font-medium">
+                          Selected ({selectedFiles.length} files):
+                        </p>
+                        <ul className="text-sm text-gray-600 mt-1">
+                          {selectedFiles.map((entry, index) => (
+                            <li key={index} className="truncate">
+                              • {entry.relativePath}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                   </div>
 
                   <div className="border-t border-gray-200 pt-4">
                     <button
                       onClick={handleUpload}
-                      disabled={uploading || !selectedFiles}
-                      className={`px-4 py-2 text-sm font-medium rounded ${uploading || !selectedFiles ? "bg-gray-300 cursor-not-allowed" : "bg-primary text-white hover:bg-orange-600"}`}
+                      disabled={uploading || selectedFiles.length === 0}
+                      className={`px-4 py-2 text-sm font-medium rounded ${uploading || selectedFiles.length === 0 ? "bg-gray-300 cursor-not-allowed" : "bg-primary text-white hover:bg-orange-600"}`}
                     >
                       {uploading ? "Uploading..." : "Upload to Vault"}
                     </button>

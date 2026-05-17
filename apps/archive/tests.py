@@ -138,12 +138,6 @@ class PDFConversionTest(TestCase):
         """Clean up test files."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
     
-    def test_pdf_conversion_script_exists(self):
-        """Test that the PDF conversion script exists."""
-        from django.conf import settings
-        script_path = Path(settings.BASE_DIR) / 'scripts' / 'pdf_to_md_conversion.py'
-        self.assertTrue(script_path.exists(), "PDF conversion script not found")
-    
     def test_pdf_conversion_creates_markdown(self):
         """Test that PDF conversion creates a markdown file."""
         from apps.core.document_processing import convert_pdf_to_markdown

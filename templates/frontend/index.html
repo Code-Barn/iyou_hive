@@ -12,7 +12,7 @@
 
     <div id="timeline-app"
          data-username="{{ username }}"
-         data-case-id="{{ active_case_id }}"
+         data-case-id="{{ active_case_id|default:'' }}"
          class="min-h-screen">
         <div class="flex items-center justify-center min-h-screen">
             <div class="text-center">
