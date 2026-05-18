@@ -27,4 +27,5 @@ urlpatterns = [
     
     # Additional endpoints
     path('directory/', api_views.ArchiveDirectoryView.as_view(), name='archive-directory'),
+    path('documents/content/<uuid:file_uuid>/', api_views.DocumentContentView.as_view(), name='archive-document-content-by-uuid'),
 ]

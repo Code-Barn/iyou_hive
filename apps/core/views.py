@@ -178,216 +178,90 @@ def create_case(request):
                     is_active=True
                 )
                 
-                # Create standard folder structure for the new case
-                from apps.archive.models import ArchiveDocument
-                ArchiveDocument.create_standard_folder_structure(case, request.user)
-                
-                request.session['selected_case_id'] = str(case.id)
-                request.session['case_just_created'] = True
-                
-                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    return JsonResponse({
-                        'status': 'success',
-                        'case_id': str(case.id),
-                        'redirect': '/'
-                    })
-                
-                messages.success(request, f'Case "{name}" created and selected!')
-                return redirect('/')
-        except IntegrityError as e:
-            error_msg = f'Database error: {e}'
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': error_msg}, status=400)
-            messages.error(request, error_msg)
-        except Exception as e:
-            error_msg = f'Failed to create case: {e}'
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                return JsonResponse({'error': error_msg}, status=400)
-            messages.error(request, error_msg)
-            
-            # Re-render form with pre-filled values
-            context = {
-                'form_name': name,
-                'form_description': description,
-                'form_color': color,
-                'color_options': [
-                    {'value': '#FF8C00', 'name': 'Honey-Orange', 'color': '#FF8C00'},
-                    {'value': '#0064AA', 'name': 'Byers Blue', 'color': '#0064AA'},
-                    {'value': '#4CAF50', 'name': 'Green', 'color': '#4CAF50'},
-                    {'value': '#F44336', 'name': 'Red', 'color': '#F44336'},
-                    {'value': '#9C27B0', 'name': 'Purple', 'color': '#9C27B0'},
-                    {'value': '#FF9800', 'name': 'Orange', 'color': '#FF9800'},
-                    {'value': '#2196F3', 'name': 'Blue', 'color': '#2196F3'},
-                    {'value': '#E91E63', 'name': 'Pink', 'color': '#E91E63'},
-                ]
-            }
-            return render(request, 'core/create_case.html', context)
-    
-    # GET request - show form (with optional pre-filled name)
-    form_name = request.GET.get('name', '').strip()
-    
-    context = {
-        'form_name': form_name,
-        'color_options': [
-            {'value': '#FF8C00', 'name': 'Honey-Orange', 'color': '#FF8C00'},
-            {'value': '#0064AA', 'name': 'Byers Blue', 'color': '#0064AA'},
-            {'value': '#4CAF50', 'name': 'Green', 'color': '#4CAF50'},
-            {'value': '#F44336', 'name': 'Red', 'color': '#F44336'},
-            {'value': '#9C27B0', 'name': 'Purple', 'color': '#9C27B0'},
-            {'value': '#FF9800', 'name': 'Orange', 'color': '#FF9800'},
-            {'value': '#2196F3', 'name': 'Blue', 'color': '#2196F3'},
-            {'value': '#E91E63', 'name': 'Pink', 'color': '#E91E63'},
-        ]
-    }
-    
-    return render(request, 'core/create_case.html', context)
-
-
-@login_required
-@require_http_methods(["GET", "POST"])
-def switch_case(request, case_id):
-    """
-    Switch to a different case.
-    
-    Updates the session to use the selected case.
-    """
-    case = get_object_or_404(Case, id=case_id, user=request.user)
-    
-    # Update session
-    request.session['selected_case_id'] = str(case.id)
-    
-    # Deactivate other cases, activate this one
-    Case.objects.filter(user=request.user).update(is_active=False)
-    case.is_active = True
-    case.save()
-    
-    messages.success(request, f'Switched to case: {case.name}')
-    return redirect('/')
-
-
-@login_required
-@require_http_methods(["POST"])
-def delete_case(request, case_id):
-    """
-    Delete a case and all its associated data.
-    
-    POST only to prevent accidental deletion.
-    Requires confirmation.
-    """
-    case = get_object_or_404(Case, id=case_id, user=request.user)
-    
-    # Check for confirmation
-    if request.POST.get('confirm') != 'yes':
-        messages.error(request, 'Deletion not confirmed. Please check the confirmation box.')
-        return redirect('core:case_detail', case_id=case.id)
-    
-    # Get all related data for deletion
-    events = TimelineEvent.objects.filter(case=case)
-    documents = ArchiveDocument.objects.filter(case=case)
-    timeline_files = TimelineFile.objects.filter(case=case)
-    
-    # Delete in proper order (events first, then timeline files, then documents)
-    try:
-        with transaction.atomic():
-            # Delete events for this case
-            events_count = events.count()
-            events.delete()
-            
-            # Delete timeline files for this case
-            timeline_files_count = timeline_files.count()
-            timeline_files.delete()
-            
-            # Delete documents for this case
-            documents_count = documents.count()
-            documents.delete()
-            
-            # Finally, delete the case
-            case_name = case.name
-            case.delete()
-            
-            messages.success(
-                request,
-                f'Case "{case_name}" and {events_count} events, '
-                f'{timeline_files_count} timeline files, and '
-                f'{documents_count} documents deleted successfully.'
-            )
-            
-            # Clear session
-            request.session.pop('selected_case_id', None)
-            
-            return redirect('core:case_list')
-            
-    except Exception as e:
-        messages.error(request, f'Failed to delete case: {e}')
-    
-    return redirect('core:case_detail', case_id=case.id)
-
-
-# ============================================================================
-# API Endpoints
-# ============================================================================
-
-@login_required
-def api_case_list(request):
-    """
-    API endpoint to list all cases for the current user.
-    POST: Create a new case
-    
-    Returns:
-        JsonResponse with list of cases or created case
-    """
-    if request.method == 'POST':
-        # Create a new case
-        import json
-        try:
-            data = json.loads(request.body)
-            name = data.get('name', '').strip()
-            description = data.get('description', '').strip()[:500]
-            color = data.get('color', '#FF8C00')
-            
-            if not name:
-                return JsonResponse({'error': 'Case name is required'}, status=400)
-            
-            # Gradient color selection options
-            color_options = [
-                '#FF8C00',  # Honey-Orange (default)
-                '#0064AA',  # Byers Blue
-                '#4CAF50',  # Green
-                '#F44336',  # Red
-                '#9C27B0',  # Purple
-                '#FF9800',  # Orange
-                '#2196F3',  # Blue
-                '#E91E63',  # Pink
-            ]
-            
-            if color not in color_options:
-                color = '#FF8C00'
-            
-            with transaction.atomic():
-                # Check if case with this name already exists
-                existing = Case.objects.filter(name=name, user=request.user).first()
-                if existing:
-                    return JsonResponse({'error': f'A case with the name "{name}" already exists.'}, status=400)
-                
-                case = Case.objects.create(
-                    name=name,
-                    description=description,
-                    color=color,
-                    user=request.user,
-                    is_active=True
-                )
-                
                 # Create standard folder structure
                 from apps.archive.models import ArchiveDocument
                 ArchiveDocument.create_standard_folder_structure(case, request.user)
                 
                 request.session['selected_case_id'] = str(case.id)
                 
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': True,
+                        'case_id': str(case.id),
+                        'name': case.name
+                    })
+                
+                messages.success(request, f'Case "{case.name}" created successfully!')
+                return redirect('core:case_detail', case_id=case.id)
+        except Exception as e:
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'error': f'Failed to create case: {e}'}, status=500)
+            messages.error(request, f'Failed to create case: {e}')
+            return redirect('core:case_list')
+    
+    # GET: Show creation form
+    return render(request, 'core/create_case.html', {
+        'color_options': color_options
+    })
+
+
+@login_required
+def api_case_list(request):
+    """
+    API endpoint to list all cases for the current user.
+    POST: Create a new case
+
+    Returns:
+        JsonResponse with list of cases or created case
+    """
+    if request.method == 'POST':
+        import json
+        try:
+            data = json.loads(request.body)
+            name = data.get('name', '').strip()
+            client_legal_name = data.get('client_legal_name', '').strip()
+            opposing_legal_name = data.get('opposing_legal_name', '').strip()
+            description = data.get('description', '').strip()[:500]
+            color = data.get('color', '#FF8C00')
+
+            if not name:
+                return JsonResponse({'error': 'Case name is required'}, status=400)
+
+            color_options = [
+                '#FF8C00', '#0064AA', '#4CAF50', '#F44336',
+                '#9C27B0', '#FF9800', '#2196F3', '#E91E63',
+            ]
+
+            if color not in color_options:
+                color = '#FF8C00'
+
+            with transaction.atomic():
+                existing = Case.objects.filter(name=name, user=request.user).first()
+                if existing:
+                    return JsonResponse({'error': f'A case with the name "{name}" already exists.'}, status=400)
+
+                case = Case.objects.create(
+                    name=name,
+                    client_legal_name=client_legal_name,
+                    opposing_legal_name=opposing_legal_name,
+                    description=description,
+                    color=color,
+                    user=request.user,
+                    is_active=True
+                )
+
+                from apps.archive.models import ArchiveDocument
+                ArchiveDocument.create_standard_folder_structure(case, request.user)
+
+                request.session['selected_case_id'] = str(case.id)
+
                 return JsonResponse({
                     'status': 'success',
                     'case': {
                         'id': str(case.id),
                         'name': case.name,
+                        'client_legal_name': case.client_legal_name,
+                        'opposing_legal_name': case.opposing_legal_name,
                         'description': case.description,
                         'color': case.color,
                         'is_active': case.is_active,
@@ -399,15 +273,16 @@ def api_case_list(request):
                 }, status=201)
         except Exception as e:
             return JsonResponse({'error': f'Failed to create case: {e}'}, status=500)
-    
-    # GET: List all cases
+
     cases = Case.objects.filter(user=request.user).order_by('-updated_at')
-    
+
     case_list = []
     for case in cases:
         case_list.append({
-            'id': str(case.id),  # Convert UUID to string for JSON serialization
+            'id': str(case.id),
             'name': case.name,
+            'client_legal_name': case.client_legal_name,
+            'opposing_legal_name': case.opposing_legal_name,
             'description': case.description,
             'color': case.color,
             'is_active': case.is_active,
@@ -416,7 +291,7 @@ def api_case_list(request):
             'created_at': case.created_at.isoformat() if case.created_at else None,
             'updated_at': case.updated_at.isoformat() if case.updated_at else None,
         })
-    
+
     return JsonResponse({'cases': case_list})
 
 
@@ -676,6 +551,52 @@ def generate_response_sheet_view(request):
     return render(request, 'core/generate_sheet.html', {
         'cases': cases
     })
+
+
+@login_required
+def switch_case(request, case_id):
+    """
+    Switch the active case for the current user session.
+
+    Sets ``selected_case_id`` in the session and redirects to the case
+    timeline view.
+
+    Args:
+        case_id: UUID of the target case.
+
+    Returns:
+        Redirect to the timeline view for the chosen case.
+    """
+    case = get_object_or_404(Case, id=case_id, user=request.user)
+    Case.objects.filter(user=request.user).update(is_active=False)
+    case.is_active = True
+    case.save(update_fields=['is_active'])
+    request.session['selected_case_id'] = str(case.id)
+    return redirect('timeline:timeline')
+
+
+@login_required
+def delete_case(request, case_id):
+    """
+    Delete a case and all associated data.
+
+    POST-only view that removes the case and its related timeline events,
+    documents, and AI conversations.
+
+    Args:
+        case_id: UUID of the case to delete.
+
+    Returns:
+        Redirect to the case list on success.
+    """
+    case = get_object_or_404(Case, id=case_id, user=request.user)
+    if request.method == 'POST':
+        case_name = case.name
+        case.delete()
+        request.session.pop('selected_case_id', None)
+        messages.success(request, f'Case "{case_name}" has been deleted.')
+        return redirect('core:case_list')
+    return render(request, 'core/confirm_delete.html', {'case': case})
 
 
 @login_required

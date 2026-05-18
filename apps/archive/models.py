@@ -170,76 +170,48 @@ class ArchiveDocument(models.Model):
     @staticmethod
     def create_standard_folder_structure(case, user):
         """
-        Create the standard folder structure for a new case archive.
-        
-        Creates the following structure:
-        01_Raw/              - Original uploaded documents
-        02_Wiki/             - Processed/cleaned documents
-        03_Drafts/           - Working drafts and edits
-        04_Strategy/         - Strategy documents and notes
-        05_Exports/          - Export outputs and reports
+        Create logical folder placeholder records for a new case archive.
+
+        Creates database-only folder markers — no physical files are written
+        to disk. The folders exist purely in the ``virtual_path`` metadata
+        that the ``RecursiveFolderSerializer`` uses to build the UI tree.
+
+        Folders:
+        01_Raw       — Original uploaded documents and source materials
+        02_Wiki      — Processed and cleaned documents for reference
+        03_Drafts    — Working drafts and editable documents
+        04_Strategy  — Strategy documents and case planning materials
+        05_Exports   — Export outputs, reports, and final deliverables
         """
-        from django.core.files.base import ContentFile
-        
-        # Define the standard folder structure
-        folder_structure = [
+        folder_structure: list[tuple[str, str]] = [
             ('01_Raw', 'Original uploaded documents and source materials'),
             ('02_Wiki', 'Processed and cleaned documents for reference'),
             ('03_Drafts', 'Working drafts and editable documents'),
             ('04_Strategy', 'Strategy documents and case planning materials'),
-            ('05_Exports', 'Export outputs, reports, and final deliverables')
+            ('05_Exports', 'Export outputs, reports, and final deliverables'),
         ]
-        
-        created_folders = []
-        
+
+        created_folders: list[ArchiveDocument] = []
+
         for folder_name, folder_description in folder_structure:
             try:
-                # Create a placeholder document to represent the folder
-                # This uses a .folder file approach to represent directories
-                folder_path = f"{folder_name}/.folder"
-                
-                # Create a minimal folder descriptor file
-                folder_content = f"""{{
-    "type": "folder",
-    "name": "{folder_name}",
-    "description": "{folder_description}",
-    "created_by": "system",
-    "purpose": "Standard case organization"
-}}"""
-                
-                # Create the folder placeholder document
-                folder_doc = ArchiveDocument.objects.create(
+                folder_doc: ArchiveDocument = ArchiveDocument.objects.create(
                     title=f"[FOLDER] {folder_name}",
                     file_type='folder',
-                    path=folder_path,
+                    path=f"{folder_name}/",
                     description=folder_description,
                     is_draft=False,
                     is_immutable=True,
                     case=case,
                     user=user,
-                    uploader=user
+                    uploader=user,
+                    metadata={'virtual_path': f"{folder_name}/"}
                 )
-                
-                # Create an actual empty file for the folder marker
-                from django.core.files.uploadedfile import SimpleUploadedFile
-                empty_file = SimpleUploadedFile(
-                    f".folder",
-                    folder_content.encode('utf-8'),
-                    content_type="application/json"
-                )
-                folder_doc.file.save(
-                    f"{folder_path}/.folder",
-                    empty_file,
-                    save=True
-                )
-                
                 created_folders.append(folder_doc)
-                
             except Exception as e:
-                # Log the error but don't fail the entire process
                 print(f"Warning: Could not create folder {folder_name}: {e}")
                 continue
-        
+
         return created_folders
     
     def get_file_extension(self):

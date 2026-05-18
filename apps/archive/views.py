@@ -627,6 +627,9 @@ def api_get_content(request, pk):
     })
 
 
+
+
+
 @login_required
 def api_save_canvas(request):
     """API endpoint to save canvas content as a document."""

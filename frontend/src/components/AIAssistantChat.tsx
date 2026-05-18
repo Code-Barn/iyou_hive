@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { aiApi, ChatMessage } from "../api/ai";
 import { timelineApi, MaterializePayload } from "../api/timeline";
+import archiveApi from "../api/archive";
 import { FileNode } from "../types/shared";
 import { PerspectiveMode } from "../types/timeline";
 import { InspectorPanel } from "./InspectorPanel";
@@ -102,18 +103,15 @@ const AIAssistantChat: React.FC<AIAssistantChatProps> = ({
   }, [caseId]);
 
   useEffect(() => {
-    if (!activeDocument?.file_details) {
+    if (!activeDocument?.file_details?.uuid) {
       setDocumentContent("");
       return;
     }
     const loadContent = async () => {
-      const filePath = activeDocument.file_details!.path;
-      const isPdf = activeDocument.file_details!.file_type === 'pdf';
-      const targetPath = isPdf ? filePath.replace(/\.pdf$/i, '.md') : filePath;
       try {
-        const resp = await fetch(`/media/${targetPath}`);
-        if (resp.ok) {
-          setDocumentContent(await resp.text());
+        const resp = await archiveApi.getDocumentContent(activeDocument.file_details!.uuid!);
+        if (resp.status === 200 && resp.data.content) {
+          setDocumentContent(resp.data.content);
           return;
         }
       } catch {}

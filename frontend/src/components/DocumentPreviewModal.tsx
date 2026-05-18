@@ -65,7 +65,7 @@ const DocumentPreviewModal: React.FC<DocumentPreviewModalProps> = ({
           ) : document ? (
             <div className="h-full">
               <iframe
-                src={`/media/${document.path}`}
+                src={document.file_url || `/media/${document.path}`}
                 className="w-full h-full"
                 title={document.title}
               />

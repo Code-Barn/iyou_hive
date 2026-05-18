@@ -343,6 +343,20 @@ def query_timeline(request):
         perspective_instructions['NEUTRAL'],
     )
 
+    # --- Operational persona: inject client / opposing party names ---
+    client_name: str = case.client_legal_name or "Client"
+    opposing_name: str = case.opposing_legal_name or "Opposing Party"
+    persona_clause: str = (
+        "Operational Persona Context: You are evaluating evidence records "
+        "for an active lawsuit. Your client/user is "
+        f"{client_name}. "
+        "The adversarial/opposing party is "
+        f"{opposing_name}. "
+        "Synthesize all timeline data and extracted fields using these "
+        "explicitly assigned positioning anchors."
+    )
+    perspective_prompt = f"{persona_clause}\n\n{perspective_prompt}"
+
     # --- Semantic retrieval from case-isolated LanceDB ---
     semantic_context: str = _build_semantic_context(str(case.id), query)
 

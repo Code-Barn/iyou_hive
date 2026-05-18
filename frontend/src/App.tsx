@@ -17,8 +17,8 @@ const App: React.FC = () => {
   const [showInitModal, setShowInitModal] = useState(true);
 
   const createCaseMutation = useMutation({
-    mutationFn: async (data: { name: string; description: string }) => {
-      const response = await archiveApi.createCase(data.name, data.description);
+    mutationFn: async (data: { name: string; description: string; client_legal_name: string; opposing_legal_name: string }) => {
+      const response = await archiveApi.createCase(data.name, data.description, data.client_legal_name, data.opposing_legal_name);
       return response.data;
     },
     onSuccess: (data) => {
@@ -51,8 +51,8 @@ const App: React.FC = () => {
     <>
       {showInitModal && !caseId && (
         <CaseInitializationModal
-          onCreateCase={async (name, description) => {
-            await createCaseMutation.mutateAsync({ name, description });
+          onCreateCase={async (name, description, clientLegalName, opposingLegalName) => {
+            await createCaseMutation.mutateAsync({ name, description, client_legal_name: clientLegalName, opposing_legal_name: opposingLegalName });
           }}
         />
       )}

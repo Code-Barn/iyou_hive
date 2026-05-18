@@ -5,6 +5,7 @@ from apps.timeline.models import TimelineEvent
 from apps.core.services.hive_directory import HiveDirectoryService
 import os
 import uuid
+from typing import Any
 
 class TimelineEventUuidSerializer(serializers.ModelSerializer):
     class Meta:
@@ -15,10 +16,24 @@ class ArchiveDocumentSerializer(serializers.ModelSerializer):
     timeline_event_uuids = serializers.SerializerMethodField()
     trust_level = serializers.SerializerMethodField()
     has_md_twin = serializers.SerializerMethodField()
+    file_url = serializers.SerializerMethodField()
+    virtual_path = serializers.SerializerMethodField()
 
     class Meta:
         model = ArchiveDocument
-        fields = ['uuid', 'title', 'file_type', 'path', 'is_promoted', 'promoted_at', 'timeline_event_uuids', 'trust_level', 'conversion_status', 'markdown_path', 'has_md_twin']
+        fields = ['uuid', 'title', 'file_type', 'path', 'is_promoted', 'promoted_at',
+                  'timeline_event_uuids', 'trust_level', 'conversion_status',
+                  'markdown_path', 'has_md_twin', 'file_url', 'virtual_path']
+
+    def get_file_url(self, obj: ArchiveDocument) -> str:
+        """Return the absolute URL for the stored file."""
+        if obj.file:
+            return obj.file.url
+        return ""
+
+    def get_virtual_path(self, obj: ArchiveDocument) -> str:
+        """Return the virtual path from metadata, falling back to the logical path."""
+        return obj.metadata.get('virtual_path', obj.path) if isinstance(obj.metadata, dict) else obj.path
 
     def get_timeline_event_uuids(self, obj):
         if obj.timeline_event:
@@ -70,12 +85,12 @@ class RecursiveFolderSerializer(serializers.Serializer):
 
     @classmethod
     def build_tree(cls, case_uuid: str, user_uuid: str):
-        case_uuid_str = str(case_uuid)
-        user_uuid_str = str(user_uuid)
+        case_uuid_str: str = str(case_uuid)
+        user_uuid_str: str = str(user_uuid)
 
         documents = ArchiveDocument.objects.filter(case__id=case_uuid_str).select_related('timeline_event', 'uploader').order_by('path')
 
-        tree = [
+        tree: list[dict[str, Any]] = [
             {
                 'uuid': str(uuid.uuid5(uuid.NAMESPACE_DNS, f'{case_uuid_str}/formal')),
                 'name': 'Vault (Shared)',
@@ -92,36 +107,35 @@ class RecursiveFolderSerializer(serializers.Serializer):
             }
         ]
 
-        formal_root_node = tree[0]
-        private_root_node = tree[1]
+        formal_root_node: dict[str, Any] = tree[0]
+        private_root_node: dict[str, Any] = tree[1]
 
-        def insert_node(current_children, path_parts, node_data, is_file_node=False):
+        def insert_node(current_children: list[dict[str, Any]], path_parts: list[str], node_data: dict[str, Any], is_file_node: bool = False) -> None:
             if not path_parts:
                 return
 
-            part = path_parts[0]
-            existing_node = next((c for c in current_children if c['name'] == part and c['is_folder']), None) # Only match folders
+            part: str = path_parts[0]
+            existing_node: dict[str, Any] | None = next(
+                (c for c in current_children if c['name'] == part and c['is_folder']),
+                None
+            )
 
-            if len(path_parts) == 1: # This is the final part of the path
+            if len(path_parts) == 1:
                 if is_file_node:
-                    if node_data['name'] != '.folder': # Avoid adding the .folder file itself
-                        current_children.append(node_data)
-                else: # It's a folder node represented by a .folder file or an implied folder
+                    current_children.append(node_data)
+                else:
                     if existing_node:
-                        existing_node.update(node_data) # Update existing placeholder folder node if more details are available
+                        existing_node.update(node_data)
                     else:
                         current_children.append(node_data)
-            else: # It's an intermediate folder
+            else:
                 if not existing_node:
-                    # Create intermediate folder node
-                    # Generate UUID based on the full path segment up to this point
-                    # The full_path_segment needs to be relative to the case_uuid, not including it
-                    full_path_segment_for_uuid = os.path.join(
-                        (case_uuid_str if current_children == formal_root_node['children'] else
+                    full_path_segment: str = os.path.join(
+                        (case_uuid_str if current_children is formal_root_node['children'] else
                          os.path.join(case_uuid_str, 'private', user_uuid_str)),
                         *path_parts[:len(path_parts)]
                     )
-                    folder_uuid = str(uuid.uuid5(uuid.NAMESPACE_DNS, full_path_segment_for_uuid))
+                    folder_uuid: str = str(uuid.uuid5(uuid.NAMESPACE_DNS, full_path_segment))
                     existing_node = {
                         'uuid': folder_uuid,
                         'name': part,
@@ -133,47 +147,38 @@ class RecursiveFolderSerializer(serializers.Serializer):
                 insert_node(existing_node['children'], path_parts[1:], node_data, is_file_node)
 
         for doc in documents:
-            # TASK 2 FIX: Use doc.path (logical path with vault structure) instead of doc.file.name (storage path)
-            # doc.path contains the vault structure like "formal/01_Raw/filename.pdf" or "private/uuid/03_Drafts/filename.pdf"
-            # doc.file.name is the actual storage path like "archive/documents/filename.pdf"
-            
             if not doc.path:
                 continue
-            
-            # Parse the logical path to determine vault location
-            path_parts = doc.path.split('/')
-            
-            if not path_parts:
+
+            # --- Vault routing from doc.path ---
+            root_path_parts: list[str] = doc.path.split('/')
+            if not root_path_parts:
                 continue
 
-            # TASK 2 FIX: Store the model instance, not pre-serialized data
-            # This allows the serializer to properly handle the file_details field
-            node_data = {
+            # --- Sub-tree path from metadata.virtual_path ---
+            raw_virtual: str = doc.metadata.get('virtual_path', '') if isinstance(doc.metadata, dict) else ''
+            sub_path_parts: list[str] = raw_virtual.split('/') if raw_virtual else root_path_parts[2:]
+
+            node_data: dict[str, Any] = {
                 'uuid': str(doc.uuid),
                 'name': doc.title if doc.file_type != 'folder' else doc.title.replace('[FOLDER] ', ''),
                 'type': doc.file_type,
                 'is_folder': doc.file_type == 'folder',
-                'file_details': doc  # Pass the model instance, not serialized data
+                'file_details': doc,
+                'path': doc.path,
             }
 
-            # Route to correct vault based on path
-            if len(path_parts) >= 1:
-                if path_parts[0] == 'formal':
-                    # Path: formal/01_Raw/filename.pdf or formal/04_Strategy/filename.pdf
-                    insert_node(formal_root_node['children'], path_parts[1:], node_data, is_file_node=(doc.file_type != 'folder'))
-                elif path_parts[0] == 'private':
-                    # Path: private/[user_uuid]/03_Drafts/filename.pdf
-                    if len(path_parts) > 1 and path_parts[1] == user_uuid_str:
-                        insert_node(private_root_node['children'], path_parts[2:], node_data, is_file_node=(doc.file_type != 'folder'))
-                    else:
-                        # Fallback for different user_uuid or missing user part
-                        insert_node(private_root_node['children'], path_parts[1:], node_data, is_file_node=(doc.file_type != 'folder'))
+            if root_path_parts[0] == 'formal':
+                insert_node(formal_root_node['children'], sub_path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
+            elif root_path_parts[0] == 'private':
+                if len(root_path_parts) > 1 and root_path_parts[1] == user_uuid_str:
+                    insert_node(private_root_node['children'], sub_path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
                 else:
-                    # Legacy documents without vault prefix
-                    # Try to infer from is_promoted flag
-                    if doc.is_promoted:
-                        insert_node(formal_root_node['children'], path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
-                    else:
-                        insert_node(private_root_node['children'], path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
-            
+                    insert_node(private_root_node['children'], root_path_parts[1:], node_data, is_file_node=(doc.file_type != 'folder'))
+            else:
+                if doc.is_promoted:
+                    insert_node(formal_root_node['children'], sub_path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
+                else:
+                    insert_node(private_root_node['children'], sub_path_parts, node_data, is_file_node=(doc.file_type != 'folder'))
+
         return tree

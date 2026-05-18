@@ -1,5 +1,12 @@
 import React, { useEffect, useState } from "react";
 
+/**
+ * Read the ``hiver_csrftoken`` cookie and return its raw value,
+ * stripped of any surrounding quotation marks, whitespace, or
+ * URL-encoding artifacts that would cause a
+ * "CSRF token from the 'X-Csrftoken' HTTP header has incorrect length"
+ * rejection from Django's ``CsrfViewMiddleware``.
+ */
 function getCSRFToken(): string {
   const name = "hiver_csrftoken";
   if (document.cookie && document.cookie !== "") {
@@ -7,7 +14,9 @@ function getCSRFToken(): string {
     for (let i = 0; i < cookies.length; i++) {
       const cookie = cookies[i].trim();
       if (cookie.substring(0, name.length + 1) === name + "=") {
-        return decodeURIComponent(cookie.substring(name.length + 1));
+        return decodeURIComponent(cookie.substring(name.length + 1))
+          .replace(/^["']|["']$/g, "")
+          .trim();
       }
     }
   }

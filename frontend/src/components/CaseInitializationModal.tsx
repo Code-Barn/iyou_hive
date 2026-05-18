@@ -1,13 +1,15 @@
 import React, { useState } from "react";
 
 interface CaseInitializationModalProps {
-  onCreateCase: (name: string, description: string) => Promise<void>;
+  onCreateCase: (name: string, description: string, clientLegalName: string, opposingLegalName: string) => Promise<void>;
 }
 
 const CaseInitializationModal: React.FC<CaseInitializationModalProps> = ({
   onCreateCase,
 }) => {
   const [name, setName] = useState("");
+  const [clientLegalName, setClientLegalName] = useState("");
+  const [opposingLegalName, setOpposingLegalName] = useState("");
   const [description, setDescription] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +22,7 @@ const CaseInitializationModal: React.FC<CaseInitializationModalProps> = ({
     setError(null);
 
     try {
-      await onCreateCase(name.trim(), description.trim());
+      await onCreateCase(name.trim(), description.trim(), clientLegalName.trim(), opposingLegalName.trim());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create case");
       setIsCreating(false);
@@ -40,16 +42,42 @@ const CaseInitializationModal: React.FC<CaseInitializationModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Case Name *
+              Case Reference Name *
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Smith vs. Corporation"
+              placeholder="e.g. Byers v. Donatello"
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
               autoFocus
               required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Client Filing Legal Name
+            </label>
+            <input
+              type="text"
+              value={clientLegalName}
+              onChange={(e) => setClientLegalName(e.target.value)}
+              placeholder="e.g. David Byers"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Opposing Party Legal Name
+            </label>
+            <input
+              type="text"
+              value={opposingLegalName}
+              onChange={(e) => setOpposingLegalName(e.target.value)}
+              placeholder="e.g. Pauletta Donatello"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
             />
           </div>
 

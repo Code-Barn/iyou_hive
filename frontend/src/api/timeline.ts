@@ -4,7 +4,13 @@ axios.defaults.withCredentials = true;
 axios.defaults.xsrfCookieName = 'hiver_csrftoken';
 axios.defaults.xsrfHeaderName = 'X-CSRFToken';
 
-// Function to get CSRF token from cookie
+/**
+ * Read the ``hiver_csrftoken`` cookie and return its raw value,
+ * stripped of any surrounding quotation marks, whitespace, or
+ * URL-encoding artifacts that would cause a
+ * "CSRF token from the 'X-Csrftoken' HTTP header has incorrect length"
+ * rejection from Django's ``CsrfViewMiddleware``.
+ */
 function getCSRFToken(): string | null {
   const name = "hiver_csrftoken";
   let cookieValue: string | null = null;
@@ -13,7 +19,11 @@ function getCSRFToken(): string | null {
     for (let i = 0; i < cookies.length; i++) {
       const cookie = cookies[i].trim();
       if (cookie.substring(0, name.length + 1) === name + "=") {
-        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        cookieValue = decodeURIComponent(
+          cookie.substring(name.length + 1),
+        )
+          .replace(/^["']|["']$/g, "")   // strip surrounding quotes
+          .trim();                        // strip surrounding whitespace
         break;
       }
     }

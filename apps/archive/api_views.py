@@ -16,6 +16,8 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
+from django.core.files.base import ContentFile
+from django.shortcuts import get_object_or_404
 
 from .models import ArchiveDocument
 from apps.core.models import Case
@@ -23,6 +25,7 @@ from apps.core.services.hive_directory import HiveDirectoryService
 from .serializers import RecursiveFolderSerializer
 from apps.core.document_processing import convert_pdf_to_markdown
 import os
+import uuid
 from pathlib import Path
 from django.conf import settings
 
@@ -276,6 +279,58 @@ class FileMetadataView(APIView):
         return Response(serializer.data)
 
 
+class DocumentContentView(APIView):
+    """
+    Return the raw file content for a document looked up by UUID.
+
+    Reads the file from disk using the ``ArchiveDocument.file.path`` and
+    returns the text content as a JSON payload.  Supports markdown, text,
+    and email documents.  PDF and image types return extracted text or a
+    fallback message.
+
+    GET /api/archive/documents/content/<uuid:file_uuid>/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, file_uuid: str, *args, **kwargs):
+        case_id: str | None = request.session.get('selected_case_id')
+        if not case_id:
+            raise PermissionDenied("No case selected")
+
+        try:
+            case = Case.objects.get(id=case_id, user=request.user)
+        except Case.DoesNotExist:
+            raise PermissionDenied("Case not found or access denied")
+
+        document: ArchiveDocument = get_object_or_404(
+            ArchiveDocument,
+            uuid=file_uuid,
+            case=case,
+        )
+
+        content: str = ""
+        file_type: str = document.file_type
+
+        if document.file:
+            file_path: str = document.file.path
+            if os.path.exists(file_path):
+                if file_type in ('text', 'markdown', 'email'):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                            content = f.read()
+                    except Exception:
+                        content = ""
+                else:
+                    content = document.extracted_text or ""
+
+        return Response({
+            'title': document.title,
+            'content': content,
+            'file_type': file_type,
+            'file_url': document.file.url if document.file else "",
+        })
+
+
 class ArchiveDirectoryView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -334,7 +389,63 @@ class DocumentUploadView(APIView):
             case = Case.objects.get(id=case_id, user=request.user)
         except Case.DoesNotExist:
             raise PermissionDenied("Case not found or access denied")
-        
+
+        # ----------------------------------------------------------------
+        # JSON text-draft intercept – handle application/json payloads
+        # without reaching the multipart file zipper below.
+        # ----------------------------------------------------------------
+        if request.content_type == 'application/json':
+            import json as _json
+            try:
+                body: dict = _json.loads(request.body)
+            except (_json.JSONDecodeError, AttributeError, TypeError):
+                return Response(
+                    {'status': 'error', 'message': 'Invalid JSON body'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            title: str = (body.get('title') or '').strip()
+            content_text: str = (body.get('content_text') or '').strip()
+
+            if not title or not content_text:
+                return Response(
+                    {'status': 'error', 'message': 'title and content_text are required'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            slug: str = title.lower().replace(' ', '_').replace('/', '_')[:64]
+            draft_rel_path: str = f"Drafts/{slug}.md"
+
+            draft_doc: ArchiveDocument = ArchiveDocument.objects.create(
+                title=title,
+                file=ContentFile(
+                    content_text.encode('utf-8'),
+                    name=f"{slug}.md",
+                ),
+                path=draft_rel_path,
+                file_type='text',
+                is_draft=True,
+                is_immutable=False,
+                case=case,
+                user=request.user,
+                uploader=request.user,
+                metadata={'virtual_path': draft_rel_path},
+            )
+
+            return Response(
+                {
+                    'status': 'success',
+                    'message': 'Draft saved',
+                    'document': {
+                        'uuid': str(draft_doc.uuid),
+                        'title': draft_doc.title,
+                        'path': draft_doc.path,
+                        'is_draft': True,
+                    },
+                },
+                status=status.HTTP_201_CREATED,
+            )
+
         # Get vault type from POST data (required for smart ingestion)
         vault_type = request.POST.get('vault_type', None)
         target_folder = request.POST.get('target_folder', None)
@@ -343,6 +454,33 @@ class DocumentUploadView(APIView):
         files = request.FILES.getlist('files')
         paths = request.POST.getlist('relative_paths')
         
+        # --- Text-draft guard: handle raw text payloads without multipart files ---
+        text_content: str = request.POST.get('text_content', '')
+        if not files and text_content:
+            draft_path: str = f"Drafts/New_Draft_{uuid.uuid4().hex[:4]}.md"
+            draft_doc: ArchiveDocument = ArchiveDocument.objects.create(
+                title=f"New_Draft_{uuid.uuid4().hex[:4]}.md",
+                file=ContentFile(text_content.encode('utf-8'), name=f"New_Draft_{uuid.uuid4().hex[:4]}.md"),
+                path=draft_path,
+                file_type='text',
+                is_draft=True,
+                is_immutable=False,
+                case=case,
+                user=request.user,
+                uploader=request.user,
+                metadata={'virtual_path': draft_path}
+            )
+            return Response({
+                'status': 'success',
+                'message': 'Draft saved',
+                'document': {
+                    'uuid': str(draft_doc.uuid),
+                    'title': draft_doc.title,
+                    'path': draft_doc.path,
+                    'is_draft': True,
+                }
+            }, status=status.HTTP_201_CREATED)
+
         if not files:
             return Response({
                 'status': 'error',

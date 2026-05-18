@@ -30,34 +30,18 @@ const CanvasEditor: React.FC<CanvasEditorProps> = ({ caseId, activeDocument }) =
     }
   }, [activeDocument?.uuid]);
 
-  const loadFileContent = async (details: { file_type: string; path: string; has_md_twin?: boolean; markdown_path?: string | null }) => {
-    const isPdf = details.file_type === 'pdf';
-    let targetPath = details.path;
-
-    if (isPdf && details.has_md_twin && details.markdown_path) {
-      targetPath = details.markdown_path;
-    } else if (isPdf) {
-      const mdPath = details.path.replace(/\.pdf$/i, '.md');
-      targetPath = mdPath;
+  const loadFileContent = async (details: { file_type: string; uuid?: string }) => {
+    if (!details.uuid) {
+      setContent("");
+      setLoadedContent(null);
+      return;
     }
 
     try {
-      const response = await fetch(`/${targetPath}`);
-      if (response.ok) {
-        const text = await response.text();
-        setContent(text);
-        setLoadedContent(text);
-        return;
-      }
-    } catch {
-    }
-
-    try {
-      const response = await fetch(`/media/${targetPath}`);
-      if (response.ok) {
-        const text = await response.text();
-        setContent(text);
-        setLoadedContent(text);
+      const response = await archiveApi.getDocumentContent(details.uuid);
+      if (response.status === 200) {
+        setContent(response.data.content || "");
+        setLoadedContent(response.data.content || null);
         return;
       }
     } catch {

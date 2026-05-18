@@ -48,6 +48,18 @@ class Case(models.Model):
         help_text="Name of the legal case"
     )
     
+    client_legal_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Full legal name of the client party"
+    )
+    
+    opposing_legal_name = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Full legal name of the opposing/adversarial party"
+    )
+    
     description = models.TextField(
         blank=True,
         help_text="Detailed description of the case"
