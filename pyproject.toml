@@ -25,8 +25,7 @@ dependencies = [
     "mozilla-django-oidc>=5.0.2",
     "lancedb>=0.25,<0.26",
     "sentence-transformers>=2.7,<3",
-    "numpy<2",
-    "torch>=2.2.0,<2.3.0",
+    "torch",
 ]
 
 [tool.setuptools.packages.find]
