@@ -38,9 +38,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-ENV UV_SYSTEM_PYTHON=1 \
-    UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
@@ -69,9 +69,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_SYSTEM_PYTHON=1 \
+    PATH="/app/.venv/bin:$PATH" \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    HOME=/app \
     LANCE_DB_PATH=/data/lancedb
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
@@ -81,8 +82,7 @@ RUN addgroup --system --gid 1001 appgroup \
     && mkdir -p /data/lancedb /app/static /app/media \
     && chown -R appuser:appgroup /data /app
 
-COPY --from=backend-forge /usr/local/lib/python3.13 /usr/local/lib/python3.13
-COPY --from=backend-forge /usr/local/bin /usr/local/bin
+COPY --from=backend-forge /build/.venv /app/.venv
 COPY --from=backend-forge /build /app
 COPY --from=frontend-builder /build/static/frontend /app/static/frontend
 COPY docker-entrypoint.sh /docker-entrypoint.sh
