@@ -16,8 +16,8 @@
 services:
   web:
     build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     volumes:
       - static_volume:/app/staticfiles
       - media_volume:/app/media
@@ -62,8 +62,8 @@ services:
 
   celery:
     build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     command: celery -A config worker --loglevel=info
     volumes:
       - media_volume:/app/media
@@ -82,8 +82,8 @@ services:
 
   celery-beat:
     build:
-      context: ../..
-      dockerfile: deploy/docker/Dockerfile
+      context: .
+      dockerfile: Dockerfile
     command: celery -A config beat --loglevel=info
     volumes:
       - media_volume:/app/media

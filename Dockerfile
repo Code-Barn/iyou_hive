@@ -85,7 +85,7 @@ COPY --from=backend-forge /usr/local/lib/python3.13 /usr/local/lib/python3.13
 COPY --from=backend-forge /usr/local/bin /usr/local/bin
 COPY --from=backend-forge /build /app
 COPY --from=frontend-builder /build/frontend/dist /app/static/frontend
-COPY deploy/docker/docker-entrypoint.sh /docker-entrypoint.sh
+COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 WORKDIR /app
 USER appuser
