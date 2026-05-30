@@ -79,7 +79,7 @@ class VectorIndexService:
         """
         self.case_uuid: str = str(case_uuid)
         self._db_path: str = str(
-            Path(settings.MEDIA_ROOT) / "cases" / self.case_uuid / "lancedb"
+            Path(settings.LANCE_DB_BASE) / "cases" / self.case_uuid / "lancedb"
         )
         self._db: Optional[lancedb.DBConnection] = None
         self._model: Any = None

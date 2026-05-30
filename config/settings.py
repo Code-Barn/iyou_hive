@@ -23,17 +23,24 @@ import os
 import platform
 from pathlib import Path
 
-from dotenv import load_dotenv
+import environ
 
-load_dotenv()
+env = environ.Env(
+    DEBUG=(bool, True),
+    ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1", "100.64.0.4"]),
+    SESSION_COOKIE_SECURE=(bool, False),
+    CSRF_COOKIE_SECURE=(bool, False),
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv("SECRET_KEY", "django-insecure-dev-key-change-in-production")
+environ.Env.read_env(BASE_DIR / ".env")
 
-DEBUG = os.getenv("DEBUG", "True") == "True"
+SECRET_KEY = env("SECRET_KEY", default="django-insecure-dev-key-change-in-production")
 
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,100.64.0.4").split(",")
+DEBUG = env("DEBUG")
+
+ALLOWED_HOSTS = env("ALLOWED_HOSTS")
 
 
 INSTALLED_APPS = [
@@ -57,6 +64,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -79,26 +87,28 @@ RUST_DID_LIB_EXTENSION = {"Linux": "so", "Darwin": "dylib", "Windows": "dll"}.ge
     platform.system(), "so"
 )
 
-RUST_DID_LIB_PATH = os.getenv(
+RUST_DID_LIB_PATH = env(
     "RUST_DID_LIB_PATH",
-    BASE_DIR
-    / "rust_did"
-    / "target"
-    / "release"
-    / f"libdid_rust.{RUST_DID_LIB_EXTENSION}",
+    default=str(
+        BASE_DIR
+        / "rust_did"
+        / "target"
+        / "release"
+        / f"libdid_rust.{RUST_DID_LIB_EXTENSION}"
+    ),
 )
 
-DID_BACKEND = os.getenv("DID_BACKEND", "rust")
+DID_BACKEND = env("DID_BACKEND", default="rust")
 
 SESSION_COOKIE_NAME = "hiver_sessionid"
 SESSION_COOKIE_AGE = 1209600
-SESSION_COOKIE_SECURE = False  # Set to False for development (localhost)
+SESSION_COOKIE_SECURE = env("SESSION_COOKIE_SECURE")
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_DOMAIN = None
 SESSION_SAVE_EVERY_REQUEST = True
 CSRF_COOKIE_NAME = "hiver_csrftoken"
-CSRF_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = env("CSRF_COOKIE_SECURE")
 
 TEMPLATES = [
     {
@@ -120,10 +130,9 @@ WSGI_APPLICATION = "config.wsgi.application"
 
 
 DATABASES = {
-    "default": {
-        "ENGINE": os.getenv("DATABASE_ENGINE", "django.db.backends.sqlite3"),
-        "NAME": os.getenv("DATABASE_NAME", BASE_DIR / "db.sqlite3"),
-    }
+    "default": env.db_url(
+        "DATABASE_URL", default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
+    ),
 }
 
 
@@ -133,17 +142,27 @@ AUTHENTICATION_BACKENDS = [
     "apps.accounts.backends.MyOIDCAuthenticationBackend",
 ]
 
-OIDC_RP_CLIENT_ID = os.getenv("OIDC_RP_CLIENT_ID", "hiver-client")
-OIDC_RP_CLIENT_SECRET = os.getenv("OIDC_RP_CLIENT_SECRET", "")
+OIDC_RP_CLIENT_ID = env("OIDC_RP_CLIENT_ID", default="hiver-client")
+OIDC_RP_CLIENT_SECRET = env("OIDC_RP_CLIENT_SECRET", default="")
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_RP_VERIFY_KID = False
 
-OIDC_OP_AUTHORIZATION_ENDPOINT = os.getenv("OIDC_OP_AUTHORIZATION_ENDPOINT", "http://127.0.0.1:8000/openid/authorize/")
-OIDC_OP_TOKEN_ENDPOINT = os.getenv("OIDC_OP_TOKEN_ENDPOINT", "http://127.0.0.1:8000/openid/token/")
-OIDC_OP_USER_ENDPOINT = os.getenv("OIDC_OP_USER_ENDPOINT", "http://127.0.0.1:8000/openid/userinfo/")
-OIDC_OP_JWKS_ENDPOINT = os.getenv("OIDC_OP_JWKS_ENDPOINT", "http://127.0.0.1:8000/openid/jwks/")
+OIDC_OP_AUTHORIZATION_ENDPOINT = env(
+    "OIDC_OP_AUTHORIZATION_ENDPOINT", default="https://iyou.me/openid/authorize/"
+)
+OIDC_OP_TOKEN_ENDPOINT = env(
+    "OIDC_OP_TOKEN_ENDPOINT", default="http://127.0.0.1:8000/openid/token/"
+)
+OIDC_OP_USER_ENDPOINT = env(
+    "OIDC_OP_USER_ENDPOINT", default="http://127.0.0.1:8000/openid/userinfo/"
+)
+OIDC_OP_JWKS_ENDPOINT = env(
+    "OIDC_OP_JWKS_ENDPOINT", default="http://127.0.0.1:8000/openid/jwks/"
+)
 
-OIDC_RP_CALLBACK_URL = os.getenv("OIDC_RP_CALLBACK_URL", "http://127.0.0.1:8003/oidc/callback/")
+OIDC_RP_CALLBACK_URL = env(
+    "OIDC_RP_CALLBACK_URL", default="http://127.0.0.1:8003/oidc/callback/"
+)
 
 OIDC_USERNAME_ALGO = lambda claims: claims.get("sub")
 OIDC_RP_REQUIRED_CLAIMS = []
@@ -152,7 +171,7 @@ OIDC_STORE_ID_TOKEN = True
 
 CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:8000",
-    "http://127.0.0.1:8003",
+    "http://127.0.0.1:8004",
 ]
 
 
@@ -163,9 +182,11 @@ USE_TZ = True
 
 
 STATIC_URL = "static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
 ]
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Cache control for development - prevent browser caching of assets
 # This ensures the browser always fetches the latest manifest and JS/CSS
@@ -196,7 +217,10 @@ HIVER_THEME = {
 
 
 # Mistral AI Configuration
-MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
+MISTRAL_API_KEY = env("MISTRAL_API_KEY", default="")
+
+# LanceDB vector index base directory
+LANCE_DB_BASE = env("LANCE_DB_PATH", default=str(BASE_DIR / "media"))
 
 # Django REST Framework Configuration
 REST_FRAMEWORK = {

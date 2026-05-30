@@ -1,24 +1,43 @@
-version: "3.8"
+# Copyright (C) 2026 Byers Brands, LLC
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 services:
   web:
     build:
-      context: .
-      dockerfile: apps/core/Dockerfile
-    command: uv run gunicorn --bind 0.0.0.0:8000 config.wsgi:application --workers 4 --threads 2
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
     volumes:
-      - .:/app
-      - static_volume:/app/static
+      - static_volume:/app/staticfiles
       - media_volume:/app/media
+      - lancedb_data:/data/lancedb
     environment:
-      - DJANGO_SETTINGS_MODULE=config.settings
-      - DEBUG=False
-      - SECRET_KEY=${DJANGO_SECRET_KEY}
-      - ALLOWED_HOSTS=*
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
+      DJANGO_SETTINGS_MODULE: config.settings
+      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DEBUG: "False"
+      ALLOWED_HOSTS: "*"
+      LANCE_DB_PATH: /data/lancedb
+      OIDC_RP_CLIENT_ID: ${OIDC_RP_CLIENT_ID}
+      OIDC_RP_CLIENT_SECRET: ${OIDC_RP_CLIENT_SECRET}
+      OIDC_RP_CALLBACK_URL: ${OIDC_RP_CALLBACK_URL}
+      MISTRAL_API_KEY: ${MISTRAL_API_KEY}
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
     ports:
       - "8000:8000"
     restart: unless-stopped
@@ -28,9 +47,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data/
     environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
     ports:
       - "5432:5432"
     restart: unless-stopped
@@ -43,39 +62,46 @@ services:
 
   celery:
     build:
-      context: .
-      dockerfile: apps/core/Dockerfile
-    command: uv run celery -A config worker --loglevel=info
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    command: celery -A config worker --loglevel=info
     volumes:
-      - .:/app
+      - media_volume:/app/media
+      - lancedb_data:/data/lancedb
     environment:
-      - DJANGO_SETTINGS_MODULE=config.settings
-      - DEBUG=False
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
+      DJANGO_SETTINGS_MODULE: config.settings
+      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+      DEBUG: "False"
+      LANCE_DB_PATH: /data/lancedb
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
     restart: unless-stopped
 
   celery-beat:
     build:
-      context: .
-      dockerfile: apps/core/Dockerfile
-    command: uv run celery -A config beat --loglevel=info
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    command: celery -A config beat --loglevel=info
     volumes:
-      - .:/app
+      - media_volume:/app/media
+      - lancedb_data:/data/lancedb
     environment:
-      - DJANGO_SETTINGS_MODULE=config.settings
-      - DEBUG=False
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/postgres
+      DJANGO_SETTINGS_MODULE: config.settings
+      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+      DEBUG: "False"
+      LANCE_DB_PATH: /data/lancedb
     depends_on:
-      - db
-      - redis
-      - web
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
     restart: unless-stopped
 
 volumes:
   static_volume:
   media_volume:
+  lancedb_data:
   postgres_data:
