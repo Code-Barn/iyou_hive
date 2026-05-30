@@ -21,7 +21,7 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /build/frontend
 
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci && npm cache clean --force
 
 COPY frontend/ .
 
@@ -40,7 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV UV_SYSTEM_PYTHON=1 \
     UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
@@ -84,7 +85,7 @@ RUN addgroup --system --gid 1001 appgroup \
 COPY --from=backend-forge /usr/local/lib/python3.13 /usr/local/lib/python3.13
 COPY --from=backend-forge /usr/local/bin /usr/local/bin
 COPY --from=backend-forge /build /app
-COPY --from=frontend-builder /build/frontend/dist /app/static/frontend
+COPY --from=frontend-builder /build/static/frontend /app/static/frontend
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 WORKDIR /app
