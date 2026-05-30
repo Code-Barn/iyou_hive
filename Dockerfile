@@ -16,7 +16,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — Frontend asset build
 # ---------------------------------------------------------------------------
-FROM node:20-alpine@sha256:f1718e3a058af04c3b3fd74b2c32ccd2ab39009e530d3b4c34b0c2f7a87c4d37 AS frontend-builder
+FROM node:20-alpine AS frontend-builder
 
 WORKDIR /build/frontend
 
@@ -30,7 +30,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 # Stage 2 — Python wheel assembly + static collection
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim@sha256:37b9e4ccfd52d1d2ba0876e06748ae36fd04f588a25bf7e4e0ae5e4a175ed634 AS backend-forge
+FROM python:3.13-slim AS backend-forge
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -42,7 +42,7 @@ ENV UV_SYSTEM_PYTHON=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
 
-COPY --from=ghcr.io/astral-sh/uv:0.6.14@sha256:a7fbcd24dfe2288c5a3577a91e70c247daf3f7d52eace7787e1c5e03416e04cd /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
 WORKDIR /build
 
@@ -59,7 +59,7 @@ RUN DJANGO_SETTINGS_MODULE=config.settings \
 # ---------------------------------------------------------------------------
 # Stage 3 — Final runtime image
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim@sha256:37b9e4ccfd52d1d2ba0876e06748ae36fd04f588a25bf7e4e0ae5e4a175ed634
+FROM python:3.13-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
@@ -74,7 +74,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy \
     LANCE_DB_PATH=/data/lancedb
 
-COPY --from=ghcr.io/astral-sh/uv:0.6.14@sha256:a7fbcd24dfe2288c5a3577a91e70c247daf3f7d52eace7787e1c5e03416e04cd /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
 RUN addgroup --system --gid 1001 appgroup \
     && adduser --system --uid 1001 --gid 1001 appuser \
