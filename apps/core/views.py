@@ -56,9 +56,14 @@ def react_app_view(request):
             active_case_id = str(user_case.id)
             request.session['selected_case_id'] = active_case_id
 
+    from django.conf import settings
+
     context = {
         'username': request.user.username,
         'active_case_id': active_case_id if active_case_id else '',
+        'POLY_URL': getattr(settings, 'POLY_URL', 'https://poly.iyou.me'),
+        'SOCIALFEED_URL': getattr(settings, 'SOCIALFEED_URL', 'https://wun.iyou.me'),
+        'VAULT_URL': getattr(settings, 'VAULT_URL', 'ws://127.0.0.1:9001'),
     }
 
     return render(request, 'frontend/index.html', context)

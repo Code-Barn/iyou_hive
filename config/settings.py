@@ -30,6 +30,8 @@ env = environ.Env(
     ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1", "100.64.0.4"]),
     SESSION_COOKIE_SECURE=(bool, False),
     CSRF_COOKIE_SECURE=(bool, False),
+    CORS_ALLOWED_ORIGINS=(list, ["https://hive.iyou.me"]),
+    CSRF_TRUSTED_ORIGINS=(list, ["https://hive.iyou.me"]),
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -121,6 +123,7 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "apps.core.context_processors.cases_processor",
+                "apps.core.context_processors.service_urls",
             ],
         },
     },
@@ -166,13 +169,10 @@ OIDC_RP_CALLBACK_URL = env(
 
 OIDC_USERNAME_ALGO = lambda claims: claims.get("sub")
 OIDC_RP_REQUIRED_CLAIMS = []
-OIDC_VERIFY_SSL = False
+OIDC_VERIFY_SSL = env.bool("OIDC_VERIFY_SSL", default=True)
 OIDC_STORE_ID_TOKEN = True
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://127.0.0.1:8000",
-    "http://127.0.0.1:8004",
-]
+CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 
 
 LANGUAGE_CODE = "en-us"
@@ -216,8 +216,13 @@ HIVER_THEME = {
 }
 
 
-# Mistral AI Configuration
+# AI Provider Configuration
 MISTRAL_API_KEY = env("MISTRAL_API_KEY", default="")
+GEMINI_API_KEY = env("GEMINI_API_KEY", default="")
+LLM_BACKEND = env("LLM_BACKEND", default="mock")
+OLLAMA_ENDPOINT = env("OLLAMA_ENDPOINT", default="http://127.0.0.1:11434")
+OLLAMA_MODEL = env("OLLAMA_MODEL", default="llama2")
+GEMINI_MODEL = env("GEMINI_MODEL", default="gemini-2.5-flash")
 
 # LanceDB vector index base directory
 LANCE_DB_BASE = env("LANCE_DB_PATH", default=str(BASE_DIR / "media"))
@@ -235,16 +240,18 @@ REST_FRAMEWORK = {
     "PAGE_SIZE": 50,
 }
 
-# CORS Configuration (for React frontend in development)
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_CREDENTIALS = True
 
 # Celery Configuration
-CELERY_BROKER_URL = "redis://localhost:6379/0"
-CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://127.0.0.1:6379/0")
+CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default="redis://127.0.0.1:6379/0")
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
+
+# Cross-service mesh URLs
+POLY_URL = env("POLY_URL", default="https://poly.iyou.me")
+SOCIALFEED_URL = env("SOCIALFEED_URL", default="https://wun.iyou.me")
+VAULT_URL = env("VAULT_URL", default="ws://127.0.0.1:9001")

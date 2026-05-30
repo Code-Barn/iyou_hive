@@ -2,8 +2,8 @@
     <div class="mesh-nav-inner">
         <span class="mesh-nav-brand">Hiver</span>
         <div class="mesh-nav-links">
-            <a href="http://127.0.0.1:8001" class="mesh-nav-link">Social Feed</a>
-            <a href="http://127.0.0.1:8002" class="mesh-nav-link">Poly</a>
+            <a href="{{ POLY_URL }}" class="mesh-nav-link">Poly</a>
+            <a href="{{ SOCIALFEED_URL }}" class="mesh-nav-link">Social Feed</a>
             <span id="meshBadge" class="mesh-badge hidden">Sovereign Mesh Active</span>
             {% if user.is_authenticated %}
                 <span class="mesh-user" title="{{ user.username }}">
@@ -24,7 +24,8 @@
 document.addEventListener("DOMContentLoaded", function () {
     var badge = document.getElementById("meshBadge");
     if (!badge) return;
-    fetch("http://127.0.0.1:9001/", { signal: AbortSignal.timeout(300) })
+    var vaultUrl = "{{ VAULT_URL }}".replace(/^ws:/, "http:").replace(/^wss:/, "https:");
+    fetch(vaultUrl + "/", { signal: AbortSignal.timeout(300) })
         .then(function (r) { if (r.ok) badge.classList.remove("hidden"); })
         .catch(function () {});
 });

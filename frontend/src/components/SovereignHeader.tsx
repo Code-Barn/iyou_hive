@@ -43,11 +43,17 @@ function getCSRFToken(): string {
 const SovereignHeader: React.FC = () => {
   const [meshActive, setMeshActive] = useState(false);
 
+  const root = document.getElementById("timeline-app");
+  const vaultUrl = root?.dataset?.vaultUrl || "ws://127.0.0.1:9001";
+  const polyUrl = root?.dataset?.polyUrl || "https://poly.iyou.me";
+  const socialfeedUrl = root?.dataset?.socialfeedUrl || "https://wun.iyou.me";
+
   useEffect(() => {
-    fetch("http://127.0.0.1:9001/", { signal: AbortSignal.timeout(300) })
+    const httpUrl = vaultUrl.replace(/^ws:/, "http:").replace(/^wss:/, "https:");
+    fetch(httpUrl + "/", { signal: AbortSignal.timeout(300) })
       .then((r) => { if (r.ok) setMeshActive(true); })
       .catch(() => {});
-  }, []);
+  }, [vaultUrl]);
 
   const handleLogout = () => {
     const form = document.createElement("form");
@@ -62,7 +68,6 @@ const SovereignHeader: React.FC = () => {
     form.submit();
   };
 
-  const root = document.getElementById("timeline-app");
   const username = root?.dataset?.username || "";
 
   return (
@@ -73,13 +78,13 @@ const SovereignHeader: React.FC = () => {
         </span>
         <div className="flex items-center gap-4">
           <a
-            href="http://127.0.0.1:8001"
+            href={socialfeedUrl}
             className="text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400"
           >
             Social Feed
           </a>
           <a
-            href="http://127.0.0.1:8002"
+            href={polyUrl}
             className="text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400"
           >
             Poly

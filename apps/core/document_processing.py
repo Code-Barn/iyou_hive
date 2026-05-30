@@ -115,7 +115,8 @@ def build_markdown_with_form(text, form_data, checkboxes, original_name="", virt
 
 def get_llm_converter():
     import google.genai as genai
-    api_key = os.environ.get("GEMINI_API_KEY")
+    from django.conf import settings
+    api_key = getattr(settings, "GEMINI_API_KEY", None) or os.environ.get("GEMINI_API_KEY")
     if not api_key:
         return None
     try:

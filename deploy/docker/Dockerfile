@@ -63,6 +63,8 @@ FROM python:3.13-slim@sha256:37b9e4ccfd52d1d2ba0876e06748ae36fd04f588a25bf7e4e0a
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
+    poppler-utils \
+    tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

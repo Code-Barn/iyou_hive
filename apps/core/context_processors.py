@@ -21,6 +21,14 @@ from apps.archive.models import ArchiveDocument
 from django.conf import settings
 
 
+def service_urls(request):
+    return {
+        "POLY_URL": getattr(settings, "POLY_URL", "https://poly.iyou.me"),
+        "SOCIALFEED_URL": getattr(settings, "SOCIALFEED_URL", "https://wun.iyou.me"),
+        "VAULT_URL": getattr(settings, "VAULT_URL", "ws://127.0.0.1:9001"),
+    }
+
+
 def cases_processor(request):
     """
     Context processor to provide current case information to all templates.
