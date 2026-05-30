@@ -32,3 +32,6 @@ dependencies = [
 where = ["."]
 include = ["apps*", "config*"]
 exclude = ["tests*"]
+
+[tool.uv.sources]
+torch = { index = "https://download.pytorch.org/whl/cpu" }
