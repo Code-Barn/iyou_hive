@@ -40,8 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV UV_SYSTEM_PYTHON=1 \
     UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
-    UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+    UV_LINK_MODE=copy
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
