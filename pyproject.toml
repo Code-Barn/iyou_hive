@@ -33,5 +33,9 @@ where = ["."]
 include = ["apps*", "config*"]
 exclude = ["tests*"]
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+
 [tool.uv.sources]
-torch = { index = "https://download.pytorch.org/whl/cpu" }
+torch = { index = "pytorch-cpu" }
