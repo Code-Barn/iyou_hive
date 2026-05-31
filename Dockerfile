@@ -40,11 +40,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+    UV_PROJECT_ENVIRONMENT=/app/.venv
 
 COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
-WORKDIR /build
+WORKDIR /app
 
 COPY pyproject.toml .
 RUN uv lock --no-cache && uv sync --no-dev --no-cache
@@ -53,8 +53,8 @@ COPY . .
 
 RUN DJANGO_SETTINGS_MODULE=config.settings \
     SECRET_KEY=placeholder-do-not-use \
-    DATABASE_URL=sqlite:///build/db.sqlite3 \
-    uv run python manage.py collectstatic --noinput --clear
+    DATABASE_URL=sqlite:///app/db.sqlite3 \
+    /app/.venv/bin/python manage.py collectstatic --noinput --clear
 
 # ---------------------------------------------------------------------------
 # Stage 3 — Final runtime image
@@ -69,9 +69,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH" \
-    UV_COMPILE_BYTECODE=1 \
-    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/app/.venv \
+    PATH=/app/.venv/bin:$PATH \
     HOME=/app \
     LANCE_DB_PATH=/data/lancedb
 
@@ -82,8 +81,7 @@ RUN addgroup --system --gid 1001 appgroup \
     && mkdir -p /data/lancedb /app/static /app/media \
     && chown -R appuser:appgroup /data /app
 
-COPY --from=backend-forge /build/.venv /app/.venv
-COPY --from=backend-forge /build /app
+COPY --from=backend-forge /app /app
 COPY --from=frontend-builder /build/static/frontend /app/static/frontend
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
@@ -93,4 +91,4 @@ USER appuser
 EXPOSE 8000
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "2"]
+CMD ["/app/.venv/bin/gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4", "--threads", "2"]

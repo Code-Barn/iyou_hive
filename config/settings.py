@@ -27,7 +27,7 @@ import environ
 
 env = environ.Env(
     DEBUG=(bool, True),
-    ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1", "100.64.0.4"]),
+    ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1", "hive.iyou.me"]),
     SESSION_COOKIE_SECURE=(bool, False),
     CSRF_COOKIE_SECURE=(bool, False),
     CORS_ALLOWED_ORIGINS=(list, ["https://hive.iyou.me"]),

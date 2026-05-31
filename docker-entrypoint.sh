@@ -16,6 +16,6 @@
 
 set -e
 
-python manage.py migrate --noinput
+/app/.venv/bin/python manage.py migrate --noinput
 
 exec "$@"
