@@ -42,7 +42,13 @@ SECRET_KEY = env("SECRET_KEY", default="django-insecure-dev-key-change-in-produc
 
 DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = env("ALLOWED_HOSTS")
+raw_hosts = env("ALLOWED_HOSTS", default="hive.iyou.me,127.0.0.1,localhost")
+
+if isinstance(raw_hosts, str):
+    clean_hosts = raw_hosts.replace("[", "").replace("]", "").replace("'", "").replace('"', "")
+    ALLOWED_HOSTS = [host.strip() for host in clean_hosts.split(",") if host.strip()]
+else:
+    ALLOWED_HOSTS = raw_hosts
 
 
 INSTALLED_APPS = [
