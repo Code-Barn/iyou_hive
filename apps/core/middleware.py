@@ -48,7 +48,7 @@ class SessionSecurityMiddleware(MiddlewareMixin):
                 "style-src 'self' 'unsafe-inline'; "
                 "img-src 'self' data:; "
                 "font-src 'self'; "
-                "connect-src 'self'; "
+                f"connect-src {getattr(settings, 'CONNECT_SRC', \"'self' wss://home.iyou.me:9001\")}; "
                 "frame-src 'none'; "
                 "object-src 'none'"
             )

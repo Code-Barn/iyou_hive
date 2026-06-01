@@ -252,4 +252,7 @@ CELERY_RESULT_SERIALIZER = "json"
 # Cross-service mesh URLs
 POLY_URL = env("POLY_URL", default="https://poly.iyou.me")
 SOCIALFEED_URL = env("SOCIALFEED_URL", default="https://wun.iyou.me")
-VAULT_URL = env("VAULT_URL", default="ws://127.0.0.1:9001")
+VAULT_URL = env("VAULT_URL", default="wss://home.iyou.me:9001/")
+
+# Content Security Policy: connect-src origins
+CONNECT_SRC = env("CONNECT_SRC", default="'self' wss://home.iyou.me:9001")

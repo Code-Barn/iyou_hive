@@ -44,7 +44,7 @@ const SovereignHeader: React.FC = () => {
   const [meshActive, setMeshActive] = useState(false);
 
   const root = document.getElementById("timeline-app");
-  const vaultUrl = root?.dataset?.vaultUrl || "ws://127.0.0.1:9001";
+  const vaultUrl = root?.dataset?.vaultUrl || "wss://home.iyou.me:9001/";
   const polyUrl = root?.dataset?.polyUrl || "https://poly.iyou.me";
   const socialfeedUrl = root?.dataset?.socialfeedUrl || "https://wun.iyou.me";
 

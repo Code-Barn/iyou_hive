@@ -25,7 +25,7 @@ def service_urls(request):
     return {
         "POLY_URL": getattr(settings, "POLY_URL", "https://poly.iyou.me"),
         "SOCIALFEED_URL": getattr(settings, "SOCIALFEED_URL", "https://wun.iyou.me"),
-        "VAULT_URL": getattr(settings, "VAULT_URL", "ws://127.0.0.1:9001"),
+        "VAULT_URL": getattr(settings, "VAULT_URL", "wss://home.iyou.me:9001/"),
     }
 
 
