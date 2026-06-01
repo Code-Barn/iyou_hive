@@ -46,8 +46,8 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
 WORKDIR /app
 
-COPY pyproject.toml .
-RUN uv lock --no-cache && uv sync --no-dev --no-cache
+COPY pyproject.toml uv.lock .
+RUN uv sync --no-dev --frozen
 
 COPY . .
 
