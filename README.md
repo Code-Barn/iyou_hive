@@ -9,7 +9,7 @@
 - ✅ **Document Archive**: Store and manage legal documents (PDFs, images, etc.)
 - ✅ **AI Research Assistant**: Query timeline events and documents using Mistral AI
 - ✅ **Dark/Light Mode**: Toggle between themes with CSS variables
-- ✅ **Authentication**: Secure access with Rust-DID integration (Epiphany separation pattern)
+- ✅ **Authentication**: Secure access via **OpenID Connect (OIDC)** — unified identity mesh across iyou satellites
 - ✅ **Responsive Design**: Mobile-friendly interface
 
 ### Timeline Features
@@ -46,9 +46,9 @@
 
 ### Prerequisites
 - Python 3.10+
-- Django 4.0+
+- Django 5.0+
 - PostgreSQL (recommended) or SQLite
-- Rust (for DID authentication)
+- An OIDC identity provider (iyou_idp) for authentication
 - Node.js (optional, for asset minification)
 
 ### Installation
@@ -57,12 +57,6 @@
 # Clone the repository
 git clone <repository-url>
 cd hiver_django
-
-# Initialize submodules (includes rust_did)
-git submodule update --init
-
-# Build Rust-DID library (optional, for authentication)
-cd rust_did && cargo build --release && cd ..
 
 # Install Python dependencies
 uv sync
@@ -93,9 +87,10 @@ DATABASE_NAME=db.sqlite3
 # Mistral AI API Key (for AI assistant)
 MISTRAL_API_KEY=your-mistral-api-key
 
-# Rust-DID Backend (optional)
-# Set to "rust" to use Rust-DID, or "python" for Python-only
-DID_BACKEND=python
+# OIDC Provider (required for production)
+# Defaults point to the cluster-internal iyou-idp mesh
+OIDC_RP_CLIENT_ID=hive-satellite-client
+OIDC_RP_CLIENT_SECRET=your-client-secret
 
 # Allowed hosts (for production)
 ALLOWED_HOSTS=localhost,127.0.0.1,yourdomain.com
@@ -184,20 +179,6 @@ The three-pane workspace provides:
 - Preference is saved automatically
 - Default is dark mode (black #000000 background)
 
-You'll need to:
-1. **Admin Login**: Go to `/admin/` and log in with your superuser credentials
-2. **Upload Timeline**: Navigate to `/timeline/upload/` to upload markdown timeline files
-3. **Upload Documents**: Go to `/archive/upload/` to upload supporting documents
-4. **Use AI Assistant**: Visit `/ai/` to query your timeline and documents
-
-### Dark/Light Mode Toggle
-
-The application features a theme toggle button in the navigation bar that allows users to switch between dark and light modes. The preference is automatically saved to the browser's localStorage and persists across page reloads.
-
-- **Dark Mode**: Default theme with black background (#000000), honey-orange (#FF8C00) and Byers blue (#0064AA) accents
-- **Light Mode**: Light theme with off-white background (#F5F5F5)
-- **Toggle Button**: Located in the navigation bar with sun (☀️) icon for dark mode and moon (🌙) icon for light mode
-
 ### Dynamic Logo
 
 The site logo automatically switches based on the current theme:
@@ -263,7 +244,8 @@ The AI uses your timeline data and documents as context for responses.
 hiver_django/
 ├── apps/                      # Django applications
 │   ├── core/                # Shared templates, static files, middleware
-│   │   ├── middleware.py    # Authentication and security middleware
+│   │   ├── auth.py          # OIDC authentication backend (MyOIDCAuthenticationBackend)
+│   │   ├── middleware.py    # Security and case-selection middleware
 │   │   └── static/          # Global static files
 │   │
 │   ├── timeline/            # Timeline functionality
@@ -292,12 +274,7 @@ hiver_django/
 ├── config/                   # Django project settings
 │   └── settings.py          # Main settings file
 │
-├── rust_did/                 # Rust-DID library (git submodule)
-│   ├── Cargo.toml            # Rust project manifest
-│   ├── src/                 # Rust source code
-│   │   └── lib.rs           # FFI implementations
-│   └── target/              # Built library (after build)
-│
+
 ├── scripts/                  # Utility scripts
 │   └── minify_assets.py     # CSS/JS minification script
 │
@@ -328,33 +305,40 @@ hiver_django/
 
 ## Authentication
 
-Hiver uses a flexible authentication system with multiple backends:
+Hiver uses **OpenID Connect (OIDC)** for unified identity across the iyou mesh ecosystem.
 
-### Rust-DID (Recommended for Production)
+### OIDC Flow
 
-The Rust-DID library provides decentralized identity verification using Verifiable Credentials (VCs).
+All authentication is handled through the canonical iyou_idp provider:
 
-```bash
-# Enable Rust-DID backend
-DID_BACKEND=rust python manage.py runserver
-```
+1. User clicks **"Authenticate via Sovereign Key Enclave"** → redirects to `iyou.me/openid/authorize/`
+2. iyou_idp handles DID verification, signature challenge, and token issuance
+3. User is redirected back to Hiver via the OIDC callback (`/oidc/callback/`)
+4. `MyOIDCAuthenticationBackend` (`apps/core/auth.py`) provisions the user from the `sub` claim
 
-The middleware will:
-1. Check for VC tokens in request headers (`X-VC-Token`)
-2. Verify the token using Rust-DID FFI
-3. Set `request.user` based on the VC
-4. Fall back to session authentication if VC is invalid
+No manual cryptographic verification, challenge endpoints, or custom login views are used — the OIDC code flow is the sole authentication path.
 
-### Django Session Authentication (Development)
+### Backends
 
-For development and simpler deployments, use Django's built-in authentication:
+| Backend | Purpose |
+|---------|---------|
+| `apps.core.auth.MyOIDCAuthenticationBackend` | Canonical OIDC user provisioning — auto-creates users from `sub` claim |
+| `django.contrib.auth.backends.ModelBackend` | Fallback for admin/staff CLI-created accounts |
 
-```bash
-# Use Python-only backend
-DID_BACKEND=python python manage.py runserver
-```
+### Configuration
 
-This uses standard Django session authentication via the admin interface.
+Set these env vars (defaults point to cluster-internal iyou-idp mesh):
+
+| Variable | Default |
+|----------|---------|
+| `OIDC_RP_CLIENT_ID` | `hive-satellite-client` |
+| `OIDC_RP_CLIENT_SECRET` | _(required)_ |
+| `OIDC_OP_AUTHORIZATION_ENDPOINT` | `https://iyou.me/openid/authorize/` |
+| `OIDC_OP_TOKEN_ENDPOINT` | `http://iyou-idp.identity.svc.cluster.local:8000/openid/token/` |
+| `OIDC_OP_USER_ENDPOINT` | `http://iyou-idp.identity.svc.cluster.local:8000/openid/userinfo/` |
+| `OIDC_OP_JWKS_ENDPOINT` | `http://iyou-idp.identity.svc.cluster.local:8000/openid/jwks/` |
+
+Cluster-internal endpoints use the Kubernetes service DNS `iyou-idp.identity.svc.cluster.local` for server-to-server validation. External user-facing auth begins at `https://iyou.me/openid/authorize/`.
 
 ## Performance Optimization
 
@@ -450,7 +434,7 @@ Test coverage includes:
 - ✅ Markdown parsing
 - ✅ AI API integration
 - ✅ View rendering
-- ✅ Authentication middleware
+- ✅ Session and case-selection middleware
 
 ## Deployment
 
@@ -465,7 +449,7 @@ Test coverage includes:
 7. [ ] Set up HTTPS
 8. [ ] Run `python scripts/minify_assets.py`
 9. [ ] Collect static files: `python manage.py collectstatic`
-10. [ ] Build Rust-DID library (if using DID auth)
+10. [ ] Configure `OIDC_RP_CLIENT_ID` and `OIDC_RP_CLIENT_SECRET`
 
 ### Using Gunicorn
 
@@ -491,11 +475,6 @@ COPY . .
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
-
-# Build Rust-DID
-WORKDIR /app/rust_did
-RUN cargo build --release
-WORKDIR /app
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
