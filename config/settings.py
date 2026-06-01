@@ -80,9 +80,8 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "mozilla_django_oidc.middleware.SessionRefresh",
-    "apps.core.middleware.RustDIDAuthenticationMiddleware",
-    "apps.core.middleware.CaseSelectionMiddleware",
     "apps.core.middleware.SessionSecurityMiddleware",
+    "apps.core.middleware.CaseSelectionMiddleware",
 ]
 
 ROOT_URLCONF = "config.urls"
@@ -147,27 +146,20 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = []
 
-AUTHENTICATION_BACKENDS = [
-    "apps.accounts.backends.MyOIDCAuthenticationBackend",
-]
+AUTHENTICATION_BACKENDS = (
+    "apps.core.auth.MyOIDCAuthenticationBackend",
+    "django.contrib.auth.backends.ModelBackend",
+)
 
-OIDC_RP_CLIENT_ID = env("OIDC_RP_CLIENT_ID", default="hiver-client")
+OIDC_RP_CLIENT_ID = env("OIDC_RP_CLIENT_ID", default="hive-satellite-client")
 OIDC_RP_CLIENT_SECRET = env("OIDC_RP_CLIENT_SECRET", default="")
 OIDC_RP_SIGN_ALGO = "RS256"
-OIDC_RP_VERIFY_KID = False
+OIDC_RP_VERIFY_KID = True
 
-OIDC_OP_AUTHORIZATION_ENDPOINT = env(
-    "OIDC_OP_AUTHORIZATION_ENDPOINT", default="https://iyou.me/openid/authorize/"
-)
-OIDC_OP_TOKEN_ENDPOINT = env(
-    "OIDC_OP_TOKEN_ENDPOINT", default="http://127.0.0.1:8000/openid/token/"
-)
-OIDC_OP_USER_ENDPOINT = env(
-    "OIDC_OP_USER_ENDPOINT", default="http://127.0.0.1:8000/openid/userinfo/"
-)
-OIDC_OP_JWKS_ENDPOINT = env(
-    "OIDC_OP_JWKS_ENDPOINT", default="http://127.0.0.1:8000/openid/jwks/"
-)
+OIDC_OP_AUTHORIZATION_ENDPOINT = "https://iyou.me/openid/authorize/"
+OIDC_OP_TOKEN_ENDPOINT = "http://iyou-idp.identity.svc.cluster.local:8000/openid/token/"
+OIDC_OP_USER_ENDPOINT = "http://iyou-idp.identity.svc.cluster.local:8000/openid/userinfo/"
+OIDC_OP_JWKS_ENDPOINT = "http://iyou-idp.identity.svc.cluster.local:8000/openid/jwks/"
 
 OIDC_RP_CALLBACK_URL = env(
     "OIDC_RP_CALLBACK_URL", default="http://127.0.0.1:8003/oidc/callback/"

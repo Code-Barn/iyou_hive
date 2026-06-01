@@ -100,24 +100,21 @@
             </div>
         </form>
 
-        <!-- Alternative Registration Options -->
-        {% if rust_did_available %}
         <div class="alternative-options">
             <div class="divider">
                 <span>or</span>
             </div>
             <div class="option-card">
-                <div class="option-icon">🔐</div>
+                <div class="option-icon">🔑</div>
                 <div class="option-content">
-                    <h3>Sign Up with DID</h3>
-                    <p>Use your Decentralized Identifier to create an account without a password.</p>
+                    <h3>Sovereign Key Login</h3>
+                    <p>Authenticate with your unified Sovereign Key enclave across the iyou mesh.</p>
                 </div>
-                <a href="{% url 'accounts:did_login' %}" class="option-btn">
-                    Continue with DID
+                <a href="{% url 'oidc_authentication_init' %}" class="option-btn">
+                    Authenticate via Sovereign Key
                 </a>
             </div>
         </div>
-        {% endif %}
     </div>
 </div>
 

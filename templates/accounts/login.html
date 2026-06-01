@@ -65,49 +65,15 @@
         </div>
     </div>
 
-    <!-- DID Login Option -->
-    {% if rust_did_available %}
-    <div class="login-card did-card">
-        <h2>🔐 DID Authentication</h2>
-        <p class="did-description">
-            Sign in using your Decentralized Identifier (DID) with Rust-DID verification.
+    <div class="login-card oidc-card">
+        <h2>Sovereign Key Authentication</h2>
+        <p class="oidc-description">
+            Sign in using your unified Sovereign Key identity across the iyou mesh.
         </p>
-        
-        <div class="did-features">
-            <div class="feature-item">
-                <span class="feature-icon">🔒</span>
-                <span>Decentralized identity</span>
-            </div>
-            <div class="feature-item">
-                <span class="feature-icon">✅</span>
-                <span>Verified credentials</span>
-            </div>
-            <div class="feature-item">
-                <span class="feature-icon">🚀</span>
-                <span>No password needed</span>
-            </div>
-        </div>
-        
-        <a href="{% url 'accounts:did_login' %}" class="btn-secondary did-login-btn">
-            <span class="did-icon">🔐</span>
-            Sign In with DID
+        <a href="{% url 'oidc_authentication_init' %}" class="btn-hud-primary">
+            Authenticate via Sovereign Key Enclave
         </a>
-        
-        <div class="did-info">
-            <details>
-                <summary>How DID authentication works</summary>
-                <ol>
-                    <li>Click "Sign In with DID" above</li>
-                    <li>Enter your DID (e.g., did:example:abc123)</li>
-                    <li>Copy the challenge code</li>
-                    <li>Sign the challenge with your DID manager</li>
-                    <li>Paste the signature</li>
-                    <li>Submit the form</li>
-                </ol>
-            </details>
-        </div>
     </div>
-    {% endif %}
 
     <!-- Admin Link -->
     <div class="admin-link-container">
@@ -147,8 +113,9 @@
         margin-bottom: 1.5rem;
     }
     
-    .did-card {
+    .oidc-card {
         border-top: 3px solid var(--accent);
+        text-align: center;
     }
     
     .login-card h2 {
@@ -158,13 +125,10 @@
         display: flex;
         align-items: center;
         gap: 0.5rem;
+        justify-content: center;
     }
     
-    .did-card h2 {
-        color: var(--accent);
-    }
-    
-    .did-description {
+    .oidc-description {
         color: var(--text-secondary);
         font-size: 0.9rem;
         margin-bottom: 1.5rem;
@@ -284,54 +248,23 @@
         color: var(--accent);
     }
     
-    /* DID Features */
-    .did-features {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-        flex-wrap: wrap;
-    }
-    
-    .feature-item {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.5rem 1rem;
-        background: rgba(0, 100, 170, 0.1);
-        border-radius: 20px;
-        font-size: 0.85rem;
-        color: var(--text-secondary);
-    }
-    
-    .feature-icon {
+    .btn-hud-primary {
+        display: inline-block;
+        padding: 0.875rem 1.5rem;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 8px;
         font-size: 1rem;
-    }
-    
-    .did-info {
-        margin-top: 1rem;
-        padding-top: 1rem;
-        border-top: 1px solid var(--border);
-    }
-    
-    .did-info details {
+        font-weight: 600;
         cursor: pointer;
+        text-decoration: none;
+        transition: all 0.3s ease;
     }
     
-    .did-info summary {
-        color: var(--text-secondary);
-        font-size: 0.85rem;
-        cursor: pointer;
-    }
-    
-    .did-info ol {
-        color: var(--text-secondary);
-        padding-left: 1.5rem;
-        margin-top: 0.5rem;
-        font-size: 0.85rem;
-    }
-    
-    .did-info li {
-        margin-bottom: 0.25rem;
+    .btn-hud-primary:hover {
+        background: #e67e00;
+        box-shadow: 0 0 15px rgba(255, 140, 0, 0.3);
     }
     
     .admin-link-container {

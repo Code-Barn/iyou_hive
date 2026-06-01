@@ -13,28 +13,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 
-"""
-DID Authentication Views
-
-Handles Rust-DID based authentication with:
-- Challenge/response flow
-- DID verification
-- Session management
-"""
-from django.shortcuts import render, redirect
-from django.contrib.auth import login, logout, authenticate
+from django.shortcuts import redirect
+from django.contrib.auth import login, authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.views.decorators.http import require_http_methods
+from django.conf import settings
 from django.http import JsonResponse
 from django.contrib.auth import get_user_model
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib.auth.forms import UserCreationForm
-from django.urls import reverse_lazy
 from django.views.generic import CreateView
-from apps.core.middleware import RustDIDAuthenticationMiddleware
-import uuid
-import json
 
 # Get User model
 User = get_user_model()
@@ -54,7 +42,6 @@ class CustomLoginView(LoginView):
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['rust_did_available'] = RustDIDAuthenticationMiddleware.rust_did_available()
         return context
 
 
@@ -94,138 +81,11 @@ class RegisterView(CreateView):
         
         return response
     
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context['rust_did_available'] = RustDIDAuthenticationMiddleware.rust_did_available()
-        return context
-
-
 class CustomUserCreationForm(UserCreationForm):
     """Custom user creation form with additional fields."""
     class Meta:
         model = User
         fields = ('username', 'email')
-
-
-def generate_challenge(request):
-    """
-    Generate a DID authentication challenge.
-    
-    Returns:
-        JsonResponse with challenge and session key
-    """
-    # Generate a unique challenge
-    challenge = str(uuid.uuid4())
-    
-    # Store challenge in session
-    request.session['did_challenge'] = challenge
-    request.session['did_challenge_nonce'] = str(uuid.uuid4())
-    
-    return JsonResponse({
-        'challenge': challenge,
-        'nonce': request.session['did_challenge_nonce']
-    })
-
-
-@require_http_methods(["GET", "POST"])
-def did_login(request):
-    """
-    DID-based login view.
-    
-    GET: Generate and display login form with challenge
-    POST: Verify DID signature and authenticate user
-    
-    Uses Rust-DID for verification when available, falls back to session auth.
-    """
-    if request.method == 'POST':
-        # Handle DID authentication
-        did = request.POST.get('did')
-        signature = request.POST.get('signature')
-        challenge = request.POST.get('challenge')
-        
-        # Verify the challenge matches what we stored
-        stored_challenge = request.session.get('did_challenge')
-        
-        if not stored_challenge or stored_challenge != challenge:
-            messages.error(request, 'Invalid or expired challenge. Please try again.')
-            return redirect('accounts:did_login')
-        
-        # Try Rust-DID verification
-        from apps.core.did_rust_wrapper import verify_credential
-        
-        try:
-            # Create a VC (Verification Credential) string for verification
-            # Format: {"did": "...", "signature": "...", "challenge": "..."}
-            vc_payload = {
-                'did': did,
-                'signature': signature,
-                'challenge': challenge,
-                'nonce': request.session.get('did_challenge_nonce')
-            }
-            vc_string = json.dumps(vc_payload)
-            
-            # Verify using Rust-DID
-            is_valid = verify_credential(vc_string)
-            
-            if is_valid:
-                # Extract username from DID or create new user
-                # For now, use DID as username
-                username = did
-                
-                # Get or create user
-                user, created = User.objects.get_or_create(
-                    username=username,
-                    defaults={'email': f'{username}@did.example'}
-                )
-                
-                # Log the user in
-                login(request, user)
-                messages.success(request, f'Welcome back, {username}!')
-                
-                # Clear challenge from session
-                request.session.pop('did_challenge', None)
-                request.session.pop('did_challenge_nonce', None)
-                
-                return redirect('/')
-            else:
-                messages.error(request, 'Invalid DID signature. Authentication failed.')
-                
-        except FileNotFoundError as e:
-            # Rust-DID library not available, log warning
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(f"Rust-DID library not found: {e}")
-            messages.warning(request, 'Rust-DID not available. Please configure RUST_DID_LIB_PATH.')
-            
-        except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"DID authentication error: {e}")
-            messages.error(request, f'Authentication error: {str(e)}')
-        
-        # If we get here, authentication failed
-        return redirect('/accounts/login/')
-    
-    # GET request - show login form
-    challenge = str(uuid.uuid4())
-    request.session['did_challenge'] = challenge
-    request.session['did_challenge_nonce'] = str(uuid.uuid4())
-    
-    return render(request, 'accounts/did_login.html', {
-        'challenge': challenge,
-        'nonce': request.session['did_challenge_nonce'],
-        'rust_did_available': RustDIDAuthenticationMiddleware.rust_did_available(),
-    })
-
-
-@login_required
-def did_logout(request):
-    """
-    Logout view with DID session cleanup.
-    """
-    logout(request)
-    messages.success(request, 'You have been logged out.')
-    return redirect('/')
 
 
 def auth_status(request):
@@ -239,13 +99,12 @@ def auth_status(request):
         return JsonResponse({
             'authenticated': True,
             'username': request.user.username,
-            'did': request.user.username,  # Using username as DID for now
+            'login_url': settings.LOGIN_URL,
         })
     else:
         return JsonResponse({
             'authenticated': False,
-            'challenge_url': '/accounts/challenge/',
-            'login_url': '/accounts/login/',
+            'login_url': settings.LOGIN_URL,
         })
 
 
