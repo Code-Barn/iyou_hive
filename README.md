@@ -184,7 +184,6 @@ The three-pane workspace provides:
 The site logo automatically switches based on the current theme:
 - **Dark Mode**: Displays the dark mode logo (DARK_mode_LOGO.png)
 - **Light Mode**: Displays the light mode logo (light_mode_LOGO.png)
-- The logo is 3x larger than the original and links to the home page (`/`)
 
 ### Timeline Markdown Format
 
