@@ -26,6 +26,7 @@ def service_urls(request):
         "POLY_URL": getattr(settings, "POLY_URL", "https://poly.iyou.me"),
         "SOCIALFEED_URL": getattr(settings, "SOCIALFEED_URL", "https://wun.iyou.me"),
         "VAULT_URL": getattr(settings, "VAULT_URL", "wss://home.iyou.me:9001/"),
+        "app_prefix": getattr(settings, "APP_PREFIX", "hive"),
     }
 
 

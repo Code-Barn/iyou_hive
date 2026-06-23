@@ -54,6 +54,9 @@ COPY . .
 RUN DJANGO_SETTINGS_MODULE=config.settings \
     SECRET_KEY=placeholder-do-not-use \
     DATABASE_URL=sqlite:///app/db.sqlite3 \
+    OIDC_RP_CLIENT_ID=builder \
+    OIDC_RP_CLIENT_SECRET=builder \
+    OIDC_RP_CALLBACK_URL=builder \
     /app/.venv/bin/python manage.py collectstatic --noinput --clear
 
 # ---------------------------------------------------------------------------
@@ -79,11 +82,13 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 RUN addgroup --system --gid 1001 appgroup \
     && adduser --system --uid 1001 --gid 1001 appuser \
     && mkdir -p /data/lancedb /app/static /app/media \
-    && chown -R appuser:appgroup /data /app
+    && chown -R appuser:appgroup /data /app/static /app/media
 
 COPY --from=backend-forge /app /app
 COPY --from=frontend-builder /build/static/frontend /app/static/frontend
 COPY docker-entrypoint.sh /docker-entrypoint.sh
+
+RUN rm -f /app/db.sqlite3 && chown appuser:appgroup /app /app/static /app/media
 
 WORKDIR /app
 USER appuser

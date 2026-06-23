@@ -7,8 +7,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>iyou_hiver // Sovereign Archive Vault</title>
     {% render_vite_assets %}
+    <style>
+    #sovereign-ecosystem-topbar + header + #timeline-app { margin-top: 0; }
+    </style>
 </head>
 <body class="h-full text-gray-900 font-sans antialiased">
+
+    {% include 'includes/_ecosystem_bar.html' %}
+    {% include 'includes/_standard_header.html' %}
 
     <div id="timeline-app"
          data-username="{{ username }}"
@@ -24,6 +30,8 @@
             </div>
         </div>
     </div>
+
+
 
 </body>
 </html>

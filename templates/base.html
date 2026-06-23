@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hiver{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     {% if DEBUG %}
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     {% else %}
@@ -12,7 +13,8 @@
     {% endif %}
 </head>
 <body>
-    {% include 'includes/_nav.html' %}
+    {% include 'includes/_ecosystem_bar.html' %}
+    {% include 'includes/_standard_header.html' %}
     <div class="workspace{% if not user.is_authenticated %} workspace-anon{% endif %}">
         <header class="workspace-header">
             <div class="case-selector">
@@ -34,7 +36,7 @@
                 <a href="#" class="nav-button" onclick="togglePane('ai-pane'); return false;">AI</a>
                 <a href="{% url 'accounts:did_logout' %}" class="nav-button">Logout</a>
                 {% else %}
-                <a href="{% url 'accounts:login' %}" class="nav-button">Login</a>
+                <a href="{% url 'oidc_authentication_init' %}" class="nav-button">Login</a>
                 <a href="{% url 'accounts:register' %}" class="nav-button">Register</a>
                 {% endif %}
             </nav>
@@ -103,10 +105,6 @@
         height: calc(100vh - 2.25rem);
         min-height: 0;
     }
-    .workspace-anon .mesh-nav {
-        filter: none;
-        pointer-events: auto;
-    }
     .workspace-anon .logo-and-toggle {
         filter: none;
         pointer-events: auto;
@@ -129,6 +127,7 @@
         text-decoration: underline;
         pointer-events: auto;
     }
+
     </style>
 
     {% if show_create_modal and user.is_authenticated %}

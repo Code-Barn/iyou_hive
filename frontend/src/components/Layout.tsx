@@ -16,6 +16,7 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
+import EcosystemBar from "./EcosystemBar";
 import SovereignHeader from "./SovereignHeader";
 import CaseSelector from "./CaseSelector";
 import FileTree from "./FileTree";
@@ -77,6 +78,8 @@ const Layout: React.FC<LayoutProps> = ({
   onCaseSelect,
   onEventAdded,
 }) => {
+  const root = document.getElementById("timeline-app");
+  const username = root?.dataset?.username || "";
   const mainRef = useRef<HTMLDivElement>(null);
 
   // Panel expanded/collapsed state
@@ -382,9 +385,11 @@ const Layout: React.FC<LayoutProps> = ({
 
   return (
     <div className="h-screen flex flex-col bg-white text-gray-900">
-      {/* Sovereign Mesh Nav */}
-      <SovereignHeader />
-      {/* Top Navigation Bar - Hiver Light Theme */}
+      {/* Layer 0: Global Cross-App Navigator */}
+      <EcosystemBar />
+      {/* Layer 1: Standard Identity Header */}
+      <SovereignHeader username={username} appPrefix="mesh" />
+      {/* Layer 2: App-Specific Header Controls - UNTOUCHED */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="flex items-center justify-between max-w-full">
           <div className="flex items-center gap-4">

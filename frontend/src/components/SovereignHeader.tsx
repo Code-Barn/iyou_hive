@@ -1,29 +1,5 @@
-/*
- * Copyright (C) 2026 Byers Brands, LLC
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <https://www.gnu.org/licenses/>.
- */
+import React from "react";
 
-import React, { useEffect, useState } from "react";
-
-/**
- * Read the ``hiver_csrftoken`` cookie and return its raw value,
- * stripped of any surrounding quotation marks, whitespace, or
- * URL-encoding artifacts that would cause a
- * "CSRF token from the 'X-Csrftoken' HTTP header has incorrect length"
- * rejection from Django's ``CsrfViewMiddleware``.
- */
 function getCSRFToken(): string {
   const name = "hiver_csrftoken";
   if (document.cookie && document.cookie !== "") {
@@ -40,21 +16,15 @@ function getCSRFToken(): string {
   return "";
 }
 
-const SovereignHeader: React.FC = () => {
-  const [meshActive, setMeshActive] = useState(false);
+interface SovereignHeaderProps {
+  username?: string;
+  appPrefix?: string;
+}
 
-  const root = document.getElementById("timeline-app");
-  const vaultUrl = root?.dataset?.vaultUrl || "wss://home.iyou.me:9001/";
-  const polyUrl = root?.dataset?.polyUrl || "https://poly.iyou.me";
-  const socialfeedUrl = root?.dataset?.socialfeedUrl || "https://wun.iyou.me";
-
-  useEffect(() => {
-    const httpUrl = vaultUrl.replace(/^ws:/, "http:").replace(/^wss:/, "https:");
-    fetch(httpUrl + "/", { signal: AbortSignal.timeout(300) })
-      .then((r) => { if (r.ok) setMeshActive(true); })
-      .catch(() => {});
-  }, [vaultUrl]);
-
+const SovereignHeader: React.FC<SovereignHeaderProps> = ({
+  username,
+  appPrefix = "mesh",
+}) => {
   const handleLogout = () => {
     const form = document.createElement("form");
     form.method = "POST";
@@ -68,53 +38,52 @@ const SovereignHeader: React.FC = () => {
     form.submit();
   };
 
-  const username = root?.dataset?.username || "";
-
   return (
-    <nav className="bg-white shadow-sm border-b dark:bg-gray-800 text-sm">
-      <div className="max-w-7xl mx-auto px-4 flex items-center justify-between h-9">
-        <span className="font-bold text-lg text-indigo-600 dark:text-indigo-400">
-          Hiver
+    <header className="w-full border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 px-6 py-3 flex items-center justify-between font-mono text-sm shadow-sm pt-5">
+      <div className="flex items-center space-x-2">
+        <span className="font-bold tracking-tight text-purple-600 dark:text-purple-400">
+          iyou_
         </span>
-        <div className="flex items-center gap-4">
-          <a
-            href={socialfeedUrl}
-            className="text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400"
-          >
-            Social Feed
-          </a>
-          <a
-            href={polyUrl}
-            className="text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400"
-          >
-            Poly
-          </a>
-          {username && (
-            <span
-              className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium dark:bg-purple-900 dark:text-purple-200"
-              title={username}
-            >
-              {username.length > 24 ? username.slice(0, 24) + "…" : username}
-            </span>
-          )}
-          <span
-            id="meshBadge"
-            className={
-              "text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full font-medium dark:bg-green-900 dark:text-green-200" +
-              (meshActive ? "" : " hidden")
-            }
-          >
-            Sovereign Mesh Active
-          </span>
-          <button
-            onClick={handleLogout}
-            className="text-sm text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer dark:text-red-400 dark:hover:text-red-300"
-          >
-            Logout
-          </button>
-        </div>
+        <span className="text-slate-500 font-semibold">{appPrefix}</span>
       </div>
-    </nav>
+
+      <div className="flex items-center space-x-4 text-xs">
+        {username ? (
+          <>
+            <div className="flex items-center space-x-2 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded border border-slate-200 dark:border-slate-700">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span
+                className="text-slate-600 dark:text-slate-300 max-w-[240px] truncate"
+                title={username}
+              >
+                {username}
+              </span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-slate-400 hover:text-rose-500 transition-colors duration-150 bg-transparent border-none cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center space-x-2">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span className="text-slate-400 italic">
+                Sovereign Key Required
+              </span>
+            </div>
+            <a
+              href="/oidc/authenticate/"
+              className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-3 py-1 rounded transition-colors duration-150 shadow-sm"
+            >
+              Sign In
+            </a>
+          </>
+        )}
+      </div>
+    </header>
   );
 };
 

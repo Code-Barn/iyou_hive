@@ -1,32 +1,24 @@
-<nav class="mesh-nav" style="height:36px;display:flex;align-items:center;justify-content:space-between;background-color:#ffffff;border-bottom:1px solid #e5e7eb;padding:0 1rem;">
-    <div class="mesh-nav-inner">
-        <span class="mesh-nav-brand">Hiver</span>
-        <div class="mesh-nav-links">
-            <a href="{{ POLY_URL }}" class="mesh-nav-link">Poly</a>
-            <a href="{{ SOCIALFEED_URL }}" class="mesh-nav-link">Social Feed</a>
-            <span id="meshBadge" class="mesh-badge hidden">Sovereign Mesh Active</span>
-            {% if user.is_authenticated %}
-                <span class="mesh-user" title="{{ user.username }}">
-                    {% if "did:" in user.username %}{{ user.username|truncatechars:24 }}{% else %}{{ user.username }}{% endif %}
-                </span>
-                <form action="{% url 'accounts:logout' %}" method="post" class="inline">
-                    {% csrf_token %}
-                    <button type="submit" class="text-sm font-mono text-gray-500 hover:text-gray-900 focus:outline-none">Logout</button>
-                </form>
-            {% else %}
-                <a href="{% url 'oidc_authentication_init' %}" class="mesh-login-link">Login</a>
-            {% endif %}
-        </div>
+<nav class="bg-white shadow-sm border-b dark:bg-gray-800">
+  <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+    <span class="font-bold text-lg text-indigo-600 dark:text-indigo-400">Hiver</span>
+    <div class="flex items-center gap-4">
+      <a href="{% url 'core:case_list' %}" class="text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400">Cases</a>
+      {% if user.is_authenticated %}
+        <a href="#" onclick="togglePane('timeline-pane'); return false;" class="text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400">Timeline</a>
+        <a href="#" onclick="togglePane('archive-pane'); return false;" class="text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400">Archive</a>
+        <a href="#" onclick="togglePane('ai-pane'); return false;" class="text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400">AI</a>
+        <span class="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium dark:bg-purple-900 dark:text-purple-200" title="{{ user.username }}">
+          {% if "did:" in user.username %}{{ user.username|truncatechars:24 }}{% else %}{{ user.username }}{% endif %}
+        </span>
+      {% endif %}
+      {% if user.is_authenticated %}
+        <form action="{% url 'accounts:logout' %}" method="post" class="inline">
+          {% csrf_token %}
+          <button type="submit" class="text-sm text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer dark:text-red-400 dark:hover:text-red-300">Logout</button>
+        </form>
+      {% else %}
+        <a href="{% url 'oidc_authentication_init' %}" class="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">Login</a>
+      {% endif %}
     </div>
+  </div>
 </nav>
-
-<script>
-document.addEventListener("DOMContentLoaded", function () {
-    var badge = document.getElementById("meshBadge");
-    if (!badge) return;
-    var vaultUrl = "{{ VAULT_URL }}".replace(/^ws:/, "http:").replace(/^wss:/, "https:");
-    fetch(vaultUrl + "/", { signal: AbortSignal.timeout(300) })
-        .then(function (r) { if (r.ok) badge.classList.remove("hidden"); })
-        .catch(function () {});
-});
-</script>

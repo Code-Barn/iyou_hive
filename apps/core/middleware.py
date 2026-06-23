@@ -42,7 +42,7 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         
         # Only add CSP if not already set (by previous middleware or view)
         if 'Content-Security-Policy' not in response:
-            connect_src = getattr(settings, 'CONNECT_SRC', "'self' wss://home.iyou.me:9001")
+            connect_src = getattr(settings, 'CONNECT_SRC', "'self' wss://home.iyou.me:9001 https://iyou.me")
             csp = (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline'; "

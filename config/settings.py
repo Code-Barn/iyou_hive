@@ -28,8 +28,6 @@ import environ
 env = environ.Env(
     DEBUG=(bool, True),
     ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1", "hive.iyou.me"]),
-    SESSION_COOKIE_SECURE=(bool, False),
-    CSRF_COOKIE_SECURE=(bool, False),
     CORS_ALLOWED_ORIGINS=(list, ["https://hive.iyou.me"]),
     CSRF_TRUSTED_ORIGINS=(list, ["https://hive.iyou.me"]),
 )
@@ -49,6 +47,8 @@ if isinstance(raw_hosts, str):
     ALLOWED_HOSTS = [host.strip() for host in clean_hosts.split(",") if host.strip()]
 else:
     ALLOWED_HOSTS = raw_hosts
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 
 INSTALLED_APPS = [
@@ -107,15 +107,17 @@ RUST_DID_LIB_PATH = env(
 
 DID_BACKEND = env("DID_BACKEND", default="rust")
 
-SESSION_COOKIE_NAME = "hiver_sessionid"
+APP_NAME_PREFIX = env.str("APP_NAME_PREFIX", default="hive")
+SESSION_COOKIE_NAME = f"{APP_NAME_PREFIX}_sessionid"
 SESSION_COOKIE_AGE = 1209600
-SESSION_COOKIE_SECURE = env("SESSION_COOKIE_SECURE")
+SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_COOKIE_DOMAIN = None
 SESSION_SAVE_EVERY_REQUEST = True
-CSRF_COOKIE_NAME = "hiver_csrftoken"
-CSRF_COOKIE_SECURE = env("CSRF_COOKIE_SECURE")
+CSRF_COOKIE_NAME = f"{APP_NAME_PREFIX}_csrftoken"
+CSRF_COOKIE_SECURE = True
+SESSION_TRUSTED_ORIGINS = [f"https://{APP_NAME_PREFIX}.iyou.me"]
 
 TEMPLATES = [
     {
@@ -151,19 +153,21 @@ AUTHENTICATION_BACKENDS = (
     "django.contrib.auth.backends.ModelBackend",
 )
 
-OIDC_RP_CLIENT_ID = env("OIDC_RP_CLIENT_ID", default="hive-satellite-client")
-OIDC_RP_CLIENT_SECRET = env("OIDC_RP_CLIENT_SECRET", default="")
+# IDP base URLs for endpoint construction
+IDP_BASE_INTERNAL_URL = env.str("IDP_BASE_INTERNAL_URL", default="http://iyou-idp.identity.svc.cluster.local:8000")
+IDP_BASE_PUBLIC_URL = env.str("IDP_BASE_PUBLIC_URL", default="https://iyou.me")
+
+# OIDC Relying Party — all values purely from environment
+OIDC_RP_CLIENT_ID = env.str("OIDC_RP_CLIENT_ID")
+OIDC_RP_CLIENT_SECRET = env.str("OIDC_RP_CLIENT_SECRET")
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_RP_VERIFY_KID = True
+OIDC_RP_CALLBACK_URL = env.str("OIDC_RP_CALLBACK_URL")
 
-OIDC_OP_AUTHORIZATION_ENDPOINT = "https://iyou.me/openid/authorize/"
-OIDC_OP_TOKEN_ENDPOINT = "http://iyou-idp.identity.svc.cluster.local:8000/openid/token/"
-OIDC_OP_USER_ENDPOINT = "http://iyou-idp.identity.svc.cluster.local:8000/openid/userinfo/"
-OIDC_OP_JWKS_ENDPOINT = "http://iyou-idp.identity.svc.cluster.local:8000/openid/jwks/"
-
-OIDC_RP_CALLBACK_URL = env(
-    "OIDC_RP_CALLBACK_URL", default="http://127.0.0.1:8003/oidc/callback/"
-)
+OIDC_OP_AUTHORIZATION_ENDPOINT = f"{IDP_BASE_PUBLIC_URL}/openid/authorize/"
+OIDC_OP_TOKEN_ENDPOINT = f"{IDP_BASE_INTERNAL_URL}/openid/token/"
+OIDC_OP_USER_ENDPOINT = f"{IDP_BASE_INTERNAL_URL}/openid/userinfo/"
+OIDC_OP_JWKS_ENDPOINT = f"{IDP_BASE_INTERNAL_URL}/openid/jwks/"
 
 OIDC_USERNAME_ALGO = lambda claims: claims.get("sub")
 OIDC_RP_REQUIRED_CLAIMS = []
