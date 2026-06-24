@@ -37,8 +37,8 @@ def render_vite_assets():
         os.path.join(settings.BASE_DIR, 'static', 'frontend', 'assets', 'manifest.json'),
     ]
 
-    js_file = 'frontend/assets/index.js'
-    css_file = 'frontend/assets/index.css'
+    js_file = 'frontend/assets/index-CNqL40E6.js'
+    css_file = 'frontend/assets/index-Cyu1mE_y.css'
 
     manifest_path = None
     for p in manifest_paths:

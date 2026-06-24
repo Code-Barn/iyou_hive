@@ -43,13 +43,14 @@ class SessionSecurityMiddleware(MiddlewareMixin):
         # Only add CSP if not already set (by previous middleware or view)
         if 'Content-Security-Policy' not in response:
             connect_src = getattr(settings, 'CONNECT_SRC', "'self' wss://home.iyou.me:9001 https://iyou.me")
+            tailwind_cdn = "https://cdn.tailwindcss.com"
             csp = (
-                "default-src 'self'; "
-                "script-src 'self' 'unsafe-inline'; "
-                "style-src 'self' 'unsafe-inline'; "
+                f"default-src 'self'; "
+                f"script-src 'self' 'unsafe-inline' {tailwind_cdn}; "
+                f"style-src 'self' 'unsafe-inline' {tailwind_cdn}; "
                 "img-src 'self' data:; "
                 "font-src 'self'; "
-                f"connect-src {connect_src}; "
+                f"connect-src {connect_src} wss://home.iyou.me:9001 http://127.0.0.1:9001; "
                 "frame-src 'none'; "
                 "object-src 'none'"
             )
