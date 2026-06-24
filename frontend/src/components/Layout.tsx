@@ -16,8 +16,8 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
-import EcosystemBar from "./EcosystemBar";
-import SovereignHeader from "./SovereignHeader";
+import { EcosystemBar } from "./EcosystemBar";
+import { SovereignHeader } from "./SovereignHeader";
 import CaseSelector from "./CaseSelector";
 import FileTree from "./FileTree";
 import AIAssistantChat from "./AIAssistantChat";
@@ -29,7 +29,7 @@ import { SourceParty, FileNode } from "../types/shared";
 
 // Helper to get CSRF token for POST requests
 function getCSRFToken(): string {
-  const name = "csrftoken";
+  const name = "hive_csrftoken";
   if (document.cookie && document.cookie !== "") {
     const cookies = document.cookie.split(";");
     for (let i = 0; i < cookies.length; i++) {
@@ -388,7 +388,7 @@ const Layout: React.FC<LayoutProps> = ({
       {/* Layer 0: Global Cross-App Navigator */}
       <EcosystemBar />
       {/* Layer 1: Standard Identity Header */}
-      <SovereignHeader username={username} appPrefix="mesh" />
+      <SovereignHeader username={username} />
       {/* Layer 2: App-Specific Header Controls - UNTOUCHED */}
       <header className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="flex items-center justify-between max-w-full">

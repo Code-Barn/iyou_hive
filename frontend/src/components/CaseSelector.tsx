@@ -102,7 +102,7 @@ const CaseSelector: React.FC<CaseSelectorProps> = ({
   };
 
   const getCSRFToken = (): string | null => {
-    const name = "csrftoken";
+    const name = "hive_csrftoken";
     const cookies = document.cookie.split(";");
     for (let i = 0; i < cookies.length; i++) {
       const cookie = cookies[i].trim();
