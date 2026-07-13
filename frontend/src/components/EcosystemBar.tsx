@@ -41,6 +41,14 @@ export const EcosystemBar: React.FC = () => {
         <a href="https://safe.iyou.me" className="hover:text-white transition-colors duration-150">
           safe
         </a>
+        <span className="text-slate-800">/</span>
+        <a href="https://talk.iyou.me" className="hover:text-white transition-colors duration-150">
+          talk
+        </a>
+        <span className="text-slate-800">/</span>
+        <a href="https://play.iyou.me" className="hover:text-white transition-colors duration-150">
+          play
+        </a>
       </div>
     </div>
   );
