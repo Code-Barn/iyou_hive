@@ -35,10 +35,20 @@ from django.views.generic import TemplateView
 from django.conf import settings
 from django.conf.urls.static import static
 from apps.core.views import react_app_view
+from apps.core.auth_pkce import (
+    PKCEAuthorizationRequestView,
+    PKCEAuthenticationCallbackView,
+)
+from mozilla_django_oidc.views import OIDCLogoutView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('oidc/', include('mozilla_django_oidc.urls')),
+
+    # PKCE-enhanced OIDC routes (replaces include('mozilla_django_oidc.urls'))
+    path('oidc/login/', PKCEAuthorizationRequestView.as_view(), name='oidc_authentication_init'),
+    path('oidc/callback/', PKCEAuthenticationCallbackView.as_view(), name='oidc_authentication_callback'),
+    path('oidc/logout/', OIDCLogoutView.as_view(), name='oidc_logout'),
+
     # API endpoints (must be before catch-all)
     path('api/timeline/', include('apps.timeline.api_urls')),
     path('api/archive/', include('apps.archive.api_urls')),

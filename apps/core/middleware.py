@@ -94,6 +94,7 @@ class CaseSelectionMiddleware(MiddlewareMixin):
         '/media/',
         '/core/cases/',
         '/core/api/',
+        '/oidc/',
     ]
     
     def process_request(self, request):

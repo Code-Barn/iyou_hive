@@ -81,6 +81,7 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "mozilla_django_oidc.middleware.SessionRefresh",
     "apps.core.middleware.SessionSecurityMiddleware",
+    "apps.core.auth_pkce.PKCEVerifierCleanupMiddleware",
     "apps.core.middleware.CaseSelectionMiddleware",
 ]
 
@@ -149,7 +150,7 @@ DATABASES = {
 AUTH_PASSWORD_VALIDATORS = []
 
 AUTHENTICATION_BACKENDS = (
-    "apps.core.auth.MyOIDCAuthenticationBackend",
+    "apps.core.auth_pkce.PKCEAuthenticationBackend",
     "django.contrib.auth.backends.ModelBackend",
 )
 
@@ -173,6 +174,12 @@ OIDC_USERNAME_ALGO = lambda claims: claims.get("sub")
 OIDC_RP_REQUIRED_CLAIMS = []
 OIDC_VERIFY_SSL = env.bool("OIDC_VERIFY_SSL", default=True)
 OIDC_STORE_ID_TOKEN = True
+
+# PKCE: Handled by apps.core.auth_pkce (RFC 7636).
+# The library's OIDC_USE_PKCE toggle is intentionally left False --
+# the custom views manage the code_verifier lifecycle independently
+# to guarantee encrypted-session-bound storage and immediate clearing.
+OIDC_USE_PKCE = False
 
 CSRF_TRUSTED_ORIGINS = env("CSRF_TRUSTED_ORIGINS")
 
