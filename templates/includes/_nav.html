@@ -7,7 +7,7 @@
         <a href="#" onclick="togglePane('timeline-pane'); return false;" class="text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400">Timeline</a>
         <a href="#" onclick="togglePane('archive-pane'); return false;" class="text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400">Archive</a>
         <a href="#" onclick="togglePane('ai-pane'); return false;" class="text-sm text-gray-600 hover:text-indigo-600 dark:text-gray-300 dark:hover:text-indigo-400">AI</a>
-        <span class="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full font-medium dark:bg-purple-900 dark:text-purple-200" title="{{ user.username }}">
+        <span class="text-xs bg-orange-100 text-orange-800 px-2 py-0.5 rounded-full font-medium dark:bg-orange-900 dark:text-orange-200" title="{{ user.username }}">
           {% if "did:" in user.username %}{{ user.username|truncatechars:24 }}{% else %}{{ user.username }}{% endif %}
         </span>
       {% endif %}

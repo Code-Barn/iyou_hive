@@ -39,7 +39,7 @@ const partyColors: Record<SourceParty, string> = {
   CLIENT: "bg-blue-500",
   OPPOSING: "bg-red-500",
   NEUTRAL: "bg-gray-500",
-  COURT: "bg-purple-500",
+  COURT: "bg-orange-500",
   WITNESS: "bg-green-500",
 };
 

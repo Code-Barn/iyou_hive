@@ -4,9 +4,9 @@ export const EcosystemBar: React.FC = () => {
   return (
     <div
       id="sovereign-ecosystem-topbar"
-      className="fixed top-0 left-0 w-full z-[9999] transform -translate-y-[calc(100%-4px)] hover:translate-y-0 transition-all duration-300 ease-in-out bg-slate-950 border-b border-purple-600/50 text-slate-400 px-4 py-1.5 shadow-2xl flex items-center space-x-6 text-[11px] font-mono"
+      className="fixed top-0 left-0 w-full z-[9999] transform -translate-y-[calc(100%-4px)] hover:translate-y-0 transition-all duration-300 ease-in-out bg-slate-950 border-b border-orange-600/50 text-slate-400 px-4 py-1.5 shadow-2xl flex items-center space-x-6 text-[11px] font-mono"
     >
-      <span className="text-purple-400 font-bold tracking-wider uppercase">
+      <span className="text-orange-400 font-bold tracking-wider uppercase">
         🌌 SOVEREIGN MESH:
       </span>
       <div className="flex items-center space-x-4">

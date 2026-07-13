@@ -8,7 +8,7 @@ export const SovereignHeader: React.FC<HeaderProps> = ({ username }) => {
   return (
     <header className="w-full border-b border-slate-800 bg-slate-900 text-slate-100 px-6 py-3 flex items-center justify-between font-mono text-sm shadow-sm pt-5">
       <div className="flex items-center space-x-2">
-        <span className="font-bold tracking-tight text-purple-400">iyou_</span>
+        <span className="font-bold tracking-tight text-orange-400">iyou_</span>
         <span className="text-slate-400 font-semibold">hive</span>
       </div>
 

@@ -6,6 +6,9 @@ export default {
   ],
   theme: {
     extend: {
+      screens: {
+        xs: '360px',
+      },
       colors: {
         primary: '#FF8C00',  // Honey-Orange
         accent: '#0064AA',   // Byers Blue

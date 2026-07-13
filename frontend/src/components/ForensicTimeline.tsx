@@ -64,7 +64,7 @@ const partyOptions: { value: SourceParty; label: string; color: string }[] = [
   { value: "CLIENT", label: "Client", color: "bg-blue-500" },
   { value: "OPPOSING", label: "Opposing", color: "bg-red-500" },
   { value: "NEUTRAL", label: "Neutral", color: "bg-gray-500" },
-  { value: "COURT", label: "Court", color: "bg-purple-500" },
+  { value: "COURT", label: "Court", color: "bg-orange-500" },
   { value: "WITNESS", label: "Witness", color: "bg-green-500" },
 ];
 

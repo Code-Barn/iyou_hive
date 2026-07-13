@@ -114,7 +114,7 @@ export const CaseSettingsModal: React.FC<CaseSettingsModalProps> = ({
             <div className="space-y-2">
               <button
                 onClick={() => setIsImportModalOpen(true)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
               >
                 <span>📥</span> Import .hive
               </button>
@@ -204,7 +204,7 @@ export const CaseSettingsModal: React.FC<CaseSettingsModalProps> = ({
               <button
                 onClick={handleImportHive}
                 disabled={importStatus === "importing" || !importFile}
-                className={`px-4 py-2 ${importStatus === "importing" || !importFile ? "bg-purple-300" : "bg-purple-600 hover:bg-purple-700"} text-white rounded-lg transition-colors`}
+                className={`px-4 py-2 ${importStatus === "importing" || !importFile ? "bg-orange-300" : "bg-orange-600 hover:bg-orange-700"} text-white rounded-lg transition-colors`}
               >
                 {importStatus === "importing" ? "Importing..." : "Import"}
               </button>
