@@ -299,11 +299,6 @@ class PKCEAuthenticationCallbackView(OIDCAuthenticationCallbackView):
             del request.session["oidc_states"][state]
             request.session.save()
 
-            # Reload session from DB to prevent parallel-tab overwrites
-            request.session = request.session.__class__(
-                request.session.session_key,
-            )
-
             if code_verifier:
                 logger.info(
                     "PKCE verifier consumed (state=%s), "
