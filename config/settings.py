@@ -19,7 +19,6 @@ Django settings for Hiver project.
 Interactive legal timelines, document archiving, and AI-assisted research.
 """
 
-import os
 import platform
 from pathlib import Path
 
@@ -49,6 +48,7 @@ else:
     ALLOWED_HOSTS = raw_hosts
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
 
 
 INSTALLED_APPS = [
@@ -160,7 +160,7 @@ IDP_BASE_PUBLIC_URL = env.str("IDP_BASE_PUBLIC_URL", default="https://iyou.me")
 
 # OIDC Relying Party — all values purely from environment
 OIDC_RP_CLIENT_ID = env.str("OIDC_RP_CLIENT_ID")
-OIDC_RP_CLIENT_SECRET = env.str("OIDC_RP_CLIENT_SECRET")
+OIDC_RP_SCOPES = "openid profile email"
 OIDC_RP_SIGN_ALGO = "RS256"
 OIDC_RP_VERIFY_KID = True
 OIDC_RP_CALLBACK_URL = env.str("OIDC_RP_CALLBACK_URL")
@@ -170,10 +170,15 @@ OIDC_OP_TOKEN_ENDPOINT = f"{IDP_BASE_INTERNAL_URL}/openid/token/"
 OIDC_OP_USER_ENDPOINT = f"{IDP_BASE_INTERNAL_URL}/openid/userinfo/"
 OIDC_OP_JWKS_ENDPOINT = f"{IDP_BASE_INTERNAL_URL}/openid/jwks/"
 
-OIDC_USERNAME_ALGO = lambda claims: claims.get("sub")
+def OIDC_USERNAME_ALGO(claims):
+    return claims.get("sub")
 OIDC_RP_REQUIRED_CLAIMS = []
 OIDC_VERIFY_SSL = env.bool("OIDC_VERIFY_SSL", default=True)
 OIDC_STORE_ID_TOKEN = True
+OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
+LOGIN_REDIRECT_URL_FAILURE = "/"
+
+ADMIN_DID = env.str("ADMIN_DID", default="")
 
 # PKCE: Handled by apps.core.auth_pkce (RFC 7636).
 # The library's OIDC_USE_PKCE toggle is intentionally left False --

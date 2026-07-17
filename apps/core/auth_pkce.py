@@ -62,8 +62,6 @@ import secrets
 import time
 from base64 import urlsafe_b64encode
 
-from django.contrib import auth
-from django.core.exceptions import SuspiciousOperation
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.crypto import get_random_string
@@ -86,15 +84,10 @@ logger = logging.getLogger(__name__)
 # Constants
 # ──────────────────────────────────────────────────────────────────────
 
-# Session namespace for PKCE verifier (isolated from OIDC ``oidc_states``)
-_SESSION_KEY_VERIFIER = "_pkce_cv"
-_SESSION_KEY_TIMESTAMP = "_pkce_ts"
+SESSION_KEY_CODE_VERIFIER = "pkce_code_verifier"
+SESSION_KEY_TIMESTAMP = "_pkce_ts"
 
-# RFC 7636 Section 10: verifier must not be usable after excessive delay
-_VERIFIER_MAX_AGE_S = 300  # 5 minutes
-
-# RFC 7636 Section 4.1: verifier length 43-128, we use max entropy
-_VERIFIER_LENGTH = 128
+_VERIFIER_MAX_AGE_S = 300  # 5 minutes — RFC 7636 Section 10
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -102,20 +95,22 @@ _VERIFIER_LENGTH = 128
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _generate_code_verifier() -> str:
-    """Generate an RFC 7636 Section 4.1 compliant code verifier.
+def _generate_code_verifier(length: int = 64) -> str:
+    """Return a cryptographically secure, URL-safe random string.
 
-    Uses ``secrets.token_urlsafe`` (CSPRNG) and truncates to exactly
-    128 characters for maximum entropy within the allowed range.
+    The output length (pre-encoding) is `length` random bytes, which
+    yields a base64url string between 43 and 128 characters depending
+    on the input length.  RFC 7636 section 4.1 mandates the range
+    [43, 128].
     """
-    # token_urlsafe produces ~1.3x chars per byte; request extra to
-    # guarantee we have enough after truncation.
-    raw = secrets.token_urlsafe(96)
-    return raw[:_VERIFIER_LENGTH]
+    if not (43 <= length <= 128):
+        msg = f"code_verifier length must be between 43 and 128, got {length}"
+        raise ValueError(msg)
+    return secrets.token_urlsafe(length)
 
 
 def _compute_s256_challenge(verifier: str) -> str:
-    """RFC 7636 Section 4.2: BASE64URL(SHA256(ASCII(code_verifier)))."""
+    """BASE64URL(SHA256(ASCII(code_verifier))) — RFC 7636 section 4.1."""
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
     return urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
@@ -126,45 +121,16 @@ def _compute_s256_challenge(verifier: str) -> str:
 
 
 def _store_verifier(request, verifier: str) -> None:
-    """Persist the code verifier inside the encrypted Django session.
-
-    The verifier lives under ``_pkce_cv`` and its creation timestamp
-    under ``_pkce_ts``.  Both keys are namespaced to avoid collision
-    with ``mozilla_django_oidc``'s ``oidc_states`` dict.
-    """
-    request.session[_SESSION_KEY_VERIFIER] = verifier
-    request.session[_SESSION_KEY_TIMESTAMP] = time.time()
+    """Persist the code verifier inside the encrypted Django session."""
+    request.session[SESSION_KEY_CODE_VERIFIER] = verifier
+    request.session[SESSION_KEY_TIMESTAMP] = time.time()
     request.session.modified = True
-
-
-def _consume_verifier(request) -> str | None:
-    """Atomically retrieve *and* destroy the verifier from the session.
-
-    Returns ``None`` if the verifier is missing or has exceeded the
-    maximum allowed age.
-    """
-    verifier = request.session.pop(_SESSION_KEY_VERIFIER, None)
-    ts = request.session.pop(_SESSION_KEY_TIMESTAMP, None)
-
-    if verifier is None:
-        return None
-
-    if ts is not None and (time.time() - ts) > _VERIFIER_MAX_AGE_S:
-        logger.warning(
-            "PKCE verifier expired (age=%.1fs, max=%ds)",
-            time.time() - ts,
-            _VERIFIER_MAX_AGE_S,
-        )
-        return None
-
-    request.session.modified = True
-    return verifier
 
 
 def _purge_verifier(request) -> None:
-    """Unconditional removal -- defense-in-depth."""
-    request.session.pop(_SESSION_KEY_VERIFIER, None)
-    request.session.pop(_SESSION_KEY_TIMESTAMP, None)
+    """Unconditional removal — defense-in-depth."""
+    request.session.pop(SESSION_KEY_CODE_VERIFIER, None)
+    request.session.pop(SESSION_KEY_TIMESTAMP, None)
     request.session.modified = True
 
 
@@ -178,25 +144,32 @@ class PKCEAuthorizationRequestView(OIDCAuthenticationRequestView):
 
     On ``GET /oidc/login/`` this view:
 
-    1. Generates a 128-char ``code_verifier`` and its S256 ``code_challenge``.
+    1. Generates a 64-byte ``code_verifier`` and its S256 ``code_challenge``.
     2. Stores the verifier in the encrypted session (``hive_sessionid``).
     3. Appends ``code_challenge`` + ``code_challenge_method=S256`` to the
        authorization redirect URL targeting ``https://iyou.me/openid/authorize/``.
-    4. Stores the standard OIDC ``state`` + ``nonce`` in ``session['oidc_states']``
-       (via the library helper) *without* a ``code_verifier`` to avoid
-       dual-verifier confusion.
+    4. Stores the standard OIDC ``state`` + ``nonce`` in
+       ``session['oidc_states']`` (via the library helper) *without* a
+       ``code_verifier`` to avoid dual-verifier confusion.
     """
+
+    http_method_names = ["get"]
 
     def get(self, request):
         state = get_random_string(self.get_settings("OIDC_STATE_SIZE", 32))
-        redirect_field_name = self.get_settings("OIDC_REDIRECT_FIELD_NAME", "next")
+        redirect_field_name = self.get_settings(
+            "OIDC_REDIRECT_FIELD_NAME", "next"
+        )
         reverse_url = self.get_settings(
-            "OIDC_AUTHENTICATION_CALLBACK_URL", "oidc_authentication_callback"
+            "OIDC_AUTHENTICATION_CALLBACK_URL",
+            "oidc_authentication_callback",
         )
 
         params = {
             "response_type": "code",
-            "scope": self.get_settings("OIDC_RP_SCOPES", "openid email"),
+            "scope": self.get_settings(
+                "OIDC_RP_SCOPES", "openid profile email"
+            ),
             "client_id": self.OIDC_RP_CLIENT_ID,
             "redirect_uri": absolutify(request, reverse(reverse_url)),
             "state": state,
@@ -205,27 +178,30 @@ class PKCEAuthorizationRequestView(OIDCAuthenticationRequestView):
         params.update(self.get_extra_params(request))
 
         if self.get_settings("OIDC_USE_NONCE", True):
-            nonce = get_random_string(self.get_settings("OIDC_NONCE_SIZE", 32))
+            nonce = get_random_string(
+                self.get_settings("OIDC_NONCE_SIZE", 32)
+            )
             params["nonce"] = nonce
 
-        # ── PKCE ────────────────────────────────────────────────
-        code_verifier = _generate_code_verifier()
+        code_verifier = _generate_code_verifier(
+            self.get_settings("OIDC_PKCE_CODE_VERIFIER_SIZE", 64)
+        )
         code_challenge = _compute_s256_challenge(code_verifier)
 
         params["code_challenge"] = code_challenge
         params["code_challenge_method"] = "S256"
 
-        # Store state + nonce in the standard oidc_states dict.
-        # Pass code_verifier=None so the library does NOT embed it
-        # inside oidc_states -- we manage it independently.
         add_state_and_verifier_and_nonce_to_session(
             request, state, params, code_verifier=None,
         )
 
-        # Store the actual verifier in our isolated session slot
         _store_verifier(request, code_verifier)
 
-        request.session["oidc_login_next"] = get_next_url(request, redirect_field_name)
+        request.session[SESSION_KEY_CODE_VERIFIER] = code_verifier
+        request.session["oidc_login_next"] = get_next_url(
+            request, redirect_field_name
+        )
+        request.session.save()
 
         query = "&".join(f"{k}={v}" for k, v in params.items())
         redirect_url = f"{self.OIDC_OP_AUTH_ENDPOINT}?{query}"
@@ -251,80 +227,35 @@ class PKCEAuthenticationCallbackView(OIDCAuthenticationCallbackView):
     1. Validates the ``state`` against ``session['oidc_states']``.
     2. Extracts ``nonce`` from the standard state dict.
     3. Atomically retrieves *and* destroys the ``code_verifier`` from
-       the isolated session slot.
+       the isolated session slot via ``get_backend_kwargs()``.
     4. Deletes the state entry to prevent replay.
     5. Passes ``code_verifier`` to ``auth.authenticate()`` which
        dispatches it to iyou_idp's token endpoint.
-    6. Clears the verifier reference from ``request`` on exit.
 
-    If the verifier is missing or expired the callback still proceeds
-    (the IDP may or may not require PKCE) but a warning is logged.
+    This view does NOT override ``get()``.  Instead it overrides the
+    library's ``get_backend_kwargs()`` hook, which is called internally
+    by the parent ``get()`` method when it invokes the authentication
+    backend.  By injecting the code_verifier into the backend kwargs
+    here, the verifier is guaranteed to reach the backend's
+    ``authenticate()`` call without intercepting the view routing flow.
     """
 
-    def get(self, request):
-        if request.GET.get("error"):
-            # ── Error branch ────────────────────────────────────
-            _purge_verifier(request)
+    def get_backend_kwargs(self, request):
+        """Pop the PKCE verifier from the session and forward it to the
+        authentication backend via the kwargs dictionary.
+        """
+        kwargs = super().get_backend_kwargs(request)
 
-            if (
-                "state" in request.GET
-                and "oidc_states" in request.session
-                and request.GET["state"] in request.session["oidc_states"]
-            ):
-                del request.session["oidc_states"][request.GET["state"]]
-                request.session.save()
+        code_verifier = request.session.pop(SESSION_KEY_CODE_VERIFIER, None)
 
-            if request.user.is_authenticated:
-                auth.logout(request)
-            assert not request.user.is_authenticated
-            return self.login_failure()
+        if code_verifier is None:
+            logger.warning(
+                "No pkce_code_verifier in session — possible replay, "
+                "cookie rotation failure, or direct callback access"
+            )
 
-        elif "code" in request.GET and "state" in request.GET:
-            # ── Success branch ──────────────────────────────────
-            if "oidc_states" not in request.session:
-                return self.login_failure()
-
-            state = request.GET.get("state")
-            if state not in request.session["oidc_states"]:
-                msg = "OIDC callback state not found in session `oidc_states`!"
-                raise SuspiciousOperation(msg)
-
-            nonce = request.session["oidc_states"][state]["nonce"]
-
-            # Consume PKCE verifier -- retrieves and immediately
-            # destroys the value in a single session mutation.
-            code_verifier = _consume_verifier(request)
-
-            # Remove the state entry to prevent replay attacks
-            del request.session["oidc_states"][state]
-            request.session.save()
-
-            if code_verifier:
-                logger.info(
-                    "PKCE verifier consumed (state=%s), "
-                    "dispatching to iyou_idp token endpoint",
-                    state,
-                )
-            else:
-                logger.warning(
-                    "No PKCE verifier in session for callback state=%s",
-                    state,
-                )
-
-            # Authenticate -- the backend receives code_verifier as a kwarg
-            # and includes it in the token exchange payload.
-            kwargs = {
-                "request": request,
-                "nonce": nonce,
-                "code_verifier": code_verifier,
-            }
-
-            self.user = auth.authenticate(**kwargs)
-
-            if self.user and self.user.is_active:
-                return self.login_success()
-
-        return self.login_failure()
+        kwargs.update({"code_verifier": code_verifier})
+        return kwargs
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -337,22 +268,22 @@ class PKCEAuthenticationBackend(MyOIDCAuthenticationBackend):
 
     Extends ``MyOIDCAuthenticationBackend`` (DID-based user provisioning)
     to forward the PKCE ``code_verifier`` in the back-channel token
-    exchange.  The verifier is included in the ``token_payload`` dict
-    sent to ``OIDC_OP_TOKEN_ENDPOINT`` (iyou_idp's token intercept
-    gateway view).
+    exchange.  The verifier is cached as an instance attribute to survive
+    internal method transitions, then injected into the token payload
+    via ``get_token()``.
     """
 
     def authenticate(self, request, **kwargs):
         code_verifier = kwargs.pop("code_verifier", None)
-
         if code_verifier is not None:
-            logger.debug("PKCE code_verifier attached to token exchange payload")
+            self.pkce_code_verifier = code_verifier
+        return super().authenticate(request, **kwargs)
 
-        # Delegate to the parent which builds token_payload and calls
-        # OIDC_OP_TOKEN_ENDPOINT.  The parent's ``get_token()`` sends
-        # the payload as-is, so we inject code_verifier into the kwargs
-        # which the parent will forward through the call chain.
-        return super().authenticate(request, code_verifier=code_verifier, **kwargs)
+    def get_token(self, payload, **kwargs):
+        code_verifier = getattr(self, "pkce_code_verifier", None)
+        if code_verifier:
+            payload["code_verifier"] = code_verifier
+        return super().get_token(payload, **kwargs)
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -363,17 +294,17 @@ class PKCEAuthenticationBackend(MyOIDCAuthenticationBackend):
 class PKCEVerifierCleanupMiddleware(MiddlewareMixin):
     """Scans every request for orphaned PKCE verifiers.
 
-    If a ``_pkce_cv`` session key persists beyond the 5-minute maximum
-    (e.g. because the callback never arrived or the user aborted the
-    flow), this middleware purges it to prevent session state bloat
+    If a ``pkce_code_verifier`` session key persists beyond the 5-minute
+    maximum (e.g. because the callback never arrived or the user aborted
+    the flow), this middleware purges it to prevent session state bloat
     and to close the replay window.
     """
 
     def process_request(self, request):
-        if _SESSION_KEY_VERIFIER not in request.session:
+        if SESSION_KEY_CODE_VERIFIER not in request.session:
             return None
 
-        ts = request.session.get(_SESSION_KEY_TIMESTAMP)
+        ts = request.session.get(SESSION_KEY_TIMESTAMP)
         if ts is None or (time.time() - ts) > _VERIFIER_MAX_AGE_S:
             _purge_verifier(request)
             logger.debug("Purged expired/orphaned PKCE verifier from session")
