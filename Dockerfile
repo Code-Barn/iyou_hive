@@ -83,10 +83,12 @@ RUN addgroup --system --gid 1001 appgroup \
     && mkdir -p /data/lancedb /app/static /app/staticfiles /app/media
 
 COPY --from=backend-forge /app /app
+RUN rm -rf /app/static/frontend
 COPY --from=frontend-builder /build/static/frontend /app/static/frontend
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN rm -f /app/db.sqlite3 \
+    && chown appuser:appgroup /app \
     && chown -R appuser:appgroup /data /app/staticfiles /app/media
 
 WORKDIR /app
