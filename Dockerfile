@@ -80,15 +80,14 @@ COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /bin/uv
 
 RUN addgroup --system --gid 1001 appgroup \
     && adduser --system --uid 1001 --gid 1001 appuser \
-    && mkdir -p /data/lancedb /app/static /app/staticfiles /app/media \
-    && chown -R appuser:appgroup /data /app/static /app/staticfiles /app/media
+    && mkdir -p /data/lancedb /app/static /app/staticfiles /app/media
 
 COPY --from=backend-forge /app /app
 COPY --from=frontend-builder /build/static/frontend /app/static/frontend
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 
 RUN rm -f /app/db.sqlite3 \
-    && chown -R appuser:appgroup /app /app/static /app/staticfiles /app/media
+    && chown -R appuser:appgroup /data /app/staticfiles /app/media
 
 WORKDIR /app
 USER appuser
