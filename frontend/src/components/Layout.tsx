@@ -29,7 +29,7 @@ import { SourceParty, FileNode } from "../types/shared";
 
 // Helper to get CSRF token for POST requests
 function getCSRFToken(): string {
-  const name = "hive_csrftoken";
+  const name = "iyou-hive_csrftoken";
   if (document.cookie && document.cookie !== "") {
     const cookies = document.cookie.split(";");
     for (let i = 0; i < cookies.length; i++) {
