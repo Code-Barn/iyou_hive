@@ -18,18 +18,18 @@
 import axios from "axios";
 
 axios.defaults.withCredentials = true;
-axios.defaults.xsrfCookieName = 'hiver_csrftoken';
+axios.defaults.xsrfCookieName = 'hive_csrftoken';
 axios.defaults.xsrfHeaderName = 'X-CSRFToken';
 
 /**
- * Read the ``hiver_csrftoken`` cookie and return its raw value,
+ * Read the ``hive_csrftoken`` cookie and return its raw value,
  * stripped of any surrounding quotation marks, whitespace, or
  * URL-encoding artifacts that would cause a
  * "CSRF token from the 'X-Csrftoken' HTTP header has incorrect length"
  * rejection from Django's ``CsrfViewMiddleware``.
  */
 function getCSRFToken(): string | null {
-  const name = "hiver_csrftoken";
+  const name = "hive_csrftoken";
   let cookieValue: string | null = null;
   if (document.cookie && document.cookie !== "") {
     const cookies = document.cookie.split(";");
