@@ -5,7 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Hiver{% endblock %}</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- REPLACE WITH STATIC TAILWIND CSS - Rule 7 compliance -->
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <link rel="stylesheet" href="{% static 'css/output.css' %}">
     {% if DEBUG %}
     <link rel="stylesheet" href="{% static 'css/style.css' %}">
     {% else %}
@@ -15,6 +17,7 @@
 <body>
     {% include 'includes/_ecosystem_bar.html' %}
     {% include 'includes/_standard_header.html' %}
+    {% include 'includes/_tailwind_safe_init.html' %}
     <div class="workspace{% if not user.is_authenticated %} workspace-anon{% endif %}">
         <header class="workspace-header">
             <div class="case-selector">
@@ -55,7 +58,7 @@
             <p>🔒 You are viewing a preview. <a href="{% url 'oidc_authentication_init' %}">Log in with iyou_idp</a> to access your cases.</p>
         </div>
         {% endif %}
-        
+
         <div class="workspace-body">
             <div id="timeline-pane" class="workspace-pane" data-pane="timeline">
                 <div class="pane-header">
@@ -141,7 +144,7 @@
             window.location.href = '/core/cases/' + caseId + '/switch/';
         }
     }
-    
+
     function togglePane(paneId) {
         var pane = document.getElementById(paneId);
         if (pane) {
@@ -175,7 +178,7 @@
             }
         }
     }
-    
+
     function updateLayout() {
         // Count visible (non-collapsed) panes
         var visiblePanes = document.querySelectorAll('.workspace-pane:not([data-state="collapsed"])');
